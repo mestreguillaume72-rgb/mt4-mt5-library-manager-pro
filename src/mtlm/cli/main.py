@@ -20,8 +20,9 @@ from mtlm import APP_NAME, ENGINE_VERSION, __version__
 from mtlm.app.context import AppContext, open_app
 from mtlm.app.formats import FormatService
 from mtlm.app.hashing import HashService
-from mtlm.app.inventory import FileFilter, InventoryService
+from mtlm.app.inventory import FileFilter, InventoryService, analysis_of
 from mtlm.app.jobs import JobStore
+from mtlm.app.recognize import RecognitionService
 from mtlm.app.scan import ScanService, ScanSummary
 from mtlm.app.sources import SourceService
 from mtlm.audit.journal import ACTOR_USER
@@ -93,6 +94,8 @@ def build_parser() -> argparse.ArgumentParser:
     files.add_argument("--ext", action="append", default=[], help="Extension (répétable).")
     files.add_argument("--recherche", default=None, help="Texte cherché dans le nom ou le chemin.")
     files.add_argument("--manquants", action="store_true", help="Fichiers disparus.")
+    files.add_argument("--type", default=None, help="Type reconnu (ea, indicator, script, set…).")
+    files.add_argument("--plateforme", choices=["mt4", "mt5", "unknown"], default=None)
     files.add_argument("--limite", type=int, default=50)
     files.add_argument("--apres", type=int, default=0, help="Identifiant de départ (pagination).")
 
@@ -108,6 +111,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Identifie les formats réels et inspecte les archives ZIP (sans extraction).",
     )
     formats.add_argument("--source", type=int, default=None)
+    recognize = sub.add_parser(
+        "reconnaitre", help="Classe les fichiers MetaTrader (type, plateforme, certitude)."
+    )
+    recognize.add_argument("--source", type=int, default=None)
     archive = sub.add_parser("archive", help="Contenu inspecté d'une archive.")
     archive.add_argument("id", type=int, help="Identifiant du fichier archive.")
 
@@ -170,6 +177,7 @@ def _dispatch(
             "fichier": _detail,
             "formats": _formats,
             "archive": _archive,
+            "reconnaitre": _recognize,
             "taches": _jobs,
             "erreurs": _errors,
         }
@@ -322,6 +330,8 @@ def _files(args: argparse.Namespace, ctx: AppContext, out: TextIO, _err: TextIO)
         extensions=tuple(args.ext),
         presence="missing" if args.manquants else "present",
         text=args.recherche,
+        detected_type=args.type,
+        platform=args.plateforme,
     )
     service = InventoryService(ctx.conn)
     rows = service.page(flt, after_id=args.apres, limit=max(1, min(args.limite, 10_000)))
@@ -374,6 +384,43 @@ def _formats(args: argparse.Namespace, ctx: AppContext, out: TextIO, _err: TextI
         "inspectée(s) sans extraction.",
         file=out,
     )
+    return EXIT_OK
+
+
+TYPE_LABELS = {
+    "ea": "robot (EA)",
+    "indicator": "indicateur",
+    "script": "script",
+    "library": "bibliothèque",
+    "include": "fichier d'inclusion",
+    "service": "service",
+    "set": "jeu de paramètres (SET)",
+    "dll": "DLL",
+    "template": "modèle",
+    "resource": "fichier annexe",
+    "unknown": "inconnu",
+}
+CERTAINTY_LABELS = {
+    "certain": "certain",
+    "probable": "probable",
+    "possible": "possible",
+    "unknown": "inconnue",
+}
+
+
+def _recognize(args: argparse.Namespace, ctx: AppContext, out: TextIO, _err: TextIO) -> int:
+    summary = RecognitionService(ctx.conn, ctx.clock, ctx.journal).run(args.source)
+    print(
+        f"Reconnaissance (tâche {summary.job_id}) : {summary.classified} fichier(s) classé(s), "
+        f"{summary.sources_parsed} source(s) MQL analysée(s), {summary.warnings} "
+        f"avertissement(s), {summary.waiting_for_hash} en attente d'empreinte.",
+        file=out,
+    )
+    for kind, n in sorted(summary.by_type.items(), key=lambda kv: -kv[1]):
+        print(f"  {TYPE_LABELS.get(kind, kind)}\t{n}", file=out)
+    print("Certitude :", file=out)
+    for level, n in summary.by_certainty.items():
+        print(f"  {CERTAINTY_LABELS.get(level, level)}\t{n}", file=out)
     return EXIT_OK
 
 
@@ -449,6 +496,37 @@ def _detail(args: argparse.Namespace, ctx: AppContext, out: TextIO, err: TextIO)
     ]
     for label, value in lines:
         print(f"{label} : {value}", file=out)
+    info = analysis_of(ctx.conn, args.id)
+    if info is None:
+        print("Reconnaissance : non effectuée (lancez « mtlm reconnaitre »).", file=out)
+        return EXIT_OK
+    print(
+        f"Type reconnu : {TYPE_LABELS.get(info.detected_type, info.detected_type)} — "
+        f"plateforme {info.platform} — certitude {CERTAINTY_LABELS[info.certainty]}",
+        file=out,
+    )
+    for reason in info.basis:
+        print(f"  preuve : {reason}", file=out)
+    if info.limits:
+        print(f"  limite : {info.limits}", file=out)
+    for warning in info.warnings:
+        print(f"  avertissement : {warning}", file=out)
+    if info.encoding is not None:
+        print(f"Encodage : {info.encoding}", file=out)
+        print(f"Version déclarée : {info.prop_version or 'aucune'}", file=out)
+        print(f"Copyright déclaré : {info.prop_copyright or 'aucun'}", file=out)
+        if info.prop_description:
+            print(f"Description : {info.prop_description}", file=out)
+        print(f"Fonctions d'entrée : {', '.join(info.entry_points) or 'aucune'}", file=out)
+        print(f"Paramètres ({len(info.inputs)}) :", file=out)
+        for name, mql_type, default, modifier in info.inputs:
+            print(
+                f"  {modifier} {mql_type} {name}" + (f" = {default}" if default else ""), file=out
+            )
+        if info.includes:
+            print(f"Inclusions : {', '.join(info.includes)}", file=out)
+        if info.imports:
+            print(f"Imports (jamais chargés) : {', '.join(info.imports)}", file=out)
     return EXIT_OK
 
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0] — Phase 5 : reconnaissance MetaTrader
+
+### Ajouté
+- Détection d'encodage, analyse lexicale MQL (propriétés, paramètres, inclusions, imports).
+- Classement type/plateforme/certitude avec preuves et limites ; EX4/EX5 opaques.
+- CLI : `reconnaitre`, filtres `--type`/`--plateforme`, détail enrichi.
+
 ## [0.4.0] — Phase 4 : formats et archives
 
 ### Ajouté

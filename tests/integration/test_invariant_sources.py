@@ -37,6 +37,9 @@ def all_commands(corpus: Path, export_dir: Path) -> list[list[str]]:
         ["fichier", "1"],
         ["formats"],
         ["formats"],  # deuxième passage : rien à ré-inspecter
+        ["reconnaitre"],
+        ["reconnaitre"],
+        ["fichiers", "--type", "ea"],
         ["inventaire"],
         ["fichiers", "--limite", "10"],
         ["taches"],
@@ -102,6 +105,7 @@ def test_charge_corpus_et_invariant(
         f"octets {sum(e.size for e in manifest.entries)} ; "
         f"2 inventaires (initial + incrémental) {durations['scanner']:.1f}s ; "
         f"empreintes {durations['empreintes']:.1f}s ; "
+        f"formats {durations['formats']:.1f}s ; reconnaissance {durations['reconnaitre']:.1f}s ; "
         f"RAM max processus {rss_mib:.0f} Mio"
     )
     assert files == n_files == len(manifest.entries)

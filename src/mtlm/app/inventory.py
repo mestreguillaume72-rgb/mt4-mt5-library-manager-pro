@@ -52,6 +52,8 @@ class FileFilter:
     text: str | None = None  # recherche plein texte (nom, chemin), insensible aux accents
     hash_state: str | None = None
     file_type: str | None = None
+    detected_type: str | None = None
+    platform: str | None = None
 
 
 @dataclass
@@ -108,6 +110,12 @@ class InventoryService:
         if flt.file_type is not None:
             clauses.append("f.file_type = ?")
             params.append(flt.file_type)
+        if flt.detected_type is not None:
+            clauses.append("f.id IN (SELECT file_id FROM file_analysis WHERE detected_type = ?)")
+            params.append(flt.detected_type)
+        if flt.platform is not None:
+            clauses.append("f.id IN (SELECT file_id FROM file_analysis WHERE platform = ?)")
+            params.append(flt.platform)
         if flt.text:
             query = _fts_query(flt.text)
             if query:
@@ -230,3 +238,79 @@ class InventoryService:
             )
             for r in rows
         ]
+
+
+@dataclass(frozen=True)
+class AnalysisInfo:
+    detected_type: str
+    platform: str
+    certainty: str
+    basis: list[str]
+    limits: str | None
+    warnings: list[str]
+    encoding: str | None = None
+    prop_version: str | None = None
+    prop_copyright: str | None = None
+    prop_description: str | None = None
+    inputs: list[tuple[str, str, str | None, str]] = field(default_factory=list)
+    includes: list[str] = field(default_factory=list)
+    imports: list[str] = field(default_factory=list)
+    entry_points: list[str] = field(default_factory=list)
+
+
+def analysis_of(conn: sqlite3.Connection, file_id: int) -> AnalysisInfo | None:
+    """Résultat de la reconnaissance d'un fichier (type, certitude, preuves, limites)."""
+    import json
+
+    row = conn.execute(
+        "SELECT detected_type, platform, certainty, basis_json, limits, warnings_json,"
+        " content_id FROM file_analysis WHERE file_id = ?",
+        (file_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    info = AnalysisInfo(row[0], row[1], row[2], json.loads(row[3]), row[4], json.loads(row[5]))
+    content_id = row[6]
+    meta = conn.execute(
+        "SELECT encoding, prop_version, prop_copyright, prop_description, entry_points_json"
+        " FROM mql_source_meta WHERE content_id = ?",
+        (content_id,),
+    ).fetchone()
+    if meta is None:
+        return info
+    inputs = [
+        (r[0], r[1] or "?", r[2], r[3])
+        for r in conn.execute(
+            "SELECT name, mql_type, default_raw, modifier FROM mql_input WHERE content_id = ?"
+            " ORDER BY ordinal",
+            (content_id,),
+        )
+    ]
+    includes = [
+        r[0]
+        for r in conn.execute(
+            "SELECT target FROM mql_include WHERE content_id = ? ORDER BY line", (content_id,)
+        )
+    ]
+    imports = [
+        r[0]
+        for r in conn.execute(
+            "SELECT module FROM mql_import WHERE content_id = ? ORDER BY line", (content_id,)
+        )
+    ]
+    return AnalysisInfo(
+        info.detected_type,
+        info.platform,
+        info.certainty,
+        info.basis,
+        info.limits,
+        info.warnings,
+        meta[0],
+        meta[1],
+        meta[2],
+        meta[3],
+        inputs,
+        includes,
+        imports,
+        json.loads(meta[4]),
+    )
