@@ -21,6 +21,9 @@ jobs:
         with:
           python-version: "3.12"
       - run: uv sync --frozen
+      - name: Mesure de performance de l'application seule
+        shell: bash
+        run: PYTHONPATH=. uv run python tools/mesure_performance.py 50000 100000 | tee mesure.log
       - name: Charge et invariant
         shell: bash  # active pipefail : l'échec de pytest n'est pas masqué par tee
         run: uv run pytest -m slow -s --junitxml=pytest-charge.xml 2>&1 | tee charge.log
@@ -29,5 +32,6 @@ jobs:
         with:
           name: charge-${{ matrix.runner }}
           path: |
+            mesure.log
             charge.log
             pytest-charge.xml

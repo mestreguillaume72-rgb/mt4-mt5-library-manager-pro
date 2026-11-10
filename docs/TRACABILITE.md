@@ -33,4 +33,6 @@ Mise à jour à chaque phase. « Preuve » renvoie au rapport de phase contenant
 | F10 Exports CSV/JSON | `app/reports.py`, `transfer/exports.py` | `test_reports.py` | phase-08-09 | ✅ moteur |
 | § 6 Destinations distinctes des sources, arrêt au moindre doute | `transfer/guards.py`, services | tests de destination, référence, disque plein | phase-08-09 | ✅ |
 | F11 Interface (13 écrans, aucune action décorative, clavier, pause/reprise/annulation) | `src/mtlm/ui/*` | `tests/ui/test_ui.py` | phase-10, `docs/captures/` | ✅ Phase 10 |
-| F12 (rapport final), F13 (livraison) | — | — | — | ⏳ phases 11 et 12 |
+| F12 Performance 50k/100k, mémoire, reprise | `tools/mesure_performance.py`, tests `-m slow` | invariant de charge | phase-11 | ✅ Phase 11 |
+| F13 Livraison macOS (.app, DMG, Intel + Apple Silicon, matrice prouvée) | `packaging/macos/`, `.github/workflows/macos-app.yml` | auto-diagnostic sur Mac réels (CI) | phase-12, run 42919451282 | ✅ Phase 12 (Mac du propriétaire : à confirmer) |
+| § 11 Documentation utilisateur FR, procédure de restauration, limites des formats opaques | `docs/utilisateur/`, écran Aide | — | — | ✅ |

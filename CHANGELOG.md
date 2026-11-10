@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.0] — Phases 11 et 12 : performance et livraison macOS
+
+### Ajouté
+- Application macOS `.app` + DMG (Apple Silicon et Intel) construits et testés sur de vrais Mac.
+- Auto-diagnostic `--autotest`, mesure de performance `tools/mesure_performance.py`.
+- Guide d'installation, matrice de compatibilité, rapports des phases 11 et 12.
+
 ## [0.10.0] — Phase 10 : interface graphique
 
 ### Ajouté

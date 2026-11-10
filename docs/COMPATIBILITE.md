@@ -7,8 +7,8 @@ exécution réelle.
 |---|---|---|---|---|
 | 15 (GitHub `macos-15`) | Apple Silicon (arm64) | suite de tests complète + invariant 50 000 fichiers | CI « CI macOS » à chaque envoi | ✅ moteur et interface (hors écran) |
 | 15 (GitHub `macos-15-intel`) | Intel (x86_64) | idem | CI « CI macOS » à chaque envoi | ✅ moteur et interface (hors écran) |
-| 15 (GitHub) | Apple Silicon | construction `.app`, signature ad hoc, auto-diagnostic, DMG, test depuis le DMG monté | workflow « Application macOS » | voir rapport de phase 12 |
-| 15 (GitHub) | Intel | idem | workflow « Application macOS » | voir rapport de phase 12 |
+| 15 (GitHub `macos-15`) | Apple Silicon | construction `.app`, signature ad hoc vérifiée, auto-diagnostic, DMG vérifié, application lancée depuis le DMG monté | run 42919451282 | ✅ |
+| 15 (GitHub `macos-15-intel`) | Intel | idem | run 42919451282 | ✅ |
 | Mac du propriétaire | à préciser (Q-02) | installation depuis le DMG, lancement, analyse réelle | à faire par le propriétaire | ⏳ non testé |
 | macOS 12 à 14 | — | **non testé** (version minimale déclarée dans l'application : 12.0, imposée par Qt 6) | — | ⏳ non annoncé |
 
