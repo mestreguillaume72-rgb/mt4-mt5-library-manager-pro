@@ -10,8 +10,10 @@ from mtlm.core.clock import FixedClock
 from mtlm.core.errors import BackupError
 from mtlm.store import backup as backup_module
 from mtlm.store.backup import backup_database, inspect_backup, restore_database
-from mtlm.store.migrations_engine import Migrator
+from mtlm.store.migrations_engine import Migrator, packaged_migrations
 from tests.conftest import ConnectDb
+
+LATEST = packaged_migrations()[-1].version
 
 MakeDb = Callable[[Path, FixedClock, str], sqlite3.Connection]
 
@@ -39,7 +41,7 @@ def test_sauvegarde_verifiee_et_lisible(tmp_path: Path, clock: FixedClock, make_
     conn = make_db(tmp_path / "db.sqlite", clock, "v1")
     path = backup_database(conn, tmp_path / "bk", clock, "test")
     assert path.name == "library-20261110T120000000000Z-test.sqlite"
-    assert inspect_backup(path) == 1
+    assert inspect_backup(path) == LATEST
     assert setting(path) == '"v1"'
     assert not list((tmp_path / "bk").glob("*.partial"))
 
@@ -67,7 +69,7 @@ def test_fichier_partiel_orphelin_remplace(
     orphan.parent.mkdir()
     orphan.write_bytes(b"reste d'une sauvegarde interrompue")
     path = backup_database(conn, tmp_path / "bk", clock, "x")
-    assert inspect_backup(path) == 1 and not orphan.exists()
+    assert inspect_backup(path) == LATEST and not orphan.exists()
 
 
 def test_sauvegarde_corrompue_refusee(
@@ -84,7 +86,7 @@ def test_sauvegarde_version_incoherente_refusee(
     tmp_path: Path, clock: FixedClock, make_db: MakeDb, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     conn = make_db(tmp_path / "db.sqlite", clock, "v1")
-    versions = iter([1, 0])
+    versions = iter([LATEST, 0])
     monkeypatch.setattr(backup_module, "user_version", lambda _c: next(versions))
     with pytest.raises(BackupError, match="Version de schéma"):
         backup_database(conn, tmp_path / "bk", clock, "x")
@@ -150,7 +152,7 @@ def test_restauration_avec_sauvegarde_de_securite(
     conn.execute("UPDATE setting SET value_json = '\"modifie\"' WHERE key = 'k'")
     conn.close()
     clock.advance(1)
-    safety = restore_database(saved, db_path, tmp_path / "bk", clock, latest_version=1)
+    safety = restore_database(saved, db_path, tmp_path / "bk", clock, latest_version=LATEST)
     assert setting(db_path) == '"original"'
     assert safety is not None and setting(safety) == '"modifie"'
 
@@ -171,7 +173,7 @@ def test_restauration_refuse_le_meme_fichier(
     db_path = tmp_path / "db.sqlite"
     make_db(db_path, clock, "v").close()
     with pytest.raises(BackupError, match="même fichier"):
-        restore_database(db_path, db_path, tmp_path / "bk", clock, latest_version=1)
+        restore_database(db_path, db_path, tmp_path / "bk", clock, latest_version=LATEST)
 
 
 def test_restauration_sans_base_existante(
@@ -180,5 +182,5 @@ def test_restauration_sans_base_existante(
     conn = make_db(tmp_path / "src.sqlite", clock, "v")
     saved = backup_database(conn, tmp_path / "bk", clock, "x")
     target = tmp_path / "nouvelle.sqlite"
-    assert restore_database(saved, target, tmp_path / "bk", clock, latest_version=1) is None
+    assert restore_database(saved, target, tmp_path / "bk", clock, latest_version=LATEST) is None
     assert setting(target) == '"v"'

@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from mtlm import __version__
 from mtlm.cli.main import EXIT_ERROR, EXIT_OK, EXIT_USAGE, main
 from mtlm.core.clock import FixedClock
 from mtlm.core.paths import AppPaths
@@ -30,13 +31,13 @@ def audit_actions(paths: AppPaths) -> list[str]:
 
 def test_version(environ: dict[str, str], clock: FixedClock, app_home: Path) -> None:
     code, out, _ = run(["version"], environ, clock)
-    assert code == EXIT_OK and "MT4 MT5 Library Manager PRO 0.1.0" in out
+    assert code == EXIT_OK and f"MT4 MT5 Library Manager PRO {__version__}" in out
     assert not app_home.exists()  # « version » ne crée rien
 
 
 def test_init_puis_etat(environ: dict[str, str], clock: FixedClock, paths: AppPaths) -> None:
     code, out, _ = run(["init"], environ, clock)
-    assert code == EXIT_OK and "Migrations appliquées : 1" in out
+    assert code == EXIT_OK and "Migrations appliquées : 1, 2" in out
     code, out, _ = run(["init"], environ, clock)
     assert code == EXIT_OK and "déjà à jour" in out
     code, out, _ = run(["etat"], environ, clock)
@@ -133,3 +134,58 @@ def test_base_trop_recente_signalee(
     conn.close()
     code, _, err = run(["etat"], environ, clock)
     assert code == EXIT_ERROR and "version de schéma 999" in err
+
+
+# --- Phase 2 : sources et inventaire -----------------------------------------------------
+
+
+def test_parcours_source_scanner_inventaire(
+    tmp_path: Path, environ: dict[str, str], clock: FixedClock, paths: AppPaths
+) -> None:
+    from tests.synthetic.generate import generate_corpus
+
+    lib = tmp_path / "lib"
+    generate_corpus(lib, seed=3, n_files=120)
+    code, out, _ = run(["source", "lister"], environ, clock)
+    assert code == EXIT_OK and "Aucune source" in out
+    code, _, err = run(["scanner"], environ, clock)
+    assert code == EXIT_USAGE and "Aucune source" in err
+    code, out, _ = run(["source", "ajouter", str(lib), "--nom", "Robots"], environ, clock)
+    assert code == EXIT_OK and "Source n° 1 ajoutée" in out
+    code, out, _ = run(["source", "lister"], environ, clock)
+    assert "Robots" in out and "jamais inventoriée" in out
+    code, out, _ = run(["scanner"], environ, clock)
+    assert code == EXIT_OK and "120 fichier(s) vu(s) — 120 nouveau(x)" in out
+    code, out, _ = run(["inventaire"], environ, clock)
+    assert code == EXIT_OK and "Fichiers présents : 120" in out and "not_computed\t120" in out
+    code, out, _ = run(["fichiers", "--ext", "set", "--limite", "5"], environ, clock)
+    assert code == EXIT_OK and "5 affiché(s) sur" in out and "Suite : ajoutez --apres" in out
+    code, out, _ = run(["taches"], environ, clock)
+    assert "scan\tcompleted\t120" in out
+    code, out, _ = run(["erreurs", "2"], environ, clock)
+    assert "Aucune erreur" in out
+    code, out, _ = run(["fichiers", "--manquants"], environ, clock)
+    assert "0 affiché(s) sur 0" in out
+
+
+def test_retrait_source_exige_confirmation(
+    tmp_path: Path, environ: dict[str, str], clock: FixedClock
+) -> None:
+    (tmp_path / "lib").mkdir()
+    run(["source", "ajouter", str(tmp_path / "lib")], environ, clock)
+    code, _, err = run(["source", "retirer", "1"], environ, clock)
+    assert code == EXIT_USAGE and "NON effectué" in err
+    code, out, _ = run(["source", "retirer", "1", "--confirmer"], environ, clock)
+    assert code == EXIT_OK and "fichiers intacts" in out and (tmp_path / "lib").exists()
+
+
+def test_source_refusee_et_scan_en_echec(
+    tmp_path: Path, environ: dict[str, str], clock: FixedClock
+) -> None:
+    code, _, err = run(["source", "ajouter", str(tmp_path / "absent")], environ, clock)
+    assert code == EXIT_ERROR and "n'existe pas" in err
+    (tmp_path / "lib").mkdir()
+    run(["source", "ajouter", str(tmp_path / "lib")], environ, clock)
+    (tmp_path / "lib").rmdir()
+    code, _, err = run(["scanner", "1"], environ, clock)
+    assert code == EXIT_ERROR and "inaccessible" in err

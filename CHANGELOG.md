@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.2.0] — Phase 2 : scanner en lecture seule
+
+### Ajouté
+- Énumération lecture seule (octets, liens non suivis, cycles évités, erreurs non bloquantes).
+- Gestion des sources (ajout avec contrôles, retrait sans suppression).
+- Inventaire incrémental avec pause, reprise, annulation ; tâches interrompues détectées.
+- Consultation : statistiques, pagination, filtres, recherche plein texte.
+- Migration 0002 (type d'entrée). CLI : source, scanner, inventaire, fichiers, taches, erreurs.
+- CI macOS lancée à chaque envoi (décision du propriétaire).
+
 ## [0.1.0] — Phase 1 : socle (en attente de validation)
 
 ### Ajouté

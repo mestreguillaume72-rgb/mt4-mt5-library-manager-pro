@@ -1,6 +1,6 @@
 [project]
 name = "mtlm"
-version = "0.1.0"
+version = "0.2.0"
 description = "MT4 MT5 Library Manager PRO — gestion et analyse sécurisée de bibliothèques MetaTrader (macOS)"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -61,4 +61,6 @@ select = ["E", "F", "W", "I", "B", "UP", "S", "SIM", "RUF", "PTH", "N"]
 ignore = ["RUF001", "RUF002", "RUF003"]  # textes en français (apostrophes, guillemets typographiques)
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "S311", "S603"]
+"tests/**" = ["S101", "S311", "S603", "PTH"]
+# Module fs : chemins manipulés en octets (noms mal encodés conservés) => API os.* volontaire.
+"src/mtlm/fs/**" = ["PTH"]

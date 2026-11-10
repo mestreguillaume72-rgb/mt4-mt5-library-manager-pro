@@ -12,6 +12,7 @@ from pathlib import Path
 from types import TracebackType
 
 from mtlm import ENGINE_VERSION, __version__
+from mtlm.app.jobs import JobStore
 from mtlm.audit.journal import ACTOR_SYSTEM, AuditJournal
 from mtlm.audit.logs import setup_logging
 from mtlm.core.clock import Clock, SystemClock
@@ -76,6 +77,14 @@ def open_app(paths: AppPaths, clock: Clock | None = None) -> AppContext:
                 "db.migrate",
                 str(paths.database),
                 details={"versions": applied, "app_version": __version__},
+            )
+        interrupted = JobStore(conn, used_clock).mark_interrupted()
+        if interrupted:
+            journal.append(
+                ACTOR_SYSTEM,
+                "job.interrupted",
+                "démarrage",
+                details={"jobs": interrupted, "note": "tâches interrompues par une fermeture"},
             )
     except BaseException:
         conn.close()

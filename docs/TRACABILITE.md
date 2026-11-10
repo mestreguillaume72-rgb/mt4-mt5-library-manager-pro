@@ -18,4 +18,7 @@ Mise à jour à chaque phase. « Preuve » renvoie au rapport de phase contenant
 | F12 Tests 50k / 100k | `tests/integration/test_invariant_sources.py` (`-m slow`) | idem | phase-01 | ✅ génération + invariant |
 | § 1 Sources en lecture seule | invariant (outil `tests/support/fs_snapshot.py`) | `test_invariant_sources.py` | phase-01 | ✅ référence ; étendu à chaque moteur |
 | § 8 Phase 1 « installation reproductible » | `uv.lock`, `tools/check_wheel.py` | CI `ci.yml` + essai local en venv vierge | phase-01 | ✅ Linux ; macOS en CI |
-| F1 à F11, F13 | — | — | — | ⏳ phases 2 à 12 |
+| F1 Sources et inventaire lecture seule | `fs/walker.py`, `fs/paths.py`, `app/sources.py`, `app/scan.py` | `test_walker.py` (20), `test_scan.py` (17), `test_cli.py` | phase-02 | ✅ Phase 2 |
+| F11/F12 Pause, reprise, annulation, reprise après fermeture | `core/control.py`, `app/jobs.py` | `test_pause_puis_reprise`, `test_annulation_ne_declare_aucun_manquant`, `test_tache_interrompue_detectee_au_demarrage` | phase-02 | ✅ moteur |
+| F10 Recherche paginée, filtres (base) | `app/inventory.py` | `test_pagination_filtres_et_recherche` | phase-02 | ✅ base |
+| F2 à F11, F13 | — | — | — | ⏳ phases 3 à 12 |

@@ -13,7 +13,11 @@ import sys
 import zipfile
 from pathlib import PurePosixPath
 
-REQUIRED = {"mtlm/store/migrations/0001_initial.sql", "mtlm/cli/main.py"}
+REQUIRED = {
+    "mtlm/store/migrations/0001_initial.sql",
+    "mtlm/store/migrations/0002_file_type.sql",
+    "mtlm/cli/main.py",
+}
 FORBIDDEN_SUFFIXES = {
     ".ex4",
     ".ex5",
