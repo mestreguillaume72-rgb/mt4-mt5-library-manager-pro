@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.7.0] — Phase 7 : familles et versions
+
+### Ajouté
+- Identité logique, séparation des homonymes, relations et versions estimées avec leur base.
+- CLI : regrouper, familles, famille.
+
 ## [0.6.0] — Phase 6 : SET et associations
 
 ### Ajouté

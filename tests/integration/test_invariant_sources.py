@@ -44,6 +44,8 @@ def all_commands(corpus: Path, export_dir: Path) -> list[list[str]]:
         ["associer"],
         ["associations", "--limite", "5"],
         ["orphelins"],
+        ["regrouper"],
+        ["familles"],
         ["inventaire"],
         ["fichiers", "--limite", "10"],
         ["taches"],
@@ -110,6 +112,8 @@ def test_charge_corpus_et_invariant(
         f"2 inventaires (initial + incrémental) {durations['scanner']:.1f}s ; "
         f"empreintes {durations['empreintes']:.1f}s ; "
         f"formats {durations['formats']:.1f}s ; reconnaissance {durations['reconnaitre']:.1f}s ; "
+        f"SET {durations['sets']:.1f}s ; associations {durations['associer']:.1f}s ; "
+        f"familles {durations['regrouper']:.1f}s ; "
         f"RAM max processus {rss_mib:.0f} Mio"
     )
     assert files == n_files == len(manifest.entries)

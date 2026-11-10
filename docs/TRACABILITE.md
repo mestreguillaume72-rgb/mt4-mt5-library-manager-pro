@@ -26,4 +26,5 @@ Mise à jour à chaque phase. « Preuve » renvoie au rapport de phase contenant
 | F3 Formats et archives (signatures, ZIP sécurisé) | `formats/signatures.py`, `formats/archives.py`, `app/formats.py` | `test_formats.py` (42+), `test_formats_service.py` | phase-04 | ✅ Phase 4 |
 | F4 Reconnaissance MetaTrader avec certitude et limites | `metatrader/*.py`, `app/recognize.py` | `test_mql.py`, `test_classify.py`, `test_recognize.py` | phase-05 | ✅ Phase 5 |
 | F5 Analyse SET maximale + associations avec preuves | `setfiles/parser.py`, `matching/associations.py`, `app/sets.py` | `test_setfiles.py`, `test_associations.py`, `test_sets_associations.py` | phase-06 | ✅ Phase 6 |
-| F6 à F11, F13 (livraison) | — | — | — | ⏳ phases 7 à 12 |
+| F6 Familles et versions (identité logique, homonymes, versions) | `matching/names.py`, `matching/families.py`, `app/families.py` | `test_families.py`, `test_families_service.py` | phase-07 | ✅ Phase 7 |
+| F7 à F11, F13 (livraison) | — | — | — | ⏳ phases 8 à 12 |

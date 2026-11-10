@@ -18,6 +18,7 @@ from typing import TextIO
 
 from mtlm import APP_NAME, ENGINE_VERSION, __version__
 from mtlm.app.context import AppContext, open_app
+from mtlm.app.families import FamilyService
 from mtlm.app.formats import FormatService
 from mtlm.app.hashing import HashService
 from mtlm.app.inventory import FileFilter, InventoryService, analysis_of
@@ -144,6 +145,14 @@ def build_parser() -> argparse.ArgumentParser:
     choice.add_argument("--rejeter", action="store_true")
     choice.add_argument("--annuler", action="store_true", help="Revient à « non décidée ».")
     sub.add_parser("orphelins", help="SET sans aucun robot correspondant.")
+    sub.add_parser("regrouper", help="Recalcule les familles (copies, versions, compilés, SET).")
+    fams = sub.add_parser("familles", help="Liste des familles.")
+    fams.add_argument("--recherche", default=None)
+    fams.add_argument("--min-membres", type=int, default=2)
+    fams.add_argument("--limite", type=int, default=50)
+    fam = sub.add_parser("famille", help="Détail d'une famille (ou de celle d'un fichier).")
+    fam.add_argument("id", type=int)
+    fam.add_argument("--fichier", action="store_true", help="ID est un identifiant de fichier.")
 
     sub.add_parser("taches", help="Dernières tâches et leur état.")
     errors = sub.add_parser("erreurs", help="Erreurs d'une tâche d'inventaire.")
@@ -210,6 +219,9 @@ def _dispatch(
             "association": _association,
             "valider": _decide,
             "orphelins": _orphans,
+            "regrouper": _regroup,
+            "familles": _families,
+            "famille": _family,
             "taches": _jobs,
             "erreurs": _errors,
         }
@@ -583,6 +595,65 @@ def _orphans(_args: argparse.Namespace, ctx: AppContext, out: TextIO, _err: Text
     print(f"{len(rows)} SET orphelin(s) (aucun robot correspondant trouvé) :", file=out)
     for file_id, path in rows:
         print(f"  {file_id}\t{path}", file=out)
+    return EXIT_OK
+
+
+RELATION_LABELS = {
+    "exact_copy": "copie exacte",
+    "renamed_copy": "copie renommée",
+    "version_variant": "version",
+    "source_of": "source",
+    "compiled_variant": "compilé",
+    "homonym_different": "homonyme distinct",
+    "set_for": "SET associé",
+}
+
+
+def _regroup(_args: argparse.Namespace, ctx: AppContext, out: TextIO, _err: TextIO) -> int:
+    summary = FamilyService(ctx.conn, ctx.clock, ctx.journal).rebuild()
+    print(
+        f"Familles (tâche {summary.job_id}) : {summary.families} famille(s), {summary.members} "
+        f"membre(s) ; {summary.multi_version} avec plusieurs versions ; "
+        f"{summary.homonym_groups} homonyme(s) séparé(s) ; {summary.with_sets} avec SET.",
+        file=out,
+    )
+    return EXIT_OK
+
+
+def _families(args: argparse.Namespace, ctx: AppContext, out: TextIO, _err: TextIO) -> int:
+    rows = FamilyService(ctx.conn, ctx.clock, ctx.journal).find(
+        text=args.recherche, min_members=args.min_membres, limit=args.limite
+    )
+    if not rows:
+        print("Aucune famille (lancez « mtlm regrouper »).", file=out)
+    for r in rows:
+        print(
+            f"{r.id}\t{r.display_name}\t{r.platform}\t{r.members} membre(s)\t"
+            f"{r.versions} version(s)\tconfiance {r.confidence}",
+            file=out,
+        )
+    return EXIT_OK
+
+
+def _family(args: argparse.Namespace, ctx: AppContext, out: TextIO, err: TextIO) -> int:
+    service = FamilyService(ctx.conn, ctx.clock, ctx.journal)
+    family_id = service.family_of(args.id) if args.fichier else args.id
+    found = service.detail(family_id) if family_id is not None else None
+    if found is None:
+        print("Famille introuvable (lancez « mtlm regrouper »).", file=err)
+        return EXIT_ERROR
+    row, basis, members = found
+    print(
+        f"Famille {row.id} : {row.display_name} ({row.platform}) — confiance {row.confidence}",
+        file=out,
+    )
+    for reason in basis:
+        print(f"  raison : {reason}", file=out)
+    for m in members:
+        version = (
+            f" — version {m.estimated_version} ({m.version_basis})" if m.estimated_version else ""
+        )
+        print(f"  {RELATION_LABELS.get(m.relation, m.relation)}\t{m.rel_path}{version}", file=out)
     return EXIT_OK
 
 

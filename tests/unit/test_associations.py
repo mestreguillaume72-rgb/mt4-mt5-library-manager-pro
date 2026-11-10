@@ -12,7 +12,7 @@ from mtlm.matching.associations import (
 )
 from mtlm.matching.names import logical_key, parse_version, version_in_name
 
-INPUTS = {
+INPUTS: dict[str, tuple[str, str | None]] = {
     "Lots": ("double", "0.1"),
     "TakeProfit": ("int", "50"),
     "StopLoss": ("int", "30"),
