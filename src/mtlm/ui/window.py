@@ -157,9 +157,9 @@ class MainWindow(QMainWindow):
         self.sidebar.currentItemChanged.connect(self._on_item)
         side = QWidget()
         side.setObjectName("sidebar")
-        side.setFixedWidth(250)
+        side.setFixedWidth(262)
         left = QVBoxLayout(side)
-        left.setContentsMargins(10, 18, 10, 12)
+        left.setContentsMargins(14, 22, 14, 16)
         brand_row = QHBoxLayout()
         logo = QLabel()
         logo.setPixmap(app_icon(64).pixmap(40, 40))
@@ -183,8 +183,9 @@ class MainWindow(QMainWindow):
         layout.setSpacing(0)
         layout.addWidget(side)
         content = QWidget()
+        content.setObjectName("content")
         content_layout = QVBoxLayout(content)
-        content_layout.setContentsMargins(26, 20, 26, 14)
+        content_layout.setContentsMargins(36, 30, 36, 22)
         content_layout.addWidget(self.stack)
         layout.addWidget(content, 1)
         self.setCentralWidget(container)
@@ -243,7 +244,7 @@ class MainWindow(QMainWindow):
         if callable(refresh):
             refresh()
 
-    def closeEvent(self, event: Any) -> None:  # noqa: N802 — API Qt
+    def closeEvent(self, event: Any) -> None:
         if self.app.busy and self.app.control is not None:
             self.app.control.cancel()
             self.app.wait(30_000)

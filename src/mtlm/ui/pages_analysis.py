@@ -51,7 +51,9 @@ class SetsPage(Page):
             ["Paramètre", "Valeur brute", "Normalisée", "Type", "Optimisation"]
         )
         self.layout_.addWidget(two_columns(self.sets, self.params), 2)
-        self.assoc = make_table(["N°", "Score", "Niveau", "Décision", "Robot"])
+        self.assoc = make_table(
+            ["N°", "Score", "Niveau", "Décision", "Robot"], badge_columns=(2, 3)
+        )
         self.assoc.itemSelectionChanged.connect(self.load_evidence)
         self.evidence = QPlainTextEdit()
         self.evidence.setReadOnly(True)
@@ -230,12 +232,14 @@ class FamiliesPage(Page):
             self.btn("actualiser", "Actualiser", self.refresh),
         )
         self.families = make_table(
-            ["N°", "Famille", "Plateforme", "Membres", "Versions", "Confiance"]
+            ["N°", "Famille", "Plateforme", "Membres", "Versions", "Confiance"], badge_columns=(5,)
         )
         self.families.itemSelectionChanged.connect(self.load_members)
         self.reasons = QPlainTextEdit()
         self.reasons.setReadOnly(True)
-        self.members = make_table(["Fichier", "Relation", "Version estimée", "Base", "Chemin"])
+        self.members = make_table(
+            ["Fichier", "Relation", "Version estimée", "Base", "Chemin"], badge_columns=(1,)
+        )
         self.layout_.addWidget(self.families, 2)
         self.layout_.addWidget(self.reasons, 1)
         self.layout_.addWidget(self.members, 2)
@@ -313,10 +317,11 @@ class DuplicatesPage(Page):
         exact = QWidget()
         exact_layout = QVBoxLayout(exact)
         self.groups = make_table(
-            ["Groupe", "Fichiers", "Taille", "SHA-256", "Référence", "Choisie par vous"]
+            ["Groupe", "Fichiers", "Taille", "SHA-256", "Référence", "Choisie par vous"],
+            badge_columns=(5,),
         )
         self.groups.itemSelectionChanged.connect(self.load_members)
-        self.members = make_table(["Fichier", "Rôle", "Chemin"])
+        self.members = make_table(["Fichier", "Rôle", "Chemin"], badge_columns=(1,))
         exact_layout.addWidget(self.groups, 1)
         exact_layout.addWidget(self.members, 1)
         tabs.addTab(exact, "Doublons exacts")
@@ -331,7 +336,9 @@ class DuplicatesPage(Page):
         ):
             self.kind.addItem(label, value)
         self.kind.currentIndexChanged.connect(lambda _i: self.refresh())
-        self.similar = make_table(["Score", "Type", "Fichier A", "Fichier B", "Méthode"])
+        self.similar = make_table(
+            ["Score", "Type", "Fichier A", "Fichier B", "Méthode"], badge_columns=(1,)
+        )
         similar_layout.addWidget(self.kind)
         similar_layout.addWidget(self.similar, 1)
         tabs.addTab(similar, "Similaires")

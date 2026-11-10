@@ -36,6 +36,7 @@ from mtlm.app.presenters import (
 from mtlm.app.scan import ScanService
 from mtlm.app.sources import SourceService
 from mtlm.ui.base import fill_table, make_table, selected_value
+from mtlm.ui.theme import glow
 from mtlm.ui.window import MainWindow, UiApp
 
 
@@ -51,7 +52,7 @@ class Page(QWidget):
         self.setObjectName(f"page-{self.key}")
         self.layout_ = QVBoxLayout(self)
         self.layout_.setContentsMargins(0, 0, 0, 0)
-        self.layout_.setSpacing(10)
+        self.layout_.setSpacing(14)
         heading = QLabel(self.title)
         heading.setObjectName("pageTitle")
         self.layout_.addWidget(heading)
@@ -101,9 +102,25 @@ class Page(QWidget):
         """Recharge l'écran depuis la base (aucune donnée fictive)."""
 
 
-def card(parent_layout: QGridLayout | QHBoxLayout | QVBoxLayout | None = None) -> QFrame:
-    frame = QFrame()
+class ClickCard(QFrame):
+    """Carte entièrement cliquable (en plus de son bouton, pour le clavier)."""
+
+    def __init__(self, on_click: Any = None) -> None:
+        super().__init__()
+        self._on_click = on_click
+        if on_click is not None:
+            self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def mouseReleaseEvent(self, event: Any) -> None:
+        if self._on_click is not None and event.button() == Qt.MouseButton.LeftButton:
+            self._on_click()
+        super().mouseReleaseEvent(event)
+
+
+def card(on_click: Any = None) -> QFrame:
+    frame = ClickCard(on_click)
     frame.setObjectName("card")
+    glow(frame, None)
     return frame
 
 
@@ -237,10 +254,13 @@ class DashboardPage(Page):
             ("families", "🧬  Familles de robots", "familles", "Voir"),
             ("files", "📄  Fichiers analysés", "explorateur", "Explorer"),
         ]
+        self.tiles: dict[str, QFrame] = {}
+        self.hints: dict[str, QLabel] = {}
         for i, (key, label, target, action) in enumerate(tiles):
-            frame = card()
+            frame = card(lambda t=target: self.win.navigate(t))
             box = QVBoxLayout(frame)
-            box.setContentsMargins(16, 12, 16, 12)
+            box.setContentsMargins(22, 18, 22, 16)
+            box.setSpacing(6)
             caption = QLabel(label)
             caption.setObjectName("cardTitle")
             value = QLabel("—")
@@ -252,10 +272,15 @@ class DashboardPage(Page):
             row = QHBoxLayout()
             row.addWidget(value, 1)
             row.addWidget(go)
+            hint = QLabel("")
+            hint.setObjectName("cardHint")
             box.addWidget(caption)
             box.addLayout(row)
+            box.addWidget(hint)
             grid.addWidget(frame, i // 4, i % 4)
             self.values[key] = value
+            self.tiles[key] = frame
+            self.hints[key] = hint
         self.layout_.addLayout(grid)
         # Valeurs secondaires (lues par les tests et le résumé).
         for key in (
@@ -313,6 +338,30 @@ class DashboardPage(Page):
             )
             self.progress_text.setText(f"⏳  {text}")
 
+    def _apply_tones(self, values: dict[str, Any], analysed: bool) -> None:
+        """Ton de chaque carte KPI selon les données réelles : vert = en ordre,
+        ambre = action recommandée, bleu = information."""
+        attention = {
+            "assoc_check": "à vérifier",
+            "dup_groups": "doublons exacts",
+            "reclaim": "copies en trop",
+        }
+        for key, frame in self.tiles.items():
+            if not analysed:
+                tone, hint = "", ""
+            elif key in attention:
+                busy = int(values[key]) > 0
+                tone = "warning" if busy else "success"
+                hint = "Action recommandée" if busy else "Tout est en ordre"
+            elif key == "assoc_strong":
+                tone, hint = ("success", "Reliés avec preuves") if values[key] else ("", "")
+            else:
+                tone, hint = "info", ""
+            frame.setProperty("tone", tone)
+            self.hints[key].setText(hint)
+            restyle(frame)
+            glow(frame, tone or None, 55)
+
     def _count(self, sql: str) -> int:
         return int(self.conn.execute(sql).fetchone()[0] or 0)
 
@@ -358,6 +407,7 @@ class DashboardPage(Page):
         }
         for key, value in values.items():
             self.values[key].setText(fmt(value) if isinstance(value, int) else str(value))
+        self._apply_tones(values, analysed > 0)
         # États des 3 étapes.
         done = [sources > 0, analysed > 0, values["assoc_ok"] > 0 or values["quarantined"] > 0]
         texts = [
@@ -377,6 +427,7 @@ class DashboardPage(Page):
             self.step_status[i].setObjectName("badgeOk" if done[i] else "badgeTodo")
             for widget in (frame, self.step_numbers[i], self.step_status[i]):
                 restyle(widget)
+            glow(frame, "success" if done[i] else ("info" if i == current else None), 60)
         if sources == 0:
             self.empty.setText(
                 "Aucune source n'est encore ajoutée. Commencez par l'étape 1 : "
@@ -416,7 +467,9 @@ class SourcesPage(Page):
             "écrit, ne renomme et ne supprime jamais rien.",
             "bannerSafe",
         )
-        self.table = make_table(["N°", "Nom", "Chemin", "État", "Dernier inventaire"])
+        self.table = make_table(
+            ["N°", "Nom", "Chemin", "État", "Dernier inventaire"], badge_columns=(3,)
+        )
         self.layout_.addWidget(self.table, 1)
         self.button_row(
             self.btn("ajouter", "Ajouter un dossier…", self.add),
@@ -531,7 +584,9 @@ class AnalysisPage(Page):
         self.log.setReadOnly(True)
         self.log.setObjectName("analyse.journal")
         self.layout_.addWidget(self.log, 1)
-        self.jobs = make_table(["Tâche", "Type", "État", "Traités", "Erreurs", "Créée le"])
+        self.jobs = make_table(
+            ["Tâche", "Type", "État", "Traités", "Erreurs", "Créée le"], badge_columns=(2,)
+        )
         self.layout_.addWidget(self.jobs, 1)
         self.button_row(
             self.btn("erreurs", "Voir les erreurs de la tâche choisie", self.show_errors)
@@ -657,7 +712,9 @@ class ExplorerPage(Page):
         )
         self.counter = QLabel()
         self.layout_.addWidget(self.counter)
-        self.table = make_table(["N°", "Nom", "Type", "Plateforme", "Taille", "Dossier"])
+        self.table = make_table(
+            ["N°", "Nom", "Type", "Plateforme", "Taille", "Dossier"], badge_columns=(2,)
+        )
         self.table.doubleClicked.connect(lambda _i: self.open_detail())
         self.layout_.addWidget(self.table, 1)
         self._cursors: list[int] = [0]

@@ -63,10 +63,11 @@ class QuarantinePage(Page):
             self.btn("executer", "3. Confirmer et copier", self.execute),
         )
         self.batches = make_table(
-            ["Lot", "État", "Fichiers", "Vérifiés", "Volume", "Destination", "Créé le"]
+            ["Lot", "État", "Fichiers", "Vérifiés", "Volume", "Destination", "Créé le"],
+            badge_columns=(1,),
         )
         self.batches.itemSelectionChanged.connect(self.load_entries)
-        self.entries = make_table(["Fichier", "État", "Original", "Erreur"])
+        self.entries = make_table(["Fichier", "État", "Original", "Erreur"], badge_columns=(1,))
         self.layout_.addWidget(two_columns(self.batches, self.entries), 1)
         self.button_row(
             self.btn("restaurer", "Restaurer le lot", lambda: self.restore(False)),
@@ -235,9 +236,11 @@ class OrganizePage(Page):
             self.btn("executer", "3. Confirmer et copier", self.execute),
             self.btn("actualiser", "Actualiser", self.refresh),
         )
-        self.plans = make_table(["Plan", "Destination", "État", "Fichiers", "Copiés", "Collisions"])
+        self.plans = make_table(
+            ["Plan", "Destination", "État", "Fichiers", "Copiés", "Collisions"], badge_columns=(2,)
+        )
         self.plans.itemSelectionChanged.connect(self.load_items)
-        self.items = make_table(["Fichier", "Cible", "État", "Collision avec"])
+        self.items = make_table(["Fichier", "Cible", "État", "Collision avec"], badge_columns=(2,))
         self.layout_.addWidget(two_columns(self.plans, self.items), 1)
 
     def _service(self) -> OrganizeService:
@@ -332,7 +335,9 @@ class ReportsPage(Page):
             self.btn("sauvegarder", "Sauvegarder la base", self.backup),
             self.btn("actualiser", "Actualiser", self.refresh),
         )
-        self.audit = make_table(["N°", "Date (UTC)", "Acteur", "Action", "Objet", "Résultat"])
+        self.audit = make_table(
+            ["N°", "Date (UTC)", "Acteur", "Action", "Objet", "Résultat"], badge_columns=(5,)
+        )
         self.layout_.addWidget(QLabel("Journal d'audit (200 derniers événements, non modifiable)"))
         self.layout_.addWidget(self.audit, 1)
 

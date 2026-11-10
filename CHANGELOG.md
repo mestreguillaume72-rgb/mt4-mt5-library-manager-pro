@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.2.0] — Direction artistique « Sombre Pro »
+
+### Modifié
+- Thème sombre haut de gamme : fond `#0B0F19`, cartes surélevées `#131C31` à bordures fines,
+  titres blancs, textes secondaires gris doux, marges plus aérées, police système moderne.
+- Cartes de résultats de l'accueil interactives (clic = écran concerné) avec halo et liseré
+  colorés selon les données réelles : vert « Tout est en ordre », ambre « Action recommandée »
+  (doublons, associations à vérifier, copies en trop), bleu pour l'information.
+- Tableaux modernisés : en-têtes en petites capitales, lignes alternées très discrètes, sans
+  quadrillage, et badges d'état colorés (terminée, erreur, à vérifier, référence…).
+- Boutons principaux en dégradé bleu → indigo avec survol lumineux ; boutons de danger
+  en contour rouge.
+
 ## [1.1.0] — Interface simple et soignée
 
 ### Ajouté / modifié

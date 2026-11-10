@@ -306,3 +306,37 @@ def test_accueil_guide(
     assert "Votre bibliothèque" in home.summary.text()
     click(window, qtbot, "tableau.resultats")
     assert window.current_key() == "sets"
+
+
+def test_badges_de_statut() -> None:
+    from mtlm.ui.base import badge_tone
+
+    assert badge_tone("terminée") == "success"
+    assert badge_tone("RÉFÉRENCE (conservée)") == "success"
+    assert badge_tone("échec") == "danger"
+    assert badge_tone("non admissible") == "danger"
+    assert badge_tone("admissible à la quarantaine") == "warning"
+    assert badge_tone("à vérifier") == "warning"
+    assert badge_tone("en cours") == "info"
+    assert badge_tone("non décidée") == "neutral"
+
+
+def test_cartes_kpi_tons_reels_et_cliquables(
+    window: MainWindow, qtbot: object, dialogs: FakeDialogs, tmp_path: Path
+) -> None:
+    home: Any = window.pages["tableau"]
+    # Avant analyse : aucun ton inventé.
+    assert all(frame.property("tone") in ("", None) for frame in home.tiles.values())
+    lib = tmp_path / "lib"
+    build_library(lib)
+    dialogs.directories.append(lib)
+    click(window, qtbot, "tableau.ajouter")
+    click(window, qtbot, "tableau.analyser")
+    wait_idle(window, qtbot)
+    window.navigate("tableau")
+    # La bibliothèque contient un doublon exact (Scalper.mq4 copié) : carte en alerte.
+    assert home.tiles["dup_groups"].property("tone") == "warning"
+    assert home.hints["dup_groups"].text() == "Action recommandée"
+    assert home.tiles["files"].property("tone") == "info"
+    qtbot.mouseClick(home.tiles["dup_groups"], Qt.MouseButton.LeftButton)  # type: ignore[attr-defined]
+    assert window.current_key() == "doublons"

@@ -1,6 +1,6 @@
 [project]
 name = "mtlm"
-version = "1.1.0"
+version = "1.2.0"
 description = "MT4 MT5 Library Manager PRO — gestion et analyse sécurisée de bibliothèques MetaTrader (macOS)"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -79,4 +79,5 @@ ignore = [
 # Module fs : chemins manipulés en octets (noms mal encodés conservés) => API os.* volontaire.
 "src/mtlm/fs/**" = ["PTH"]
 "src/mtlm/transfer/**" = ["PTH"]
-"tools/**" = ["S603"]  # outils de développement : lancent le Python du projet
+"tools/**" = ["S603"]
+"src/mtlm/ui/**" = ["N802"]  # surcharges de l'API Qt (sizeHint, closeEvent…)  # outils de développement : lancent le Python du projet

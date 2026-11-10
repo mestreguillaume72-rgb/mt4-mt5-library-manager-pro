@@ -9,13 +9,26 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
-from PySide6.QtCore import QObject, Qt, QThread, Signal
+from PySide6.QtCore import (
+    QModelIndex,
+    QObject,
+    QPersistentModelIndex,
+    QRectF,
+    QSize,
+    Qt,
+    QThread,
+    Signal,
+)
+from PySide6.QtGui import QColor, QFont, QPainter
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
     QHeaderView,
     QMessageBox,
     QPushButton,
+    QStyle,
+    QStyledItemDelegate,
+    QStyleOptionViewItem,
     QTableWidget,
     QTableWidgetItem,
     QWidget,
@@ -199,16 +212,134 @@ class TaskRunner(QThread):
 
 
 # ---- tableaux -----------------------------------------------------------------------------------
-def make_table(headers: Sequence[str]) -> QTableWidget:
+#: Mots-clés de statut → ton du badge (le premier ton qui correspond l'emporte).
+BADGE_RULES: list[tuple[str, tuple[str, ...]]] = [
+    (
+        "danger",
+        ("échec", "failed", "erreur", "error", "rejetée", "corrompue", "non admissible", "refus"),
+    ),
+    (
+        "warning",
+        (
+            "à vérifier",
+            "a_verifier",
+            "interrompue",
+            "pause",
+            "annulée",
+            "cancelled",
+            "moyenne",
+            "conflict",
+            "conflit",
+            "admissible",
+            "partial",
+            "stale",
+        ),
+    ),
+    (
+        "success",
+        (
+            "terminée",
+            "completed",
+            "forte",
+            "acceptée",
+            "verified",
+            "vérifiée",
+            "validated",
+            "saine",
+            "référence",
+            "restored",
+            "restaurée",
+            "certain",
+            "oui",
+        ),
+    ),
+    (
+        "info",
+        ("en cours", "running", "copying", "simulated", "preview", "planned", "probable", "copie"),
+    ),
+]
+
+
+def badge_tone(text: str) -> str:
+    lowered = text.lower()
+    for tone, words in BADGE_RULES:
+        if any(word in lowered for word in words):
+            return tone
+    return "neutral"
+
+
+class BadgeDelegate(QStyledItemDelegate):
+    """Affiche la valeur d'une cellule de statut comme une pastille colorée arrondie."""
+
+    def paint(
+        self,
+        painter: QPainter,
+        option: QStyleOptionViewItem,
+        index: QModelIndex | QPersistentModelIndex | QPersistentModelIndex,
+    ) -> None:
+        from mtlm.ui.theme import TONES
+
+        text = str(index.data() or "")
+        if not text:
+            super().paint(painter, option, index)
+            return
+        painter.save()
+        if option.state & QStyle.StateFlag.State_Selected:
+            painter.fillRect(option.rect, QColor(59, 130, 246, 46))
+        color, soft = TONES[badge_tone(text)]
+        font = QFont(option.font)
+        font.setPointSizeF(max(option.font.pointSizeF() - 1.0, 9.0))
+        font.setWeight(QFont.Weight.DemiBold)
+        painter.setFont(font)
+        metrics = painter.fontMetrics()
+        width = min(metrics.horizontalAdvance(text) + 20, option.rect.width() - 12)
+        height = metrics.height() + 6
+        rect = QRectF(option.rect.x() + 8, option.rect.center().y() - height / 2 + 1, width, height)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        background = QColor(color)
+        background.setAlpha(40)
+        painter.setBrush(background)
+        border = QColor(color)
+        border.setAlpha(110)
+        painter.setPen(border)
+        painter.drawRoundedRect(rect, height / 2, height / 2)
+        painter.setPen(QColor(color).lighter(115))
+        elided = metrics.elidedText(text, Qt.TextElideMode.ElideRight, int(width - 14))
+        painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, elided)
+        painter.restore()
+        _ = soft
+
+    def sizeHint(
+        self,
+        option: QStyleOptionViewItem,
+        index: QModelIndex | QPersistentModelIndex | QPersistentModelIndex,
+    ) -> QSize:
+        hint = super().sizeHint(option, index)
+        return QSize(hint.width() + 24, max(hint.height(), 30))
+
+
+def make_table(headers: Sequence[str], badge_columns: Sequence[int] = ()) -> QTableWidget:
     table = QTableWidget(0, len(headers))
-    table.setHorizontalHeaderLabels(list(headers))
+    table.setHorizontalHeaderLabels([h.upper() for h in headers])
     table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
     table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
     table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
     table.verticalHeader().setVisible(False)
+    table.verticalHeader().setDefaultSectionSize(40)
     table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
     table.horizontalHeader().setStretchLastSection(True)
+    table.horizontalHeader().setDefaultAlignment(
+        Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+    )
+    table.horizontalHeader().setHighlightSections(False)
+    table.setShowGrid(False)
+    table.setWordWrap(False)
     table.setAlternatingRowColors(True)
+    table.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+    delegate = BadgeDelegate(table)
+    for column in badge_columns:
+        table.setItemDelegateForColumn(column, delegate)
+    table.setProperty("badge_delegate", delegate)
     return table
 
 
