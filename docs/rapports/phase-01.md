@@ -80,7 +80,6 @@ du processus de test entier (générateur compris), pas une mesure de l'applicat
 - **CI macOS** : les workflows sont écrits mais ne se déclenchent que sur pull request ou à la
   demande ; ils n'ont **pas encore été exécutés**. Les étiquettes de machines `macos-15` et
   `macos-15-intel` sont à confirmer au premier lancement.
-- **Résultat de la CI Linux sur GitHub** : voir § 7 (consulté après envoi).
 - Les chemins macOS (`~/Library/…`) sont testés par simulation (paramètre de plateforme), pas
   encore sur un vrai Mac.
 - Aucune interface graphique (PySide6 n'est pas encore une dépendance) ; aucun `.app` ni DMG.
@@ -89,7 +88,7 @@ du processus de test entier (générateur compris), pas une mesure de l'applicat
 
 | Critère | État |
 |---|---|
-| `pytest` vert en CI Linux | voir § 7 |
+| `pytest` vert en CI Linux | ✅ run 42905395953 (Python 3.12 et 3.13) |
 | `pytest` vert en CI macOS | ⏳ à lancer (pull request ou manuel) |
 | Migration sur base vide et base N-1 | ✅ `test_base_vide_migree…`, `test_sauvegarde_avant_migration…` |
 | Installation reproductible | ✅ `uv sync --frozen` + wheel installé dans un venv vierge |
@@ -98,4 +97,17 @@ du processus de test entier (générateur compris), pas une mesure de l'applicat
 
 ## 7. Résultat de la CI GitHub
 
-Complété après l'envoi sur GitHub (voir le message de bilan de phase).
+Exécution « CI Linux » n° 1 (déclenchée par le push du commit `9235746`) :
+https://github.com/mestreguillaume72-rgb/mt4-mt5-library-manager-pro/actions/runs/42905395953
+
+| Tâche | Résultat |
+|---|---|
+| Tests (Python 3.12.16, ubuntu-latest) | ✅ succès — `117 passed, 2 deselected in 5.63s`, couverture 97,54 % |
+| Tests (Python 3.13, ubuntu-latest) | ✅ succès |
+| Lint, format, types, construction et vérification du paquet, installation dans un environnement vierge (`mtlm version/init/etat`) | ✅ dans les deux tâches |
+
+Avertissement non bloquant relevé : GitHub signale que les actions `checkout@v4`,
+`upload-artifact@v4` et `setup-uv@v6` ciblent Node.js 20 (déprécié). Mise à jour des versions
+d'actions prévue en début de phase 2.
+
+**CI macOS : non exécutée à ce jour** (déclenchement sur pull request ou manuel).
