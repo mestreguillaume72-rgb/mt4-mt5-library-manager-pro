@@ -1,141 +1,145 @@
-# DECISIONS — journal des décisions d'architecture (ADR)
+# DECISIONS — journal des décisions (ADR)
 
-> Format : chaque décision a un identifiant stable, un statut (`Proposée`, `Acceptée`, `Remplacée par D-xxx`, `Rejetée`), un contexte, les options étudiées, la décision et ses conséquences.
-> Toutes les décisions ci-dessous sont **Proposées** : elles deviennent `Acceptées` après validation du plan par le porteur du projet et confrontation au cahier des charges PDF (non reçu, voir Q-01 dans [RISQUES.md](RISQUES.md)).
+> Statuts : `Verrouillée (spéc.)` = imposée par la spécification § 1 ; `Proposée` = à approuver en Phase 0 ; `Acceptée` après approbation écrite ; `Remplacée par D-xxx` ; `Rejetée`.
+> Référence : `docs/specification/MT4-MT5-Library-Manager-PRO_dossier-developpeur_v3.0.pdf`.
 
 ---
 
-## D-001 — Technologie : Swift 6 + SwiftUI natif, ponts AppKit
+## Décisions verrouillées par la spécification (§ 1)
 
-**Contexte.** Application macOS d'analyse sécurisée, 50 000 à 100 000 fichiers, opérations de fichiers sensibles (quarantaine), aucune exécution de code tiers.
-
-**Options.**
-
-| Option | Pour | Contre |
+| ID | Décision | Conséquence dans l'architecture |
 |---|---|---|
-| **A. Swift/SwiftUI + AppKit** | Natif : sandbox, bookmarks à portée de sécurité, FSEvents, CryptoKit, notarisation, Instruments ; faible empreinte ; pas de runtime tiers ; concurrence structurée | macOS uniquement ; SwiftUI `Table` moins mature qu'`NSTableView` pour 100k lignes ; recrutement Swift plus étroit |
-| B. Electron + TypeScript | Écosystème large, multi-plateforme, UI rapide à produire | Runtime Chromium (~150 Mo, mémoire), surface d'attaque npm, accès sandbox/bookmarks via modules natifs, IO gros volumes moins performantes |
-| C. Tauri (Rust + WebView) | Léger, Rust performant et sûr pour le cœur, multi-plateforme | Deux langages ; intégration sandbox/bookmarks macOS via plugins à écrire ; table 100k lignes en web à virtualiser soi-même |
-| D. Qt (C++) / PySide | Multi-plateforme, `QTableView` performant | Look non natif, distribution/notarisation plus lourde, C++ moins sûr mémoire ; Python : GIL, packaging, perf hash |
-| E. Kotlin Multiplatform / Compose Desktop | Multi-plateforme | JVM embarquée, intégration macOS faible |
-
-**Décision.** A. Le cœur est écrit en **Swift pur, sans dépendance UI**, organisé en Swift Packages testables aussi sous Linux, ce qui garde ouverte une future CLI ou un portage du cœur.
-
-**Conséquences.** CI macOS obligatoire pour l'app ; cible Linux pour le cœur (feedback rapide). Si le PDF exige Windows (Q-03), réévaluer C (Tauri) — le modèle de données et les algorithmes de ce plan restent valables.
+| V-1 | Périmètre **ALL** | Tous les fichiers inventoriés, extensions inconnues conservées (`detected_type='unknown'`) |
+| V-2 | Analyse SET **maximum** | Modules `setfiles` + `matching`, preuves et incertitudes |
+| V-3 | Nettoyage par **quarantaine restaurable** | Module `transfer`, manifeste, pas de purge |
+| V-4 | **50 000+** fichiers | Flux, index, pagination, tests 50k/100k |
+| V-5 | Sources en **lecture seule** pendant les analyses | Modules d'analyse sans écriture ; invariant testé |
+| V-6 | **macOS**, `.app` + DMG, compatibilité **testée** | CI macOS + matrice avec preuves |
+| V-7 | Pilotage **Android**, Mac plus tard | Tout testable sans Mac jusqu'à la phase 12 |
 
 ---
 
-## D-002 — Cible minimale : macOS 14 Sonoma (proposition)
+## D-001 — Pile technologique
 
-**Raison.** Macro `@Observable`, SwiftUI `Table` et `Inspector` stables, Swift 6. macOS 13 possible avec `ObservableObject` (coût modéré). **À confirmer (Q-02).**
+**Statut : Proposée — choix final au propriétaire (Q-01).**
 
----
+**Contexte.** La spécification (§ 5) impose de comparer au moins une solution native (Swift/SwiftUI) et une solution multiplateforme (ex. Python/PySide), selon : dépendances, performances, compatibilité macOS, signature, maintenance, facilité de build. Contexte décisif : le propriétaire est **débutant**, pilote **depuis Android**, et n'aura un Mac qu'en **phase 12** ; chaque phase doit fournir des **résultats de tests réellement exécutés** (§ 7, § 9). L'environnement de développement distant est Linux (Python 3.13 présent, PySide6 installable ; pas de Swift).
 
-## D-003 — Persistance : SQLite (WAL + FTS5) via GRDB.swift
+> Note : une première version de ce document (avant lecture du PDF) recommandait Swift. La lecture de la spécification — en particulier le développement sans Mac jusqu'à la phase 12 et l'obligation de résultats de tests réels à chaque phase — a inversé la recommandation.
 
-**Options.** Core Data · SwiftData · SQLite via GRDB · SQLite C brut · fichiers JSON.
+**Options comparées.**
 
-**Décision.** SQLite via **GRDB.swift** (licence MIT, mature, migrations, observation de requêtes, FTS5).
-- Core Data/SwiftData : non disponibles sous Linux (tests du cœur), contrôle fin des requêtes et des lots plus difficile, SwiftData encore jeune pour 100k+ lignes.
-- SQLite brut : possible, mais réimplémente migrations/observation ; gardé en repli si la dépendance est refusée (Q-12).
-- JSON : inadapté aux requêtes et à la cohérence transactionnelle.
+| Critère (poids) | A. Swift 6 / SwiftUI (+AppKit) | B. Python 3.12+ / PySide6 | C. Tauri (Rust + web) | D. Electron (TypeScript) |
+|---|---|---|---|---|
+| Tests réels sans Mac — moteur (20) | 3/5 : Swift sur Linux possible mais toolchain à installer ; APIs macOS (FSEvents, bookmarks) non testables | **5/5** : tout le moteur tourne et se teste ici | 4/5 | 4/5 |
+| Tests réels sans Mac — interface (15) | **1/5** : SwiftUI uniquement sur macOS (CI payante) | **4/5** : Qt `offscreen` + pytest-qt ici ; rendu final à vérifier sur Mac | 3/5 : WebDriver, WebView différente selon OS | 3/5 |
+| Performance 50k–100k (15) | **5/5** | 4/5 : `hashlib`/`scandir`/SQLite en C ; `QTableView` paginé | 5/5 | 3/5 |
+| Compatibilité macOS / intégration (10) | **5/5** natif | 3/5 : dialogues natifs, aspect Qt | 3/5 | 3/5 |
+| Signature / notarisation / build (10) | **5/5** Xcode | 3/5 : PyInstaller + signature de nombreux binaires, faisable | 4/5 | 3/5 |
+| Universal2 Intel + Apple Silicon (5) | **5/5** | 4/5 : roues PySide6 universal2, à prouver par build | 4/5 | 4/5 |
+| Taille / mémoire (5) | **5/5** (~10–20 Mo) | 2/5 (~150–250 Mo) | 5/5 | 1/5 |
+| Maintenance par un débutant (10) | 2/5 | **5/5** | 2/5 (deux langages) | 3/5 |
+| Dépendances / chaîne d'approvisionnement (5) | **5/5** (quasi aucune) | 4/5 (PySide6 + quelques libs de test) | 3/5 | 1/5 (npm) |
+| Multiplateforme futur (5) | 1/5 | **5/5** | 5/5 | 5/5 |
+| **Score pondéré /500** | **350** | **405** | **375** | **315** |
 
-**Conséquences.** Une dépendance tierce, épinglée par version exacte et revue. Le schéma est la source de vérité, documenté dans ARCHITECTURE § 6.
+(Score = Σ note × poids ; ex. A = 60+15+75+50+50+25+25+20+25+5 = 350 ; B = 100+60+60+30+30+20+10+50+20+25 = 405. Les notes sont des jugements d'ingénierie argumentés ci-dessus, pas des mesures. Les poids reflètent les priorités de la spécification : « fiabilité, traçabilité et protection avant vitesse ou apparence ».)
 
----
+**Recommandation : B — Python 3.12+ / PySide6.**
+- Toutes les phases 1 à 11 produisent des **résultats de tests réels** dès maintenant (Linux) et sur macOS réel via GitHub Actions (`macos-14` arm64, `macos-13` Intel).
+- Le moteur est un paquet Python pur, testable sans interface (§ 5).
+- Plus lisible et explicable au propriétaire.
 
-## D-004 — Table principale : NSTableView si la mesure l'exige
+**Quand préférer A (Swift)** : si le propriétaire valorise un rendu 100 % natif, une application légère et une intégration macOS maximale, et accepte que l'interface ne soit vérifiée qu'en CI macOS (minutes payantes en dépôt privé) puis sur son Mac. L'architecture (modules, modèle de données, algorithmes, tests) se transpose : `mtlm.*` → Swift Packages `LM*`, SQLite via GRDB, `hashlib` → CryptoKit, pytest → Swift Testing/XCUITest.
 
-**Décision.** Prototyper la table en SwiftUI `Table` avec données paginées ; si les budgets (défilement fluide, tri/filtre ≤ 300 ms à 100k) ne sont pas atteints sur le matériel de référence, basculer sur `NSTableView` encapsulé (`NSViewRepresentable`). **Décision par mesure, consignée ici avec les chiffres.**
-
----
-
-## D-005 — Empreinte : SHA-256 (CryptoKit / swift-crypto)
-
-**Options.** MD5/SHA-1 (rapides, cassés en collisions) · xxHash/BLAKE3 (très rapides, non cryptographiques ou dépendance externe) · SHA-256.
-
-**Décision.** **SHA-256** pour l'identité de contenu (résistant aux collisions, outillage standard `shasum -a 256` pour vérification croisée, accélération matérielle sur Apple Silicon). Pré-filtre par taille puis hash tête+queue pour éviter de tout hasher inutilement. Option « vérification octet par octet » avant quarantaine.
-
-**Conséquences.** `swift-crypto` (Apple, API identique à CryptoKit) pour la compilation Linux du cœur.
-
----
-
-## D-006 — Lecture seule stricte et absence d'exécution, garanties par conception
-
-**Décision.**
-1. `LMFileSystem` n'expose **aucune** API d'écriture ; seul `LMQuarantine` contient du code de déplacement, et il exige un `UserConfirmation` créé uniquement par la couche UI après confirmation.
-2. Liste noire vérifiée en CI : `Process`, `NSTask`, `posix_spawn`, `dlopen`, `NSWorkspace.open`, `QLPreview*`, `NSAppleScript`, `setxattr`, `chmod`, `utimes`, `FileManager.removeItem` (hors `LMQuarantine`/conteneur app).
-3. Pas d'entitlement réseau ; pas de `disable-library-validation`.
-4. Fichiers iCloud non matérialisés : non lus par défaut.
-
-**Conséquences.** Certaines fonctionnalités « pratiques » (ouvrir dans MetaEditor, aperçu Quick Look) sont exclues ou limitées à « Afficher dans le Finder » (qui sélectionne sans ouvrir).
+**Conséquences de B.** Python officiel universal2 pour le build ; PySide6 épinglé ; PyInstaller ; signature de tous les binaires embarqués ; taille plus importante assumée.
 
 ---
 
-## D-007 — EX4 / EX5 / DLL : métadonnées de système de fichiers uniquement
+## D-002 — Version minimale de macOS
 
-**Contexte.** Les binaires compilés MQL sont des formats propriétaires ; leur décompilation est contraire aux conditions d'utilisation de MetaQuotes et potentiellement illégale ; toute « information cachée » qu'on prétendrait en extraire serait non fiable.
-
-**Décision.** En v1, pour `.ex4/.ex5/.dll` : nom, taille, dates, permissions, SHA-256, appariement avec une source de même nom dans la même bibliothèque (marqué « appariement par nom, non vérifié »). **Aucune lecture de contenu au-delà du hash.** L'UI l'indique explicitement : « Fichier compilé — contenu non analysé ».
-
-**Question ouverte (Q-13).** Lecture éventuelle d'en-têtes publiquement documentés : seulement si le PDF l'exige, avec source documentaire citée, présentée comme « indice », et testée sur fichiers légaux.
+**Statut : Proposée, à arbitrer selon le Mac du propriétaire (Q-02).**
+Proposition : **macOS 12 Monterey ou plus récent** (PySide6 6.x récent exige macOS 12+ ; à revérifier sur la version épinglée). Rien n'est annoncé compatible sans preuve (matrice § F13).
 
 ---
 
-## D-008 — Trois niveaux de ressemblance, jamais confondus
+## D-003 — Persistance : SQLite (module standard `sqlite3`), WAL, FTS5
 
-**Décision.** Vocabulaire et calculs distincts :
-- **Doublon exact** = même SHA-256 (et même taille).
-- **Équivalent normalisé** = même empreinte après normalisation documentée (encodage, fins de ligne, espaces, commentaires).
-- **Similaire** = Jaccard sur shingles de 5 tokens ≥ seuil (défaut 0,80, réglable), estimé par MinHash (128 permutations) + LSH, puis **recalculé exactement** pour les paires affichées.
-- **Version différente** = même identité logique, contenu différent ; ordre selon `#property version`, sinon « ordre supposé par date ».
-
-Seuls les doublons exacts peuvent alimenter une proposition de quarantaine « en lot » ; les autres classes sont informatives.
-
-**Conséquence.** Les seuils et la normalisation sont versionnés (`method` stocké) : un changement d'algorithme invalide et recalcule les résultats, jamais de mélange silencieux.
+**Statut : Proposée.** Conforme § F10 (« SQLite ou équivalent »). Aucune dépendance externe ; transactions, migrations versionnées maison (scripts SQL numérotés + `PRAGMA user_version`), sauvegarde par `sqlite3.Connection.backup` avant migration et avant chaque quarantaine. ORM rejeté : contrôle fin des lots et des requêtes paginées nécessaire à 100k.
 
 ---
 
-## D-009 — Quarantaine par déplacement sur le même volume, transactionnelle
+## D-004 — Empreinte : SHA-256 en flux, protocole de stabilité
 
-**Options.** Corbeille macOS (`trashItem`) · dossier de quarantaine dans le conteneur de l'app · dossier de quarantaine sur le même volume · copie + suppression.
-
-**Décision.** Dossier `.LibraryManagerQuarantine/<batch-uuid>/` sur **le même volume** que la racine : `rename(2)` atomique, aucun octet réécrit, métadonnées préservées. Manifeste JSON dans le lot **et** enregistrements SQLite (double traçabilité). Protocole en deux phases + réconciliation au démarrage. Pas de corbeille macOS (vidable par l'utilisateur hors de notre contrôle → non traçable).
-
-**Conséquences.** Nécessite le droit d'écriture sur la racine (bookmark en lecture-écriture, demandé seulement au moment de la première quarantaine). Hors même volume : refus explicite en v1. **À valider (Q-05).**
+**Statut : Proposée** (SHA-256 imposé § F2/F7). Blocs de 1 Mio, `fstat` avant/après, quatre états + `stale`. Collision « théorique » (§ F7) : option comparaison octet par octet avant quarantaine.
 
 ---
 
-## D-010 — Journalisation à deux niveaux
+## D-005 — EX4/EX5 : binaires opaques
 
-`os.Logger` + signposts (diagnostic, chemins en `.private`) ; table `audit_event` + export JSONL (actions utilisateur, traçabilité quarantaine). Le journal d'audit n'est pas modifiable depuis l'UI.
-
----
-
-## D-011 — Aucune donnée fictive dans l'application livrée
-
-Le générateur de corpus synthétique vit dans `LMTestSupport`, cible de test non liée à l'app ; test CI vérifiant le graphe de dépendances. Pas de « mode démo ». Les états vides sont réels.
+**Statut : Proposée** (conforme § 2, § F4). Seuls nom, taille, dates, signature et SHA-256. Type déduit seulement du dossier ou d'une source appariée, certitude ≤ « probable ». Aucune lecture de structure interne, aucune décompilation, aucune extraction de paramètres. Toute éventuelle lecture d'en-tête future exigerait une documentation publique vérifiable et une nouvelle décision.
 
 ---
 
-## D-012 — Pas de fonctionnalité visible non implémentée
+## D-006 — Archives : ZIP en lecture en flux sans extraction ; autres formats identifiés seulement
 
-Un bouton/menu n'est ajouté qu'avec son cas d'usage implémenté, son test XCUITest et son entrée de journal. Pas de contrôles « à venir ». Feature flags compilés pour le travail en cours, désactivés en build Release.
-
----
-
-## D-013 — Organisation du code : monorepo, Swift Package + projet Xcode mince
-
-Le projet Xcode ne contient que l'app SwiftUI ; toute logique est dans `Packages/LibraryManagerKit`. Permet tests rapides (`swift test`), CI Linux du cœur, revue plus simple.
+**Statut : Proposée.** `zipfile` standard ; aucune écriture sur disque ; limites de profondeur, taille, ratio, nombre d'entrées (valeurs § ARCHITECTURE 8.3, à valider Q-09). RAR/7z : signature uniquement (éviter dépendances natives et outils externes = risque d'exécution). Les fichiers dans des archives ne sont jamais mis en quarantaine.
 
 ---
 
-## D-014 — Qualité : Swift 6 strict concurrency, swift-format, SwiftLint
+## D-007 — Quarantaine : destination distincte, copie vérifiée, mode `copy` par défaut
 
-Avertissements traités comme erreurs en CI. Couverture mesurée (cible ≥ 85 % lignes sur le cœur, 100 % des chemins de `LMQuarantine`).
+**Statut : Proposée — mode `move` à trancher (Q-04).**
+- Destination choisie par l'utilisateur, **hors de toute source** (§ 6) ; vérification par chemins résolus et (device, inode).
+- Protocole : simulation → confirmation (jeton lié à la simulation) → copie en flux vers fichier temporaire → `fsync` → hash → renommage atomique → `verified`.
+- **`copy` (défaut)** : sources jamais modifiées ; la quarantaine sert de mise à l'écart vérifiée, et la bibliothèque organisée (F9) exclut les doublons.
+- **`move` (option)** : suppression de l'original **après** `verified` et re-vérification de stabilité ; seule opération de toute l'application qui écrit dans une source ; nécessite confirmation renforcée.
+- Pas de corbeille macOS (non traçable), pas de purge (§ F8).
 
 ---
 
-## D-015 — Nom de fichier du plan de tests
+## D-008 — Distinction doublon exact / équivalent / similaire / version
 
-Le document demandé « PLAN DE TESTS.md » est nommé `PLAN_DE_TESTS.md` (sans espaces) pour éviter les problèmes d'échappement dans les scripts/CI et les liens Markdown. Renommage trivial si l'orthographe exacte est exigée.
+**Statut : Proposée** (§ F6, F7). Quatre classes, tables et onglets distincts ; seuls les doublons **exacts admissibles** peuvent entrer en quarantaine. Similarité : Jaccard sur shingles de 5 tokens, MinHash 128 + LSH, recalcul exact affiché, seuil par défaut 0,80 (Q-10). `engine_version` stocké avec chaque résultat.
+
+---
+
+## D-009 — Associations robot↔SET : score pondéré explicable, plafonné sans source
+
+**Statut : Proposée** (§ F5). Critères et poids : ARCHITECTURE § 8.6. Règles dures : pas de niveau « forte » sans preuve paramétrique ; robot sans source lisible ⇒ plafond « à vérifier » ; aucune association validée sans l'utilisateur.
+
+---
+
+## D-010 — Audit append-only chaîné + journaux rotatifs
+
+**Statut : Proposée** (§ 5, § F12). Table `audit_event` avec `prev_hash`/`hash`, triggers interdisant `UPDATE`/`DELETE`, export JSONL ; `logging` rotatif.
+
+---
+
+## D-011 — Aucune maquette, actions « non disponible » explicites
+
+**Statut : Proposée** (§ 7). Registre central d'actions ; action non implémentée = désactivée avec libellé « non disponible » ; test qui échoue si une action activée n'est pas branchée ; générateur synthétique non empaqueté (test de contenu du bundle).
+
+---
+
+## D-012 — Outillage qualité
+
+**Statut : Proposée.** `uv` (ou `pip-tools`) avec fichier de verrouillage ; `ruff` (lint + format) ; `mypy --strict` sur `src/mtlm` ; `pytest`, `pytest-qt`, `hypothesis` (tests de propriétés), `pytest-cov` ; `import-linter` (règles de dépendances) ; couverture ≥ 85 % moteur, 100 % des branches de `transfer`.
+
+---
+
+## D-013 — CI : Linux à chaque commit, macOS ciblé, charge 100k la nuit
+
+**Statut : Proposée** (coût macOS — R-12). `ci.yml` (Linux) : lint, types, tests, sécurité statique, invariant lecture seule 50k. `macos.yml` (PR + manuel) : tests sur `macos-14`/`macos-13`, invariant macOS, build `.app`. `perf-nightly.yml` (manuel/planifié) : 100k, rapport de charge en artefact.
+
+---
+
+## D-014 — Données de test : 100 % synthétiques dans le dépôt
+
+**Statut : Proposée** (§ 9). Générateur à graine fixe produisant robots/SET **fictifs** et vérité terrain ; les exemples fictifs fournis par le propriétaire (Annexe) sont acceptés s'ils ne contiennent aucune donnée réelle. Aucun vrai robot, SET, DLL dans Git (contrôle `.gitignore` + test qui refuse `.ex4/.ex5/.dll` hors `tests/synthetic` générés à la volée).
+
+---
+
+## D-015 — Nom du plan de tests
+
+Le document « PLAN DE TESTS.md » est nommé `PLAN_DE_TESTS.md` (sans espaces) pour la robustesse des scripts et des liens. Renommage trivial si l'orthographe exacte est exigée.

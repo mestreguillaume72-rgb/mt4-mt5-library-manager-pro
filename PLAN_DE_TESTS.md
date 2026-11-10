@@ -1,165 +1,224 @@
 # PLAN DE TESTS — MT4 MT5 Library Manager PRO
 
-> Statut : **PROPOSITION — en attente de validation.**
-> Principe : une fonctionnalité n'existe que si elle est testée, journalisée, documentée et satisfait ses critères d'acceptation. Aucun résultat n'est déclaré « testé » sans exécution réelle en CI.
+> Phase 0 — Statut : **PROPOSITION, en attente de validation.**
+> Référence : `docs/specification/MT4-MT5-Library-Manager-PRO_dossier-developpeur_v3.0.pdf`.
+> Principe (§ 7) : une fonctionnalité n'est acceptée que si ses tests existent, ont été **réellement exécutés**, et que la commande, l'environnement et les résultats sont consignés. Les tests doivent **échouer si une fonction n'est pas branchée**.
 
 ---
 
-## 1. Pyramide et outillage
+## 1. Outillage et environnements
 
-| Niveau | Outil | Où | Quand |
-|---|---|---|---|
-| Unitaires | Swift Testing (`@Test`) / XCTest | `Packages/LibraryManagerKit/Tests` | Chaque commit (CI Linux + macOS) |
-| Propriétés / fuzz | Générateurs maison (graine fixe + graine aléatoire journalisée) | idem | Chaque PR (court) / nightly (long) |
-| Intégration système de fichiers | Dossiers temporaires réels (`FileManager.temporaryDirectory`) | idem | Chaque PR |
-| Golden (fichiers MQL réels) | Corpus `Fixtures/golden` + résultats attendus JSON | idem | Chaque PR |
-| Performance | `XCTMetric` / chronométrage + `OSSignposter`, seuils en échec | `PerformanceTests` | 50k chaque PR (macOS) ; 100k nightly |
-| UI | XCUITest | `App/UITests` | Chaque PR (macOS) |
-| Statique / sécurité | Script CI : APIs interdites, graphe de dépendances, entitlements, SwiftLint | `.github/workflows` | Chaque commit |
-| Manuel exploratoire | Checklist documentée | `docs/tests/manuel.md` | Avant chaque version |
+| Niveau | Outil | Exécution |
+|---|---|---|
+| Unitaires | `pytest` | Linux (env. distant + CI) à chaque commit ; macOS en CI |
+| Propriétés / fuzz | `hypothesis` (graine journalisée) | Chaque PR (court), nuit (long) |
+| Intégration système de fichiers | Dossiers temporaires réels (`tmp_path`) | Linux + macOS |
+| Interface | `pytest-qt`, Qt `QT_QPA_PLATFORM=offscreen` | Linux + macOS ; vérification visuelle finale sur Mac (phase 12) |
+| Sécurité statique | Tests `ast` maison + `import-linter` + `ruff` | Chaque commit |
+| Types | `mypy --strict` | Chaque commit |
+| Charge | Scripts `tests/perf` + mesure RAM (`resource.getrusage`, `psutil` en test uniquement) | 50k : PR des phases 2, 3, 8, 11 ; 100k : manuel / nuit |
+| Installation / bundle | Build PyInstaller + inspection du `.app` | CI macOS dès la phase 1, Mac réel en phase 12 |
 
-Chaque test est **déterministe** : horloge, UUID et graine aléatoire injectés (`LMCore.Clock`, `UUIDProvider`). Les tests ne touchent jamais `~/` réel ; seulement des dossiers temporaires créés et détruits par le test.
+**Déterminisme** : horloge, identifiants et graines injectés. Les tests n'accèdent **jamais** au dossier personnel réel ni à des données réelles : uniquement des dossiers temporaires créés puis supprimés par le test.
+
+**Preuve d'exécution** : chaque phase produit `docs/rapports/phase-NN.md` contenant la commande exacte, l'environnement (OS, Python, PySide6, matériel), le résumé `pytest` (réussis/échoués/ignorés), la couverture, les liens vers les runs CI, et la liste de ce qui attend le Mac.
 
 ---
 
-## 2. Corpus synthétique (`LMTestSupport.CorpusGenerator`)
+## 2. Jeu de données synthétique reproductible (livrable § 11)
 
-Utilisé **uniquement** en test (jamais lié à l'app, vérifié en CI — D-011).
+`tests/synthetic/generate.py --seed N --files 50000 --out <tmp>` produit une arborescence et un **manifeste de vérité terrain** (JSON). Non empaqueté dans l'application.
 
-| Paramètre | Valeurs |
+| Contenu | Détail |
 |---|---|
-| Taille | 1k (unitaire), 10k, **50k**, **100k** |
-| Arborescence | `MQL4/` et `MQL5/` avec `Experts, Indicators, Scripts, Include, Libraries, Presets, Files, Services, Images`, profondeur 1–8 |
-| Types | `.mq4 .mq5 .mqh` (sources générées syntaxiquement plausibles avec `#property`, `#include`, `input`, `OnTick`/`OnCalculate`/`OnStart`), `.ex4 .ex5 .dll` (octets aléatoires — **jamais de vrais binaires**), `.set .tpl .csv .ini`, extensions inconnues |
-| Encodages | UTF-8, UTF-8 BOM, UTF-16 LE BOM, UTF-16 BE BOM, CP1252, fichiers invalides |
-| Doublons injectés (vérité terrain connue) | 5 % exacts ; 2 % équivalents normalisés (CRLF/LF, commentaires, espaces, encodage) ; 3 % similaires à taux de mutation contrôlé (5–40 % des tokens) ; 2 % familles de versions (`#property version` 1.00→1.0n) |
-| Pièges | Mêmes tailles contenus différents ; même préfixe 64 Kio + même taille ; même tête et queue, milieu différent ; fichiers vides ; 1 octet ; > 100 Mo (un seul, nightly) |
-| Pathologies FS | Symlinks (valides, cassés, boucle), noms NFD vs NFC, casse différente, espaces/emoji/`:`, chemins longs, fichiers sans permission de lecture, dossiers non lisibles |
-
-Le générateur produit un **manifeste de vérité terrain** (JSON) ; les tests comparent les résultats de l'app à ce manifeste (précision, rappel, nombre exact).
-
----
-
-## 3. Tests par module
-
-### 3.1 LMFileSystem
-- Énumère exactement les fichiers du manifeste (compte, chemins, tailles).
-- Ne suit pas les symlinks ; détecte la boucle ; enregistre le lien comme tel.
-- Fichier illisible → erreur comptée, scan continue.
-- Fichier dataless (simulé via protocole injectable ; test réel macOS manuel) → non lu.
-- Annulation à 10 %, 50 %, 99 % → aucun état incohérent, session `cancelled`.
-- **Invariant lecture seule** (voir § 5).
-
-### 3.2 LMHashing
-- SHA-256 conforme aux vecteurs NIST et à `shasum -a 256` sur 1 000 fichiers.
-- Fichier vide, 1 octet, multiple exact de la taille de bloc, > 4 Gio (nightly, fichier creux).
-- Pré-hash tête+queue : fichiers < 128 Kio traités correctement (chevauchement).
-- Parallélisme borné respecté ; annulation propre.
-
-### 3.3 LMIndexStore
-- Chaque migration testée depuis chaque version précédente (base de chaque version archivée en fixture).
-- Insertions par lots : 100k lignes dans le budget ; atomicité (crash simulé au milieu d'un lot → rien de partiel).
-- Requêtes paginées : ordre stable, pas de doublon entre pages.
-- FTS5 : recherche par nom, chemin, `#property description`, accents.
-
-### 3.4 LMMQLAnalysis
-- Golden : pour chaque fixture, JSON attendu (`encoding`, `program_type`, `#property`, includes, imports, inputs) → égalité stricte.
-- Commentaires `//` et `/* */` imbriqués dans chaînes, chaînes contenant `#property`, lignes continuées, macros.
-- `#import "xxx.dll"` détecté et signalé — **jamais chargé** (test : aucun `dlopen` dans le binaire).
-- Fuzz : 10 000 entrées aléatoires / tronquées / binaires renommés → aucun crash, aucun blocage > 1 s par fichier.
-- Refus explicite d'analyser `.ex4 .ex5 .dll` (D-007).
-
-### 3.5 LMDuplicates
-- **Exacts** : rappel = précision = 1,0 sur le manifeste ; 0 faux positif sur les pièges (même taille, même tête/queue).
-- **Équivalents normalisés** : détectés pour CRLF/LF, BOM, encodage, commentaires, espaces ; **jamais** classés comme exacts.
-- **Similaires** : précision ≥ 0,95, rappel ≥ 0,90 au seuil 0,80 (à confirmer Q-11) ; le score affiché = Jaccard exact recalculé.
-- **Versions** : familles reconstruites conformes au manifeste ; ordre selon `#property version` ; « ordre supposé » quand absent.
-- Les classes sont disjointes dans l'affichage : un test vérifie qu'aucune paire « similaire » n'est étiquetée « doublon ».
-- Stabilité : deux exécutions → résultats identiques.
-
-### 3.6 LMQuarantine
-- Impossible d'appeler `quarantine(...)` sans `UserConfirmation` (test de compilation/visibilité + test runtime).
-- Aller-retour quarantaine → restauration : contenu (SHA-256), taille, mode, mtime, xattrs identiques ; 1 000 répétitions.
-- **Injection de fautes** après chaque étape (planned / moved / avant vérification / pendant restauration) → au redémarrage, réconciliation proposée, aucune perte, aucun fichier dupliqué.
-- Conflit à la restauration (chemin occupé) → refus + proposition de nom suffixé ; rien d'écrasé.
-- Volume différent / racine non inscriptible → refus explicite, rien déplacé.
-- Disque plein simulé → échec propre, état cohérent.
-- Chaque opération produit des `audit_event` avec l'identifiant de confirmation.
-
-### 3.7 LMReports
-- Export CSV/JSON ré-importé et comparé à l'index ; échappement (virgules, guillemets, sauts de ligne, Unicode).
-- Export d'une bibliothèque vide → fichier valide vide (en-têtes), pas de données d'exemple.
-
-### 3.8 App (XCUITest)
-- **Inventaire automatique des contrôles** : un test parcourt chaque vue et vérifie que chaque bouton/menu identifié (`accessibilityIdentifier` obligatoire) est couvert par au moins un scénario. Un contrôle sans test fait échouer la CI.
-- Scénarios : ajouter racine → scanner → filtrer → inspecter → voir doublons → mettre en quarantaine (annuler puis confirmer) → restaurer → exporter → consulter journal.
-- États vides (aucune racine, aucun doublon) : message réel, pas de données factices.
-- Clavier seul, VoiceOver (audit `performAccessibilityAudit()`), mode sombre.
+| Volumes | 1k (unitaire), 10k, **50k**, **100k** |
+| Arborescences | `MQL4/` et `MQL5/` (`Experts, Indicators, Scripts, Include, Libraries, Presets, Files, Services, Images`), dossiers « vrac », profondeur 1–12 |
+| Sources fictives | `.mq4/.mq5/.mqh` syntaxiquement plausibles avec `#property`, `input/extern/sinput`, `#include`, `#import`, fonctions d'entrée — **robots fictifs** |
+| Binaires simulés | `.ex4/.ex5/.dll` = octets **aléatoires** (jamais de vrais binaires), certains appariés par nom à une source |
+| SET fictifs | MT4 (`Nom=Val`, `Nom,F/1/2/3=`) et MT5 (`||` d'optimisation), dérivés des inputs des robots fictifs avec variations contrôlées ; SET orphelins ; SET ambigus (compatibles avec 2 robots) ; SET mal formés |
+| Encodages | UTF-8, UTF-8 BOM, UTF-16 LE/BE BOM, CP1252, invalides |
+| Doublons (vérité connue) | 5 % exacts (dont renommés) ; 2 % équivalents normalisés ; 3 % similaires (mutation 5–40 %) ; familles de versions (version dans le nom, dans `#property`, les deux, aucune) ; homonymes différents |
+| Archives ZIP | Saines, imbriquées, corrompues, bombe simulée (ratio élevé, petite taille), traversal `../`, chemins absolus, entrées symlink, doublons d'entrées, chiffrées |
+| Pièges | Même taille contenu différent ; même début/fin milieu différent ; fichiers vides, 1 octet, gros (≥ 1 Gio, creux, nuit) ; extension trompeuse (`.mq4` binaire, `.zip` texte) ; extensions inconnues |
+| Pathologies FS | Noms accentués NFC/NFD, emoji, casse différente, chemins longs (> 255 octets cumulés), symlinks valides/cassés/cycliques, fichiers et dossiers sans permission de lecture |
 
 ---
 
-## 4. Tests de performance
+## 3. Tests par phase et par exigence
 
-| Scénario | Corpus | Seuil d'échec (proposé, Q-08) | Fréquence |
+Chaque cas listé par la spécification (critères de validation F1–F13) est repris **explicitement** ci-dessous.
+
+### 3.1 Socle (Phase 1) — `store`, `audit`, `core`
+- Création de base vide ; migration de chaque version N-1 → N (bases archivées en fixtures) ; sauvegarde avant migration restaurable.
+- Atomicité : arrêt simulé au milieu d'un lot ⇒ aucune ligne partielle.
+- Audit : `UPDATE`/`DELETE` sur `audit_event` refusés ; chaînage `prev_hash` vérifié ; altération manuelle détectée.
+- Journaux rotatifs : rotation à la taille fixée ; pas de chemin de source écrit hors du dossier de logs.
+- Installation reproductible : `uv sync --frozen` puis `pytest` sur machine vierge (CI).
+
+### 3.2 F1 — Inventaire (Phase 2)
+Cas imposés : **dossiers imbriqués, noms accentués, extensions inconnues, permissions refusées, liens symboliques cycliques, fichier inaccessible ; hashes avant/après identiques.**
+- Compteurs exacts = manifeste (fichiers, dossiers, liens, erreurs).
+- Symlink cyclique ⇒ pas de boucle, terminé en temps borné, lien enregistré.
+- Permission refusée ⇒ entrée `scan_error`, scan continue.
+- Re-scan incrémental : seuls les fichiers modifiés sont marqués ; fichiers supprimés ⇒ `missing`.
+- Annulation à 10/50/99 % ⇒ état cohérent ; reprise ⇒ résultat final identique à un scan non interrompu.
+
+### 3.3 F2 — Métadonnées et empreintes (Phase 3)
+Cas imposés : **fichiers vides, gros fichiers, lecture interrompue, fichier modifié pendant le scan, reprise et cohérence du hash.**
+- SHA-256 = vecteurs NIST et = `sha256sum`/`shasum -a 256` sur 1 000 fichiers.
+- Mémoire constante : hash d'un fichier de 4 Gio (creux) avec RAM < 100 Mo supplémentaires.
+- Modification pendant la lecture (thread qui ajoute des octets) ⇒ `error` « modifié pendant la lecture », jamais `validated`.
+- Arrêt forcé (kill) pendant le hash ⇒ au redémarrage `in_progress` → `not_computed`, re-hash identique.
+- `engine_version` enregistrée.
+
+### 3.4 F3 — Formats et archives (Phase 4)
+Cas imposés : **archive saine, corrompue, zip bomb simulée, noms traversants, doublons d'entrées, archive chiffrée ; échec propre et journalisé.**
+- Détection par signature : extension trompeuse signalée.
+- Bombe : arrêt dès dépassement du ratio/taille **réellement décompressés**, statut `skipped_limit`, RAM bornée.
+- Traversal / absolu / symlink : entrée `rejected_*`, aucune écriture disque (vérifié par snapshot du dossier temporaire et du dossier de l'app).
+- Imbrication au-delà de la profondeur max ⇒ `skipped_limit`.
+- Chiffrée ⇒ `encrypted`, non inspectée. Corrompue ⇒ `corrupt`, scan continue.
+
+### 3.5 F4 — Reconnaissance MetaTrader (Phase 5)
+Cas imposés : **exemples fictifs MT4/MT5, fichiers renommés, extension trompeuse, binaire inconnu ; l'interface affiche les limites.**
+- Classement conforme au manifeste (type, plateforme, certitude) ; matrice de confusion publiée dans le rapport.
+- `.ex4/.ex5` : aucune lecture au-delà du hash (test : le lecteur est appelé uniquement par `hashing`/`formats` pour la signature) ; champ `limits` renseigné.
+- `#import "x.dll"` détecté, jamais chargé.
+- Fuzz : 10 000 entrées aléatoires/tronquées ⇒ aucun crash, aucun blocage > 2 s par fichier.
+
+### 3.6 F5 — Analyse SET (Phase 6)
+Cas imposés : **SET vide, mal formé, encodages, doublons de clés, paramètres inconnus, variantes MT4/MT5, SET presque identiques.**
+- Valeur brute toujours conservée à l'identique (aller-retour brut = original).
+- Normalisation : booléens, nombres (virgule/point, exposants), chaînes, couleurs, dates, bornes d'optimisation MT4 et MT5.
+- Clés en double : toutes conservées + avertissement.
+- SET presque identiques regroupés avec diff paramètre par paramètre.
+
+### 3.7 F5 — Moteur d'association (Phase 6)
+- Sur le corpus synthétique : chaque association proposée a des preuves ; précision des associations « forte » ≥ 0,95 (seuil à valider Q-08).
+- **Ambiguïté** : SET compatible avec deux robots ⇒ deux candidats, niveau ≤ « moyenne », incertitude explicite.
+- Robot sans source (EX uniquement) ⇒ niveau « à vérifier » au maximum.
+- **Une association non prouvée reste « à vérifier »** ; aucune `accepted` sans action utilisateur (test).
+- Orphelins détectés = manifeste.
+- Changement de pondération ⇒ `engine_version` différente, anciens résultats marqués à recalculer.
+
+### 3.8 F6 — Familles et versions (Phase 7)
+Cas imposés : **même nom/contenu différent, version dans le nom, version dans les métadonnées, compilation différente, copie identique renommée.**
+- Chaque cas produit la relation attendue (`homonym_different` ou `version_variant`, `version_variant` avec version estimée, `compiled_variant`, `renamed_copy`), avec raison et confiance.
+- Les versions distinctes ne sont **jamais** fusionnées.
+
+### 3.9 F7 — Doublons (Phase 8)
+Cas imposés : **copie exacte, fichier presque identique, homonyme différent, même contenu renommé, collision théorique traitée par vérification supplémentaire.**
+- Exacts : précision = rappel = 1,0 sur le manifeste ; 0 faux positif sur les pièges taille/début/fin.
+- Presque identique ⇒ « similaire », jamais « exact » (test d'exclusion mutuelle).
+- Collision simulée (hacheur injecté renvoyant la même empreinte pour deux contenus différents) ⇒ la vérification octet par octet les sépare.
+- Fichier modifié entre détection et action ⇒ groupe invalidé.
+
+### 3.10 F8 — Quarantaine et restauration (Phase 8)
+Cas imposés : **dry-run, confirmation, disque plein, interruption, destination existante, hash différent, restauration, conflit de chemin ; tout échec préserve une copie vérifiée.**
+- Dry-run : aucun octet écrit (snapshot) ; rapport complet.
+- Sans confirmation, ou confirmation liée à une autre simulation ⇒ refus.
+- Destination dans une source (ou l'inverse) ⇒ refus.
+- Disque plein (système de fichiers de taille limitée en test / écriture injectée échouant) ⇒ arrêt, original intact.
+- Interruption (kill) à chaque état `copying/copied/verified/source_removed` ⇒ au redémarrage, état récupérable, **au moins une copie vérifiée** existe toujours.
+- Hash de copie différent (corruption injectée) ⇒ `failed`, source intacte.
+- Destination existante ⇒ jamais écrasée.
+- Mode `move` (si validé) : original supprimé **seulement** après `verified` ; source modifiée entre-temps ⇒ arrêt.
+- Restauration : hash identique ; conflit de chemin ⇒ arrêt + choix ; 1 000 allers-retours sans perte.
+- Aucun bouton/commande de purge (test du registre d'actions).
+- Chaque étape produit un `audit_event`.
+
+### 3.11 F9 — Organisation (Phase 9)
+Cas imposés : **collision de nom, reprise de copie, destination indisponible, espace insuffisant, hash non conforme.**
+- Prévisualisation = résultat effectif de la copie (même arborescence).
+- Collisions : suffixe déterministe + rapport.
+- Reprise : éléments `verified` sautés, résultat final identique.
+- Destination démontée/indisponible ⇒ arrêt propre. Espace insuffisant détecté **avant** copie.
+- Hash destination ≠ source ⇒ élément en échec, rapport.
+- Invariant lecture seule sur les sources après organisation.
+
+### 3.12 F10 — Recherche, filtres, rapports (Phase 10, moteur dès 2)
+Cas imposés : **pagination, caractères Unicode, filtres combinés, export complet, volumes élevés.**
+- Pagination par clé à 100k : pas de doublon ni de trou entre pages, ordre stable.
+- Recherche accentuée / NFD / casse.
+- Exports CSV/JSON : ré-import et comparaison à la base (complétude) ; échappement (virgule, guillemet, saut de ligne, emoji).
+- Export d'une base vide ⇒ fichier valide sans données inventées.
+
+### 3.13 F11 — Interface (Phase 10)
+Cas imposés : **parcours utilisateur, états vides, erreurs, annulation, accessibilité clavier, aucune action décorative.**
+- **Registre d'actions** : test qui énumère toutes les actions ; échec si une action activée n'a pas de gestionnaire réel ou si son gestionnaire est un bouchon ; les actions désactivées portent « non disponible ».
+- **Branchement réel** : chaque action déclenchée dans le test produit l'effet observable en base/fichiers (pas de mock du service dans ces tests).
+- Parcours complet : ajouter source → scanner (pause, reprise, annulation) → explorer/filtrer → détail → SET (accepter/rejeter) → familles → doublons → simulation → confirmation → quarantaine → restauration → organisation → export → journal.
+- États vides et messages d'erreur réels (source inaccessible, disque plein).
+- Navigation clavier complète (tabulation, raccourcis), libellés accessibles.
+- Latence : aucune action ne bloque la boucle Qt > 200 ms pendant un scan 50k.
+
+### 3.14 F13 — Livraison macOS (Phase 12)
+- Build `.app` + DMG en CI macOS (arm64, x86_64 ; Universal2 si possible : `lipo -info` sur les binaires).
+- Inspection du bundle : générateur synthétique absent ; aucun binaire inattendu.
+- `codesign --verify --deep --strict`, `spctl --assess` (si compte Apple, Q-03).
+- **Sur le Mac du propriétaire** : installation depuis le DMG, lancement, scan d'un corpus synthétique, quarantaine + restauration, désinstallation ; procédure de sauvegarde/restauration de la base.
+- Matrice `docs/COMPATIBILITE.md` : uniquement des lignes avec preuve.
+
+---
+
+## 4. Tests de charge (F12)
+
+| Scénario | Corpus | Mesures consignées | Seuil (proposé, Q-07) |
 |---|---|---|---|
-| Inventaire initial | 50k | > 15 s | Chaque PR (macOS) |
-| Inventaire initial | 100k | > 30 s | Nightly |
-| Re-scan inchangé | 50k / 100k | > 5 s / > 10 s | PR / nightly |
-| Doublons exacts (hash inclus) | 50k / 100k | débit < 70 % du débit séquentiel mesuré | PR / nightly |
-| Similarité | 50k sources | > 120 s | Nightly |
-| Mémoire pic | 50k / 100k | > 400 Mo / > 700 Mo | PR / nightly |
-| Filtre table | 100k | > 300 ms | Nightly (UI) |
-| Thread principal bloqué | 100k | toute frame > 100 ms | Nightly (UI) |
+| Inventaire initial | 50k / 100k | durée, fichiers/s, RAM max, erreurs | ≤ 60 s / ≤ 120 s ; RAM ≤ 600 / 800 Mo |
+| Re-scan inchangé | 50k / 100k | durée | ≤ 20 s / ≤ 40 s |
+| Hash complet | 50k / 100k | Mo/s vs débit disque mesuré | ≥ 60 % |
+| Pipeline complet (scan → hash → analyses → doublons → associations) | 50k / 100k | durée par étape, RAM max | à établir à la phase 11 puis valider |
+| Reprise après fermeture forcée | 50k | temps jusqu'à reprise effective | ≤ 10 s |
+| Explorateur : filtre/tri | 100k | latence | ≤ 500 ms |
 
-Les résultats sont archivés (artefact CI JSON) pour suivre les régressions ; régression > 15 % vs moyenne des 5 derniers runs = alerte.
+Exécution sur Linux (env. distant) **et** CI macOS ; rapport `docs/rapports/charge-*.md` avec matériel et commande. Régression > 15 % vs référence = échec signalé.
 
 ---
 
-## 5. Test d'invariant « lecture seule » (critique)
+## 5. Invariant « sources inchangées » (critique)
 
-1. Générer le corpus (50k PR / 100k nightly).
-2. Instantané **avant** : pour chaque entrée, chemin brut, type, taille, SHA-256, `mtime`, `ctime`, mode, propriétaire, liste et valeurs des xattrs ; liste des entrées de chaque dossier.
-3. Exécuter : scan + hash + analyse MQL + doublons + similarité + exports.
-4. Instantané **après** et comparaison stricte → **zéro différence** exigée (hors `atime`, contrôlé séparément et documenté).
-5. Vérifier qu'aucun fichier n'a été créé dans l'arborescence (pas de `.DS_Store`, pas de fichiers temporaires).
-6. Seule exception testée séparément : les déplacements de quarantaine **confirmés**, dont l'effet doit être exactement celui du plan affiché.
-
----
-
-## 6. Tests statiques de sécurité (CI)
-
-- Recherche des symboles interdits dans les sources hors modules autorisés : `Process`, `NSTask`, `posix_spawn`, `dlopen`, `NSWorkspace.shared.open`, `QLPreview`, `NSAppleScript`, `setxattr`, `chmod`, `utimes`, `removeItem`, `moveItem`.
-- `nm`/`otool` sur le binaire Release : absence de `dlopen`, `posix_spawn`, `execve`.
-- Entitlements : sandbox ON, réseau OFF, `disable-library-validation` absent.
-- Graphe de dépendances : `LMTestSupport` non lié à l'app.
+1. Générer le corpus (50k à chaque PR des phases concernées, 100k en manuel/nuit).
+2. **Instantané avant** : pour chaque entrée (sans suivre les liens) : chemin en octets, type, taille, SHA-256, `mtime_ns`, `ctime_ns`, mode, propriétaire, xattrs (macOS/Linux) ; liste de chaque dossier.
+3. Exécuter tous les moteurs : scan, hash, archives, reconnaissance, SET, associations, familles, doublons, dry-run de quarantaine, quarantaine en mode `copy`, organisation, exports.
+4. **Instantané après** : comparaison stricte, **zéro différence** exigée ; aucun fichier créé dans les sources.
+5. `atime` : contrôlé et documenté séparément (peut dépendre des options de montage ; l'app n'utilise pas d'API qui le modifie explicitement).
+6. Exception testée à part : mode `move` (si validé), dont l'effet doit être exactement le plan confirmé.
 
 ---
 
-## 7. Logs : ce qui est testé
+## 6. Tests de sécurité
 
-- Chaque cas d'usage émet `début`, `fin` (avec durée et compteurs) ou `échec` (erreur typée) — vérifié via un `LogSink` de test.
-- Chemins de fichiers jamais en clair dans les logs système (`.private`) ; présents dans le journal d'audit local (nécessaire à la traçabilité).
-- Chaque action de quarantaine/restauration → exactement un `audit_event` par fichier + un par lot.
+- Archives hostiles (§ 3.4), fichiers MQL/SET piégés (fuzz), noms de fichiers malicieux (`../`, caractères de contrôle, très longs).
+- Destination de quarantaine/organisation dans une source ⇒ refus (y compris via symlink ou chemin relatif).
+- Aucun accès réseau : test qui bloque les sockets pendant toute la suite (`pytest-socket` ou garde maison) ⇒ aucun appel.
+- Données réelles dans Git : test CI refusant `.ex4/.ex5/.dll/.set/.mq4/.mq5` versionnés (hors gabarits explicitement fictifs).
 
----
+## 7. Tests statiques d'architecture
 
-## 8. Critères d'acceptation transverses (Definition of Done)
+- `import-linter` : `ui` → `app` uniquement ; moteur sans Qt ; seul `transfer` importe des fonctions d'écriture.
+- Analyse `ast` : interdits dans `src/mtlm` — `subprocess`, `ctypes`, `os.system`, `os.exec*`, `os.spawn*`, `os.startfile`, `webbrowser`, `runpy`, `pickle`, `importlib` dynamique, `socket`, `urllib`, `http` ; dans les modules d'analyse — `open(..., 'w'/'a'/'x'/'+')`, `os.remove`, `os.rename`, `shutil.*`, `os.chmod`, `os.utime`, `setxattr`.
+- `mypy --strict`, `ruff`.
 
-Une étape/phase est terminée si et seulement si :
-1. Tous les tests de la phase passent en CI macOS (et Linux pour le cœur), y compris performance au palier prévu.
-2. Couverture ≥ 85 % sur les modules du cœur modifiés, 100 % des branches de `LMQuarantine`.
-3. Invariant lecture seule vert.
-4. Logs et événements d'audit présents et testés.
-5. Documentation mise à jour (`ARCHITECTURE.md`, `DECISIONS.md` si décision, `docs/`, `CHANGELOG.md`).
-6. Aucun contrôle d'UI sans action réelle ni test ; aucune donnée fictive dans l'app.
-7. Exigences du PDF correspondantes marquées couvertes dans `docs/TRACABILITE.md`.
+## 8. Logs et audit testés
 
----
+- Chaque tâche émet début / fin (durée, compteurs) / échec (erreur typée) — vérifié par un gestionnaire de logs de test.
+- Chaque opération de quarantaine, restauration, copie organisée, validation d'association, export ⇒ `audit_event` attendu (nombre et contenu).
 
-## 9. Pipelines CI proposés
+## 9. Définition de « terminé » d'une phase (§ 7, § 12)
+
+1. Comportement, technique, entrées, sorties, erreurs, logs et critères d'acceptation documentés.
+2. Tests unitaires, intégration (et UI si pertinent) écrits **et exécutés** ; résultats réels dans `docs/rapports/phase-NN.md`.
+3. Invariant « sources inchangées » vert (Linux + macOS pour les phases 2, 3, 8, 9, 11).
+4. Couverture ≥ 85 % sur le moteur modifié ; 100 % des branches de `transfer`.
+5. Aucune action non branchée, aucune donnée fictive affichée comme réelle.
+6. Liste de ce qui attend le Mac.
+7. **Accord du propriétaire** avant la phase suivante.
+
+## 10. CI
 
 | Workflow | Déclencheur | Contenu |
 |---|---|---|
-| `ci-linux.yml` | push/PR | `swift build`, `swift test` (cœur), lint, analyse statique |
-| `ci-macos.yml` | push/PR | build app, tests unitaires + intégration + golden, perf 50k, XCUITest, invariant lecture seule 50k, vérification entitlements |
-| `perf-nightly.yml` | nuit | 100k complet, similarité 50k, fuzz long, archivage des métriques |
+| `ci.yml` (Linux) | push / PR | ruff, mypy, pytest (unit, intégration, UI offscreen, sécurité), invariant 10k, couverture |
+| `macos.yml` | PR (phases sensibles) + manuel | pytest sur `macos-14` (arm64) et `macos-13` (Intel), invariant 50k, build `.app` |
+| `perf.yml` | manuel / planifié | charge 50k/100k, rapport en artefact |
