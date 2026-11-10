@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.0] — Phase 6 : SET et associations
+
+### Ajouté
+- Lecteur SET MT4/MT5 (valeurs brutes + normalisées, optimisation, avertissements).
+- Moteur d'association explicable (preuves pour/contre/incertitude, règles dures, ambiguïté).
+- Décisions utilisateur conservées et journalisées. Migration 0004.
+- CLI : sets, set, comparer-sets, associer, associations, association, valider, orphelins.
+
 ## [0.5.0] — Phase 5 : reconnaissance MetaTrader
 
 ### Ajouté

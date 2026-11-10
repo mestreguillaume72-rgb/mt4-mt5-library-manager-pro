@@ -24,6 +24,7 @@ from mtlm.app.inventory import FileFilter, InventoryService, analysis_of
 from mtlm.app.jobs import JobStore
 from mtlm.app.recognize import RecognitionService
 from mtlm.app.scan import ScanService, ScanSummary
+from mtlm.app.sets import LEVEL_LABELS, AssociationService, SetService
 from mtlm.app.sources import SourceService
 from mtlm.audit.journal import ACTOR_USER
 from mtlm.audit.logs import setup_logging, shutdown_logging
@@ -121,6 +122,29 @@ def build_parser() -> argparse.ArgumentParser:
     detail = sub.add_parser("fichier", help="Détail d'un fichier inventorié.")
     detail.add_argument("id", type=int)
 
+    sets = sub.add_parser("sets", help="Analyse les fichiers SET (paramètres bruts et normalisés).")
+    sets.add_argument("--source", type=int, default=None)
+    set_detail = sub.add_parser("set", help="Paramètres d'un fichier SET analysé.")
+    set_detail.add_argument("id", type=int)
+    compare = sub.add_parser("comparer-sets", help="Compare deux SET paramètre par paramètre.")
+    compare.add_argument("a", type=int)
+    compare.add_argument("b", type=int)
+    sub.add_parser("associer", help="Calcule les associations robot ↔ SET (score et preuves).")
+    assoc = sub.add_parser("associations", help="Liste des associations proposées.")
+    assoc.add_argument("--set", dest="set_id", type=int, default=None)
+    assoc.add_argument("--robot", type=int, default=None)
+    assoc.add_argument("--niveau", choices=["forte", "moyenne", "faible", "a_verifier"])
+    assoc.add_argument("--limite", type=int, default=50)
+    one = sub.add_parser("association", help="Détail d'une association : preuves et incertitudes.")
+    one.add_argument("id", type=int)
+    decide = sub.add_parser("valider", help="Accepte ou rejette une association (vous seul).")
+    decide.add_argument("id", type=int)
+    choice = decide.add_mutually_exclusive_group(required=True)
+    choice.add_argument("--accepter", action="store_true")
+    choice.add_argument("--rejeter", action="store_true")
+    choice.add_argument("--annuler", action="store_true", help="Revient à « non décidée ».")
+    sub.add_parser("orphelins", help="SET sans aucun robot correspondant.")
+
     sub.add_parser("taches", help="Dernières tâches et leur état.")
     errors = sub.add_parser("erreurs", help="Erreurs d'une tâche d'inventaire.")
     errors.add_argument("tache", type=int)
@@ -178,6 +202,14 @@ def _dispatch(
             "formats": _formats,
             "archive": _archive,
             "reconnaitre": _recognize,
+            "sets": _sets,
+            "set": _set_detail,
+            "comparer-sets": _compare_sets,
+            "associer": _associate,
+            "associations": _associations,
+            "association": _association,
+            "valider": _decide,
+            "orphelins": _orphans,
             "taches": _jobs,
             "erreurs": _errors,
         }
@@ -421,6 +453,136 @@ def _recognize(args: argparse.Namespace, ctx: AppContext, out: TextIO, _err: Tex
     print("Certitude :", file=out)
     for level, n in summary.by_certainty.items():
         print(f"  {CERTAINTY_LABELS.get(level, level)}\t{n}", file=out)
+    return EXIT_OK
+
+
+def _sets(args: argparse.Namespace, ctx: AppContext, out: TextIO, _err: TextIO) -> int:
+    summary = SetService(ctx.conn, ctx.clock, ctx.journal).parse_all(args.source)
+    print(
+        f"SET (tâche {summary.job_id}) : {summary.parsed} analysé(s) — {summary.mt4} MT4, "
+        f"{summary.mt5} MT5, {summary.unknown_format} format indéterminé ; "
+        f"{summary.with_warnings} avec avertissement(s), {summary.errors} illisible(s).",
+        file=out,
+    )
+    return EXIT_OK
+
+
+def _set_detail(args: argparse.Namespace, ctx: AppContext, out: TextIO, err: TextIO) -> int:
+    doc = SetService(ctx.conn, ctx.clock, ctx.journal).document(args.id)
+    if doc is None:
+        print(f"Le fichier {args.id} n'est pas un SET analysé (lancez « mtlm sets »).", file=err)
+        return EXIT_ERROR
+    print(f"Format : {doc.format} ({doc.format_basis})", file=out)
+    print(f"Paramètres : {len(doc.params)}", file=out)
+    for p in doc.params:
+        opt = ""
+        if p.opt_start is not None:
+            state = "activée" if p.opt_enabled else "désactivée"
+            opt = f"  [optimisation {state} : {p.opt_start} → {p.opt_stop} pas {p.opt_step}]"
+        normalized = (
+            f" (normalisé : {p.normalized_value})"
+            if p.normalized_value not in (None, p.raw_value)
+            else ""
+        )
+        print(f"  {p.name} = {p.raw_value}{normalized}  <{p.estimated_type}>{opt}", file=out)
+    for warning in doc.warnings:
+        print(f"  avertissement : {warning}", file=out)
+    return EXIT_OK
+
+
+_DIFF_LABELS = {"same": "=", "different": "≠", "only_left": "A seul", "only_right": "B seul"}
+
+
+def _compare_sets(args: argparse.Namespace, ctx: AppContext, out: TextIO, err: TextIO) -> int:
+    service = SetService(ctx.conn, ctx.clock, ctx.journal)
+    diffs = service.compare(args.a, args.b)
+    if diffs is None:
+        print("Les deux fichiers doivent être des SET analysés.", file=err)
+        return EXIT_ERROR
+    same = sum(d.status == "same" for d in diffs)
+    print(f"{same} identique(s) sur {len(diffs)} paramètre(s).", file=out)
+    for d in diffs:
+        if d.status != "same":
+            print(f"  {_DIFF_LABELS[d.status]}\t{d.name}\tA={d.left}\tB={d.right}", file=out)
+    return EXIT_OK
+
+
+def _associate(_args: argparse.Namespace, ctx: AppContext, out: TextIO, _err: TextIO) -> int:
+    summary = AssociationService(ctx.conn, ctx.clock, ctx.journal).compute()
+    print(
+        f"Associations (tâche {summary.job_id}) : {summary.associations} proposée(s) pour "
+        f"{summary.sets} SET et {summary.robots} robot(s) ; {summary.orphans} SET orphelin(s) ; "
+        f"{summary.decisions_kept} décision(s) de votre part conservée(s).",
+        file=out,
+    )
+    for level, n in (summary.by_level or {}).items():
+        print(f"  {LEVEL_LABELS.get(level, level)}\t{n}", file=out)
+    print(
+        "Aucune association n'est validée automatiquement : « mtlm valider ID --accepter ».",
+        file=out,
+    )
+    return EXIT_OK
+
+
+_DECISION_LABELS = {"none": "non décidée", "accepted": "ACCEPTÉE", "rejected": "rejetée"}
+
+
+def _associations(args: argparse.Namespace, ctx: AppContext, out: TextIO, _err: TextIO) -> int:
+    rows = AssociationService(ctx.conn, ctx.clock, ctx.journal).find(
+        set_file_id=args.set_id, robot_file_id=args.robot, level=args.niveau, limit=args.limite
+    )
+    if not rows:
+        print("Aucune association (lancez « mtlm sets » puis « mtlm associer »).", file=out)
+    for r in rows:
+        print(
+            f"{r.id}\t{r.score:5.1f}\t{LEVEL_LABELS[r.level]}\t"
+            f"{_DECISION_LABELS[r.user_decision]}\t{r.robot_path}  ↔  {r.set_path}",
+            file=out,
+        )
+    return EXIT_OK
+
+
+_POLARITY = {"pour": "+", "contre": "−", "incertitude": "?"}
+
+
+def _association(args: argparse.Namespace, ctx: AppContext, out: TextIO, err: TextIO) -> int:
+    service = AssociationService(ctx.conn, ctx.clock, ctx.journal)
+    row = next((r for r in service.find(limit=1_000_000) if r.id == args.id), None)
+    if row is None:
+        print(f"Association {args.id} inconnue.", file=err)
+        return EXIT_ERROR
+    print(f"Robot : {row.robot_path} (fichier {row.robot_file_id})", file=out)
+    print(f"SET : {row.set_path} (fichier {row.set_file_id})", file=out)
+    print(
+        f"Score : {row.score:.1f}/100 — niveau {LEVEL_LABELS[row.level]} — "
+        f"décision : {_DECISION_LABELS[row.user_decision]}",
+        file=out,
+    )
+    print("Preuves (+ pour, − contre, ? incertitude) :", file=out)
+    for kind, weight, value, polarity, detail in service.evidence(args.id):
+        print(
+            f"  {_POLARITY[polarity]} {kind} (poids {weight:g}, valeur {value:.2f}) : {detail}",
+            file=out,
+        )
+    return EXIT_OK
+
+
+def _decide(args: argparse.Namespace, ctx: AppContext, out: TextIO, _err: TextIO) -> int:
+    decision = "accepted" if args.accepter else "rejected" if args.rejeter else "none"
+    row = AssociationService(ctx.conn, ctx.clock, ctx.journal).decide(args.id, decision)
+    print(
+        f"Association {row.id} : {_DECISION_LABELS[row.user_decision]} "
+        f"({row.robot_path} ↔ {row.set_path}).",
+        file=out,
+    )
+    return EXIT_OK
+
+
+def _orphans(_args: argparse.Namespace, ctx: AppContext, out: TextIO, _err: TextIO) -> int:
+    rows = AssociationService(ctx.conn, ctx.clock, ctx.journal).orphans()
+    print(f"{len(rows)} SET orphelin(s) (aucun robot correspondant trouvé) :", file=out)
+    for file_id, path in rows:
+        print(f"  {file_id}\t{path}", file=out)
     return EXIT_OK
 
 

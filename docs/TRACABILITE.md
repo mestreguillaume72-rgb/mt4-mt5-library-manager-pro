@@ -25,4 +25,5 @@ Mise à jour à chaque phase. « Preuve » renvoie au rapport de phase contenant
 | F13 Compatibilité testée (macOS réels) | `.github/workflows/macos.yml` | suite complète sur macOS 15 arm64 et Intel | run 42908401882 | ✅ moteur (CI) |
 | F3 Formats et archives (signatures, ZIP sécurisé) | `formats/signatures.py`, `formats/archives.py`, `app/formats.py` | `test_formats.py` (42+), `test_formats_service.py` | phase-04 | ✅ Phase 4 |
 | F4 Reconnaissance MetaTrader avec certitude et limites | `metatrader/*.py`, `app/recognize.py` | `test_mql.py`, `test_classify.py`, `test_recognize.py` | phase-05 | ✅ Phase 5 |
-| F5 à F11, F13 (livraison) | — | — | — | ⏳ phases 6 à 12 |
+| F5 Analyse SET maximale + associations avec preuves | `setfiles/parser.py`, `matching/associations.py`, `app/sets.py` | `test_setfiles.py`, `test_associations.py`, `test_sets_associations.py` | phase-06 | ✅ Phase 6 |
+| F6 à F11, F13 (livraison) | — | — | — | ⏳ phases 7 à 12 |
