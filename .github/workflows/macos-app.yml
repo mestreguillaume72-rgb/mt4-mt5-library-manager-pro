@@ -1,0 +1,124 @@
+# Livraison macOS (F13) : construit l'application .app et l'image DMG sur de vrais Mac
+# (Apple Silicon et Intel), les vérifie (signature, auto-diagnostic, DMG monté) et les met à
+# disposition. Sur une étiquette v*, une pré-version GitHub est publiée avec les DMG.
+name: Application macOS (.app + DMG)
+
+on:
+  push:
+    branches: ["claude/**", "main"]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Construction (${{ matrix.label }})
+    runs-on: ${{ matrix.runner }}
+    env:
+      QT_QPA_PLATFORM: offscreen
+      APP: "dist/MT4 MT5 Library Manager PRO.app"
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            label: Apple-Silicon
+          - runner: macos-15-intel
+            label: Intel
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - name: Environnement
+        run: |
+          sw_vers
+          uname -m
+      - name: Dépendances (verrou uv.lock)
+        run: uv sync --frozen --group build
+      - name: Construire l'application
+        run: uv run --group build pyinstaller --noconfirm packaging/macos/mtlm.spec
+      - name: Vérifier l'application
+        shell: bash
+        run: |
+          test -d "$APP"
+          lipo -archs "$APP/Contents/MacOS/mtlm-gui" | tee architectures.txt
+          codesign --verify --deep --strict --verbose=2 "$APP" 2>&1 | tee signature.txt
+          plutil -p "$APP/Contents/Info.plist" | tee info-plist.txt
+          du -sh "$APP" | tee taille.txt
+      - name: Auto-diagnostic (lecture seule du contenu de l'application)
+        shell: bash
+        run: |
+          find "$APP" -type f -exec shasum -a 256 {} + | sort > avant.txt
+          "$APP/Contents/MacOS/mtlm-gui" --autotest "$APP/Contents" | tee autotest.log
+          find "$APP" -type f -exec shasum -a 256 {} + | sort > apres.txt
+          diff avant.txt apres.txt && echo "Contenu de l'application inchangé après analyse."
+          codesign --verify --deep --strict "$APP"
+      - name: Créer et vérifier le DMG
+        shell: bash
+        run: |
+          VERSION=$(uv run python -c "import mtlm; print(mtlm.__version__)")
+          DMG="MT4-MT5-Library-Manager-PRO-${VERSION}-macOS-${{ matrix.label }}.dmg"
+          mkdir dmg-root
+          cp -R "$APP" dmg-root/
+          ln -s /Applications dmg-root/Applications
+          hdiutil create -volname "MT4 MT5 Library Manager PRO" -srcfolder dmg-root -ov \
+            -format UDZO "$DMG"
+          hdiutil verify "$DMG"
+          shasum -a 256 "$DMG" | tee "$DMG.sha256"
+          echo "DMG=$DMG" >> "$GITHUB_ENV"
+      - name: Tester l'application depuis le DMG monté
+        shell: bash
+        run: |
+          MNT=$(hdiutil attach -nobrowse -readonly "$DMG" | tail -1 | awk -F'\t' '{print $NF}')
+          echo "Monté sur : $MNT"
+          ls -la "$MNT"
+          "$MNT/MT4 MT5 Library Manager PRO.app/Contents/MacOS/mtlm-gui" --autotest \
+            "$MNT/MT4 MT5 Library Manager PRO.app/Contents" | tee autotest-dmg.log
+          hdiutil detach "$MNT"
+      - name: Gatekeeper (information — application non notarisée)
+        shell: bash
+        run: spctl --assess --type execute -vv "$APP" 2>&1 | tee gatekeeper.txt || true
+      - uses: actions/upload-artifact@v5
+        with:
+          name: DMG-${{ matrix.label }}
+          path: |
+            *.dmg
+            *.dmg.sha256
+          retention-days: 90
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: rapports-application-${{ matrix.label }}
+          path: |
+            architectures.txt
+            signature.txt
+            info-plist.txt
+            taille.txt
+            autotest.log
+            autotest-dmg.log
+            gatekeeper.txt
+
+  release:
+    name: Pré-version GitHub
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: DMG-*
+          merge-multiple: true
+      - name: Publier la pré-version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --prerelease \
+            --title "MT4 MT5 Library Manager PRO $TAG" \
+            --notes "Application macOS (Apple Silicon et Intel). Non notarisée : au premier lancement, clic droit sur l'application puis « Ouvrir ». Voir docs/utilisateur/installation.md." \
+            *.dmg *.dmg.sha256
