@@ -94,7 +94,7 @@ class HashService:
     def _candidates(self, source_id: int | None, retry_errors: bool) -> list[_Task]:
         states = ["not_computed", "stale"] + (["error"] if retry_errors else [])
         sql = (
-            "SELECT f.id, s.path, f.rel_path_bytes, f.size, f.mtime_ns, f.inode, f.device,"  # noqa: S608
+            "SELECT f.id, s.path, f.rel_path_bytes, f.size, f.mtime_ns, f.inode, f.device,"
             " f.hash_state FROM file_record f JOIN source_root s ON s.id = f.root_id"
             " WHERE s.status = 'ok' AND f.presence = 'present' AND f.file_type = 'file'"
             " AND f.is_dataless = 0"

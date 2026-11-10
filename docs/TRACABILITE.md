@@ -23,4 +23,5 @@ Mise à jour à chaque phase. « Preuve » renvoie au rapport de phase contenant
 | F10 Recherche paginée, filtres (base) | `app/inventory.py` | `test_pagination_filtres_et_recherche` | phase-02 | ✅ base |
 | F2 Métadonnées et empreintes SHA-256 en flux | `fs/reader.py`, `hashing/sha256.py`, `app/hashing.py` | `test_sha256.py` (17), `test_hashing.py` (10) | phase-03 | ✅ Phase 3 |
 | F13 Compatibilité testée (macOS réels) | `.github/workflows/macos.yml` | suite complète sur macOS 15 arm64 et Intel | run 42908401882 | ✅ moteur (CI) |
-| F3 à F11, F13 (livraison) | — | — | — | ⏳ phases 4 à 12 |
+| F3 Formats et archives (signatures, ZIP sécurisé) | `formats/signatures.py`, `formats/archives.py`, `app/formats.py` | `test_formats.py` (42+), `test_formats_service.py` | phase-04 | ✅ Phase 4 |
+| F4 à F11, F13 (livraison) | — | — | — | ⏳ phases 5 à 12 |

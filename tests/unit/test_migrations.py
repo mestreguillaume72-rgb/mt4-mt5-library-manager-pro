@@ -26,6 +26,7 @@ EXPECTED_TABLES = {
     "file_record",
     "scan_error",
     "archive_entry",
+    "archive_scan",
     "file_analysis",
     "mql_source_meta",
     "mql_input",

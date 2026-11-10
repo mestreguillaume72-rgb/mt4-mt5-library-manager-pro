@@ -16,6 +16,7 @@ from pathlib import PurePosixPath
 REQUIRED = {
     "mtlm/store/migrations/0001_initial.sql",
     "mtlm/store/migrations/0002_file_type.sql",
+    "mtlm/store/migrations/0003_archives_analysis.sql",
     "mtlm/cli/main.py",
 }
 FORBIDDEN_SUFFIXES = {

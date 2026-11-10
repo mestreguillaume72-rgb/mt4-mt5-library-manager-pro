@@ -9,6 +9,8 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass, field
 
+from mtlm.formats.signatures import EXPECTED, LABELS
+
 
 @dataclass(frozen=True)
 class FileRow:
@@ -37,6 +39,9 @@ class FileDetail:
     last_seen_job: int | None
     is_dataless: bool
     other_paths_same_content: int
+    magic: str | None = None
+    magic_label: str | None = None
+    misleading_extension: bool = False
 
 
 @dataclass(frozen=True)
@@ -113,7 +118,7 @@ class InventoryService:
     def page(self, flt: FileFilter, *, after_id: int = 0, limit: int = 200) -> list[FileRow]:
         where, params = self._where(flt)
         rows = self._conn.execute(
-            f"SELECT {_COLUMNS} FROM file_record f JOIN source_root s ON s.id = f.root_id"  # noqa: S608
+            f"SELECT {_COLUMNS} FROM file_record f JOIN source_root s ON s.id = f.root_id"
             f" WHERE {where} AND f.id > ? ORDER BY f.id LIMIT ?",
             (*params, after_id, limit),
         ).fetchall()
@@ -127,7 +132,7 @@ class InventoryService:
     def count(self, flt: FileFilter) -> int:
         where, params = self._where(flt)
         row = self._conn.execute(
-            f"SELECT count(*) FROM file_record f JOIN source_root s ON s.id = f.root_id"  # noqa: S608
+            f"SELECT count(*) FROM file_record f JOIN source_root s ON s.id = f.root_id"
             f" WHERE {where}",
             params,
         ).fetchone()
@@ -164,9 +169,9 @@ class InventoryService:
 
     def detail(self, file_id: int) -> FileDetail | None:
         row = self._conn.execute(
-            f"SELECT {_COLUMNS}, s.path, f.rel_path_bytes, c.sha256, f.hash_error,"  # noqa: S608
+            f"SELECT {_COLUMNS}, s.path, f.rel_path_bytes, c.sha256, f.hash_error,"
             " f.hashed_with_engine, f.first_seen_job, f.last_seen_job, f.is_dataless,"
-            " f.content_id FROM file_record f JOIN source_root s ON s.id = f.root_id"
+            " f.content_id, f.magic FROM file_record f JOIN source_root s ON s.id = f.root_id"
             " LEFT JOIN content c ON c.id = f.content_id WHERE f.id = ?",
             (file_id,),
         ).fetchone()
@@ -205,6 +210,12 @@ class InventoryService:
             last_seen_job=row[17],
             is_dataless=bool(row[18]),
             other_paths_same_content=same,
+            magic=row[20],
+            magic_label=LABELS.get(row[20]) if row[20] else None,
+            misleading_extension=bool(row[20])
+            and row[20] != "empty"
+            and base.ext in EXPECTED
+            and row[20] not in EXPECTED[base.ext],
         )
 
     def errors(self, job_id: int, limit: int = 1000) -> list[ScanErrorRow]:

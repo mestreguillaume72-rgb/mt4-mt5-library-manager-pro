@@ -94,7 +94,6 @@ WRITE_METHODS = {
     "write_bytes",
     "unlink",
     "rename",
-    "replace",
     "rmdir",
     "mkdir",
     "touch",
@@ -166,6 +165,26 @@ def _open_mode_writes(call: ast.Call, position: int = 1) -> bool:
     return True  # mode non littéral : refusé par prudence
 
 
+def _method_open_writes(call: ast.Call) -> bool:
+    """Méthode ``.open`` (Path.open, ZipFile.open…) : écriture si un argument littéral contient
+    un drapeau d'écriture, ou si ``mode=`` n'est pas littéral."""
+    for arg in call.args:
+        if (
+            isinstance(arg, ast.Constant)
+            and isinstance(arg.value, str)
+            and any(flag in arg.value for flag in "wax+")
+        ):
+            return True
+    for keyword in call.keywords:
+        if keyword.arg == "mode":
+            value = keyword.value
+            if not (isinstance(value, ast.Constant) and isinstance(value.value, str)):
+                return True
+            if any(flag in value.value for flag in "wax+"):
+                return True
+    return False
+
+
 def check_source(
     code: str, filename: str, *, analysis: bool, package: str | None
 ) -> list[Violation]:
@@ -204,12 +223,15 @@ def check_source(
                 if name in ("open", "io.open") and _open_mode_writes(node):
                     flag(node, "ouverture en écriture interdite dans un module d'analyse")
                 if isinstance(node.func, ast.Attribute):
+                    # Path.replace(cible) prend 1 argument ; str.replace(a, b) en prend 2.
+                    if node.func.attr == "replace" and len(node.args) == 1:
+                        flag(node, "méthode d'écriture interdite : replace (Path.replace)")
                     if node.func.attr in WRITE_METHODS:
                         flag(node, f"méthode d'écriture interdite : {node.func.attr}")
                     if (
                         node.func.attr == "open"
                         and name not in ("os.open", "io.open")
-                        and _open_mode_writes(node, position=0)
+                        and _method_open_writes(node)
                     ):
                         flag(node, "Path.open en écriture interdit dans un module d'analyse")
                 if name == "os.open":
@@ -285,12 +307,15 @@ def test_detecte_execution_et_reseau(snippet: str) -> None:
         "open('f', 'r+b')",
         "from pathlib import Path\nPath('f').write_bytes(b'')",
         "from pathlib import Path\nPath('f').open('wb')",
+        "import zipfile\nzipfile.ZipFile('a').open('x', 'w')",
+        "from pathlib import Path\nPath('f').open(mode=m)",
         "from pathlib import Path\nPath('f').unlink()",
         "import os\nos.remove('f')",
         "import os\nos.rename('a', 'b')",
         "import shutil\nshutil.copy('a', 'b')",
         "import os\nos.open('f', os.O_WRONLY)",
         "import os\nos.open('f', os.O_RDONLY | os.O_CREAT)",
+        "from pathlib import Path\nPath('a').replace('b')",
         "open('f', m)",
     ],
 )
@@ -305,6 +330,8 @@ def test_detecte_ecriture_dans_analyse(snippet: str) -> None:
         "open('f', 'rb')",
         "import os\nos.open('f', os.O_RDONLY | os.O_NOFOLLOW)",
         "from pathlib import Path\nPath('f').read_bytes()",
+        "import zipfile\nzipfile.ZipFile('a').open(info)",
+        "x = 'a/b'.replace('/', '-')",
     ],
 )
 def test_lecture_autorisee_dans_analyse(snippet: str) -> None:

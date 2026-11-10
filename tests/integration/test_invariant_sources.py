@@ -35,6 +35,8 @@ def all_commands(corpus: Path, export_dir: Path) -> list[list[str]]:
         ["empreintes"],
         ["empreintes"],  # deuxième passage : rien à recalculer
         ["fichier", "1"],
+        ["formats"],
+        ["formats"],  # deuxième passage : rien à ré-inspecter
         ["inventaire"],
         ["fichiers", "--limite", "10"],
         ["taches"],

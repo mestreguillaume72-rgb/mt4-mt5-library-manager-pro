@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0] — Phase 4 : formats et archives
+
+### Ajouté
+- Signatures binaires, extensions trompeuses.
+- Inspection ZIP sans extraction, limites anti-archives piégées, refus des noms dangereux.
+- Migration 0003 (`archive_scan`, suivi des analyses). CLI : `formats`, `archive ID`.
+
 ## [0.3.0] — Phase 3 : empreintes SHA-256
 
 ### Ajouté

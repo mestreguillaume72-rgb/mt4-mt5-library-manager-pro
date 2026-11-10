@@ -115,7 +115,7 @@ class ScanService:
                     self._conn.executemany(
                         "UPDATE file_record SET size = ?, mtime_ns = ?, ctime_ns = ?,"
                         " birthtime_ns = ?, inode = ?, device = ?, mode = ?, is_symlink = ?,"
-                        " is_dataless = ?, file_type = ?, presence = 'present',"
+                        " is_dataless = ?, file_type = ?, presence = 'present', magic = NULL,"
                         " hash_state = CASE WHEN hash_state IN ('validated', 'error')"
                         "   THEN 'stale' ELSE hash_state END,"
                         " last_seen_job = ? WHERE id = ?",

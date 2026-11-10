@@ -18,6 +18,7 @@ from typing import TextIO
 
 from mtlm import APP_NAME, ENGINE_VERSION, __version__
 from mtlm.app.context import AppContext, open_app
+from mtlm.app.formats import FormatService
 from mtlm.app.hashing import HashService
 from mtlm.app.inventory import FileFilter, InventoryService
 from mtlm.app.jobs import JobStore
@@ -102,6 +103,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     hashes.add_argument("--travailleurs", type=int, default=None, help="Calculs en parallèle.")
 
+    formats = sub.add_parser(
+        "formats",
+        help="Identifie les formats réels et inspecte les archives ZIP (sans extraction).",
+    )
+    formats.add_argument("--source", type=int, default=None)
+    archive = sub.add_parser("archive", help="Contenu inspecté d'une archive.")
+    archive.add_argument("id", type=int, help="Identifiant du fichier archive.")
+
     detail = sub.add_parser("fichier", help="Détail d'un fichier inventorié.")
     detail.add_argument("id", type=int)
 
@@ -159,6 +168,8 @@ def _dispatch(
             "fichiers": _files,
             "empreintes": _hashes,
             "fichier": _detail,
+            "formats": _formats,
+            "archive": _archive,
             "taches": _jobs,
             "erreurs": _errors,
         }
@@ -349,6 +360,63 @@ def _hashes(args: argparse.Namespace, ctx: AppContext, out: TextIO, err: TextIO)
     return EXIT_OK
 
 
+def _formats(args: argparse.Namespace, ctx: AppContext, out: TextIO, _err: TextIO) -> int:
+    summary = FormatService(ctx.conn, ctx.clock, ctx.journal).run(args.source)
+    print(
+        f"Formats (tâche {summary.job_id}) : {summary.signatures} signature(s) lue(s), "
+        f"{summary.signature_errors} illisible(s), {summary.misleading} extension(s) "
+        f"trompeuse(s).",
+        file=out,
+    )
+    print(
+        f"Archives : {summary.archives} — {summary.archives_ok} saine(s), "
+        f"{summary.archives_problem} avec problème(s), {summary.archive_entries} entrée(s) "
+        "inspectée(s) sans extraction.",
+        file=out,
+    )
+    return EXIT_OK
+
+
+_ARCHIVE_STATUS = {
+    "ok": "saine",
+    "partial": "partiellement inspectée",
+    "corrupt": "corrompue",
+    "encrypted": "chiffrée (non lue)",
+    "not_supported": "format identifié, non ouvert",
+    "rejected": "refusée",
+}
+
+
+def _archive(args: argparse.Namespace, ctx: AppContext, out: TextIO, err: TextIO) -> int:
+    scan = ctx.conn.execute(
+        "SELECT format, status, entries_total, entries_read, bytes_read, reason"
+        " FROM archive_scan WHERE file_id = ?",
+        (args.id,),
+    ).fetchone()
+    if scan is None:
+        print(
+            f"Le fichier {args.id} n'a pas été inspecté comme archive (lancez « mtlm formats »).",
+            file=err,
+        )
+        return EXIT_ERROR
+    print(f"Format : {scan[0]} — état : {_ARCHIVE_STATUS.get(scan[1], scan[1])}", file=out)
+    print(
+        f"Entrées : {scan[2]} ; lues : {scan[3]} ; octets décompressés en mémoire : "
+        f"{human_size(scan[4])}",
+        file=out,
+    )
+    if scan[5]:
+        print(f"Motif : {scan[5]}", file=out)
+    for inner, status, size, reason in ctx.conn.execute(
+        "SELECT inner_path, status, size, reason FROM archive_entry"
+        " WHERE archive_file_id = ? ORDER BY id",
+        (args.id,),
+    ):
+        note = f" — {reason}" if reason else ""
+        print(f"  {status}\t{human_size(size)}\t{inner}{note}", file=out)
+    return EXIT_OK
+
+
 def _detail(args: argparse.Namespace, ctx: AppContext, out: TextIO, err: TextIO) -> int:
     detail = InventoryService(ctx.conn).detail(args.id)
     if detail is None:
@@ -370,6 +438,11 @@ def _detail(args: argparse.Namespace, ctx: AppContext, out: TextIO, err: TextIO)
         ("État de l'empreinte", row.hash_state),
         ("SHA-256", detail.sha256_hex or "non calculée"),
         ("Erreur d'empreinte", detail.hash_error or "aucune"),
+        (
+            "Format réel (signature)",
+            (detail.magic_label or "non identifié")
+            + (" — EXTENSION TROMPEUSE" if detail.misleading_extension else ""),
+        ),
         ("Moteur", detail.hashed_with_engine or "—"),
         ("Autres emplacements au contenu identique", str(detail.other_paths_same_content)),
         ("En quarantaine", "oui" if row.in_quarantine else "non"),
