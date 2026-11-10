@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0] — Phase 10 : interface graphique
+
+### Ajouté
+- Application PySide6 (`mtlm-gui`) : 13 écrans reliés aux services réels.
+- Registre d'actions, tâches de fond avec pause/reprise/annulation, dialogues natifs.
+- Tests d'interface sans écran ; captures d'écran réelles sur corpus fictif.
+
 ## [0.9.0] — Phases 8 et 9 : doublons, quarantaine par copie, bibliothèque organisée
 
 ### Ajouté

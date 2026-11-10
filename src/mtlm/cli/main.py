@@ -22,10 +22,19 @@ from mtlm.app.duplicates import DuplicateService
 from mtlm.app.families import FamilyService
 from mtlm.app.formats import FormatService
 from mtlm.app.hashing import HashService
-from mtlm.app.inventory import FileFilter, InventoryService, analysis_of
+from mtlm.app.inventory import FileFilter, InventoryService
 from mtlm.app.jobs import JobStore
 from mtlm.app.organize import OrganizeService
 from mtlm.app.pipeline import STEPS, run_steps
+from mtlm.app.presenters import (
+    CERTAINTY_LABELS,
+    JOB_KIND_LABELS,
+    JOB_STATE_LABELS,
+    RELATION_LABELS,
+    TYPE_LABELS,
+    file_detail_lines,
+    human_size,
+)
 from mtlm.app.quarantine import QuarantineService
 from mtlm.app.recognize import RecognitionService
 from mtlm.app.reports import KINDS, ReportService
@@ -47,17 +56,6 @@ EXIT_OK = 0
 EXIT_ERROR = 1
 EXIT_USAGE = 2
 EXIT_CANCELLED = 3
-
-
-def human_size(size: int | None) -> str:
-    if size is None:
-        return "?"
-    value = float(size)
-    for unit in ("o", "Kio", "Mio", "Gio"):
-        if value < 1024 or unit == "Gio":
-            return f"{value:.0f} {unit}" if unit == "o" else f"{value:.1f} {unit}"
-        value /= 1024
-    return f"{size} o"  # pragma: no cover
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -514,27 +512,6 @@ def _formats(args: argparse.Namespace, ctx: AppContext, out: TextIO, _err: TextI
     return EXIT_OK
 
 
-TYPE_LABELS = {
-    "ea": "robot (EA)",
-    "indicator": "indicateur",
-    "script": "script",
-    "library": "bibliothèque",
-    "include": "fichier d'inclusion",
-    "service": "service",
-    "set": "jeu de paramètres (SET)",
-    "dll": "DLL",
-    "template": "modèle",
-    "resource": "fichier annexe",
-    "unknown": "inconnu",
-}
-CERTAINTY_LABELS = {
-    "certain": "certain",
-    "probable": "probable",
-    "possible": "possible",
-    "unknown": "inconnue",
-}
-
-
 def _recognize(args: argparse.Namespace, ctx: AppContext, out: TextIO, _err: TextIO) -> int:
     summary = RecognitionService(ctx.conn, ctx.clock, ctx.journal).run(args.source)
     print(
@@ -679,17 +656,6 @@ def _orphans(_args: argparse.Namespace, ctx: AppContext, out: TextIO, _err: Text
     for file_id, path in rows:
         print(f"  {file_id}\t{path}", file=out)
     return EXIT_OK
-
-
-RELATION_LABELS = {
-    "exact_copy": "copie exacte",
-    "renamed_copy": "copie renommée",
-    "version_variant": "version",
-    "source_of": "source",
-    "compiled_variant": "compilé",
-    "homonym_different": "homonyme distinct",
-    "set_for": "SET associé",
-}
 
 
 def _regroup(_args: argparse.Namespace, ctx: AppContext, out: TextIO, _err: TextIO) -> int:
@@ -1016,68 +982,18 @@ def _archive(args: argparse.Namespace, ctx: AppContext, out: TextIO, err: TextIO
 
 
 def _detail(args: argparse.Namespace, ctx: AppContext, out: TextIO, err: TextIO) -> int:
-    detail = InventoryService(ctx.conn).detail(args.id)
-    if detail is None:
+    lines = file_detail_lines(ctx.conn, args.id)
+    if lines is None:
         print(f"Fichier {args.id} inconnu.", file=err)
         return EXIT_ERROR
-    row = detail.row
-    lines = [
-        ("Chemin", row.rel_path),
-        ("Source", detail.source_path),
-        ("Nom", row.name),
-        ("Extension", row.ext or "(aucune)"),
-        ("Type d'entrée", row.file_type),
-        (
-            "Taille",
-            f"{human_size(row.size)} ({row.size} octets)" if row.size is not None else "inconnue",
-        ),
-        ("Présence", row.presence),
-        ("iCloud non téléchargé", "oui (jamais lu)" if detail.is_dataless else "non"),
-        ("État de l'empreinte", row.hash_state),
-        ("SHA-256", detail.sha256_hex or "non calculée"),
-        ("Erreur d'empreinte", detail.hash_error or "aucune"),
-        (
-            "Format réel (signature)",
-            (detail.magic_label or "non identifié")
-            + (" — EXTENSION TROMPEUSE" if detail.misleading_extension else ""),
-        ),
-        ("Moteur", detail.hashed_with_engine or "—"),
-        ("Autres emplacements au contenu identique", str(detail.other_paths_same_content)),
-        ("En quarantaine", "oui" if row.in_quarantine else "non"),
-    ]
-    for label, value in lines:
-        print(f"{label} : {value}", file=out)
-    info = analysis_of(ctx.conn, args.id)
-    if info is None:
-        print("Reconnaissance : non effectuée (lancez « mtlm reconnaitre »).", file=out)
-        return EXIT_OK
-    print(
-        f"Type reconnu : {TYPE_LABELS.get(info.detected_type, info.detected_type)} — "
-        f"plateforme {info.platform} — certitude {CERTAINTY_LABELS[info.certainty]}",
-        file=out,
-    )
-    for reason in info.basis:
-        print(f"  preuve : {reason}", file=out)
-    if info.limits:
-        print(f"  limite : {info.limits}", file=out)
-    for warning in info.warnings:
-        print(f"  avertissement : {warning}", file=out)
-    if info.encoding is not None:
-        print(f"Encodage : {info.encoding}", file=out)
-        print(f"Version déclarée : {info.prop_version or 'aucune'}", file=out)
-        print(f"Copyright déclaré : {info.prop_copyright or 'aucun'}", file=out)
-        if info.prop_description:
-            print(f"Description : {info.prop_description}", file=out)
-        print(f"Fonctions d'entrée : {', '.join(info.entry_points) or 'aucune'}", file=out)
-        print(f"Paramètres ({len(info.inputs)}) :", file=out)
-        for name, mql_type, default, modifier in info.inputs:
-            print(
-                f"  {modifier} {mql_type} {name}" + (f" = {default}" if default else ""), file=out
-            )
-        if info.includes:
-            print(f"Inclusions : {', '.join(info.includes)}", file=out)
-        if info.imports:
-            print(f"Imports (jamais chargés) : {', '.join(info.imports)}", file=out)
+    for line in lines:
+        print(
+            line.replace(
+                "Reconnaissance : non effectuée (lancez l'analyse).",
+                "Reconnaissance : non effectuée (lancez « mtlm reconnaitre »).",
+            ),
+            file=out,
+        )
     return EXIT_OK
 
 
@@ -1087,7 +1003,8 @@ def _jobs(_args: argparse.Namespace, ctx: AppContext, out: TextIO, _err: TextIO)
         print("Aucune tâche.", file=out)
     for job in jobs:
         print(
-            f"{job.id}\t{job.kind}\t{job.state}\t{job.progress_done} traité(s)\t"
+            f"{job.id}\t{JOB_KIND_LABELS.get(job.kind, job.kind)}\t"
+            f"{JOB_STATE_LABELS.get(job.state, job.state)}\t{job.progress_done} traité(s)\t"
             f"{job.errors_count} erreur(s)\t{job.created_at}",
             file=out,
         )

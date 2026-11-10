@@ -64,6 +64,23 @@ def check_destination(
     return target
 
 
+def check_file_target(path: Path, source_roots: Iterable[Path]) -> Path:
+    """Fichier unique à créer (export) : son dossier doit exister et ne pas être **dans** une
+    source. Un dossier qui contient une source (ex. « Documents ») est accepté : y créer un
+    fichier ne modifie pas la source."""
+    parent = Path(os.path.realpath(path.expanduser().parent))
+    if not parent.is_dir():
+        raise DestinationError(f"Dossier de destination introuvable : {parent}")
+    for root in source_roots:
+        if is_within(parent, root):
+            raise DestinationError(
+                f"Export refusé : {path} serait écrit dans la source {root} (lecture seule)."
+            )
+    if not os.access(parent, os.W_OK | os.X_OK):
+        raise DestinationError(f"Pas de droit d'écriture sur {parent}")
+    return parent / path.name
+
+
 def free_space(path: Path) -> int:
     probe = path
     while not probe.exists():

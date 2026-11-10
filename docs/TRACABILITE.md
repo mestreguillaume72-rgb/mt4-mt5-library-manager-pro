@@ -32,4 +32,5 @@ Mise à jour à chaque phase. « Preuve » renvoie au rapport de phase contenant
 | F9 Bibliothèque organisée | `app/organize.py` | `test_quarantine_organize.py`, invariant | phase-08-09 | ✅ Phase 9 |
 | F10 Exports CSV/JSON | `app/reports.py`, `transfer/exports.py` | `test_reports.py` | phase-08-09 | ✅ moteur |
 | § 6 Destinations distinctes des sources, arrêt au moindre doute | `transfer/guards.py`, services | tests de destination, référence, disque plein | phase-08-09 | ✅ |
-| F11, F12 (rapport final), F13 (livraison) | — | — | — | ⏳ phases 10 à 12 |
+| F11 Interface (13 écrans, aucune action décorative, clavier, pause/reprise/annulation) | `src/mtlm/ui/*` | `tests/ui/test_ui.py` | phase-10, `docs/captures/` | ✅ Phase 10 |
+| F12 (rapport final), F13 (livraison) | — | — | — | ⏳ phases 11 et 12 |

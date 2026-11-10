@@ -1,6 +1,6 @@
 [project]
 name = "mtlm"
-version = "0.9.0"
+version = "0.10.0"
 description = "MT4 MT5 Library Manager PRO — gestion et analyse sécurisée de bibliothèques MetaTrader (macOS)"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -11,6 +11,9 @@ dependencies = [
 
 [project.scripts]
 mtlm = "mtlm.cli.main:main"
+
+[project.gui-scripts]
+mtlm-gui = "mtlm.ui.main:main"
 
 [dependency-groups]
 dev = [

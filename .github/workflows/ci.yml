@@ -11,6 +11,8 @@ permissions:
 
 jobs:
   tests:
+    env:
+      QT_QPA_PLATFORM: offscreen
     name: Tests (Python ${{ matrix.python }})
     runs-on: ubuntu-latest
     strategy:
@@ -22,6 +24,10 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ matrix.python }}
+      - name: Bibliothèques système pour Qt (tests de l'interface sans écran)
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3
       - name: Installation reproductible (verrou uv.lock)
         run: uv sync --frozen
       - name: Lint

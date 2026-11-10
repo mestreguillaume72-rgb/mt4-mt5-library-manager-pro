@@ -14,6 +14,8 @@ permissions:
 
 jobs:
   tests:
+    env:
+      QT_QPA_PLATFORM: offscreen
     name: Tests macOS (${{ matrix.runner }})
     runs-on: ${{ matrix.runner }}
     strategy:

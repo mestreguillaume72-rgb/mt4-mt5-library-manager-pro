@@ -161,7 +161,7 @@ def test_parcours_source_scanner_inventaire(
     code, out, _ = run(["fichiers", "--ext", "set", "--limite", "5"], environ, clock)
     assert code == EXIT_OK and "5 affiché(s) sur" in out and "Suite : ajoutez --apres" in out
     code, out, _ = run(["taches"], environ, clock)
-    assert "scan\tcompleted\t120" in out
+    assert "inventaire\tterminée\t120" in out
     code, out, _ = run(["erreurs", "2"], environ, clock)
     assert "Aucune erreur" in out
     code, out, _ = run(["fichiers", "--manquants"], environ, clock)

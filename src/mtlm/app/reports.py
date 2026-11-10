@@ -14,7 +14,7 @@ from mtlm.audit.journal import ACTOR_USER, AuditJournal
 from mtlm.core.errors import ExportError
 from mtlm.core.paths import AppPaths
 from mtlm.transfer.exports import write_csv, write_json
-from mtlm.transfer.guards import check_destination
+from mtlm.transfer.guards import check_file_target
 
 
 @dataclass(frozen=True)
@@ -160,7 +160,7 @@ class ReportService:
             Path(r[0])
             for r in self._conn.execute("SELECT path FROM source_root WHERE status <> 'removed'")
         ]
-        check_destination(destination.parent, sources, [], require_existing=True)
+        destination = check_file_target(destination, sources)
         suffix = destination.suffix.lower()
         if suffix == ".json":
             items = [dict(zip(spec.header, row, strict=True)) for row in self.rows(kind)]

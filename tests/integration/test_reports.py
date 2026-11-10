@@ -127,3 +127,15 @@ def test_cli_exporter(tmp_path: Path, environ: dict[str, str], clock: FixedClock
         err=io.StringIO(),
     )
     assert code == EXIT_ERROR
+
+
+def test_export_dans_un_dossier_qui_contient_la_source(
+    tmp_path: Path, environ: dict[str, str], clock: FixedClock, paths: AppPaths
+) -> None:
+    """Écrire un export dans « Documents » (qui contient la bibliothèque) est autorisé."""
+    prepare(tmp_path, environ, clock)
+    with open_app(paths, clock) as ctx:
+        count = ReportService(ctx.conn, ctx.journal, ctx.paths).export(
+            "inventaire", tmp_path / "inventaire.csv"
+        )
+    assert count == 3 and (tmp_path / "inventaire.csv").exists()
