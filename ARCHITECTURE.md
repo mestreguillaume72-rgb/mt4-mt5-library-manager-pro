@@ -1,6 +1,6 @@
 # ARCHITECTURE — MT4 MT5 Library Manager PRO
 
-> **Phase 0 — Audit.** Statut : **PROPOSITION, en attente d'approbation écrite** (porte de validation de la Phase 0, spécification § 8). Aucun code métier n'est écrit avant cette approbation.
+> **Phase 0 — Audit.** Statut : **APPROUVÉ par le propriétaire le 2026-11-10** (porte de validation de la Phase 0, spécification § 8) — voir [docs/VALIDATIONS.md](docs/VALIDATIONS.md). Décisions du propriétaire : Python/PySide6 ; quarantaine **par copie uniquement**, proposée puis exécutée seulement après confirmation.
 >
 > Référence contractuelle : [`docs/specification/MT4-MT5-Library-Manager-PRO_dossier-developpeur_v3.0.pdf`](docs/specification/MT4-MT5-Library-Manager-PRO_dossier-developpeur_v3.0.pdf) (version 3.0, SHA-256 `dee061af…5e57cd`), appelée « la spécification » (§ = section de la spécification).
 >
@@ -60,7 +60,7 @@ Raisons principales de la recommandation :
 4. Performance suffisante : `hashlib` (C, sans verrou global pendant le hachage), `os.scandir`, SQLite intégré, `QTableView` paginé à 100 000 lignes.
 
 Prix accepté : application plus lourde (~150–250 Mo), signature/notarisation plus délicate (nombreuses bibliothèques à signer), aspect « Qt » plutôt que 100 % natif.
-**Le choix final appartient au propriétaire** (Annexe de la spécification) — question **Q-01**.
+**Choix du propriétaire (2026-11-10) : Python/PySide6** — D-001 acceptée.
 
 > Le reste de ce document décrit l'architecture avec la pile recommandée. Le découpage en modules, le modèle de données, les algorithmes et la stratégie de tests sont **indépendants du langage** et restent valables avec Swift (correspondances indiquées dans D-001).
 
@@ -218,11 +218,11 @@ duplicate_member(group_id FK, file_id FK, is_reference, admissible_for_quarantin
 similarity_pair(file_a FK, file_b FK, kind TEXT,           -- text_normalized_equal|text_similar|set_similar
                 score REAL, method TEXT, computed_at, PRIMARY KEY(file_a, file_b, kind))
 
-quarantine_batch(id PK, created_at, destination_root, mode TEXT CHECK(mode IN ('copy','move')),
+quarantine_batch(id PK, created_at, destination_root,          -- copie uniquement (D-007)
                  dry_run_report_path, confirmed_at, confirmation_token, status, manifest_path)
 quarantine_entry(id PK, batch_id FK, file_id FK, source_path_bytes, dest_path_bytes,
                  sha256 BLOB, size, source_mtime_ns, decision TEXT, reason TEXT,
-                 state TEXT CHECK(state IN ('planned','copying','copied','verified','source_removed',
+                 state TEXT CHECK(state IN ('planned','copying','copied','verified',
                                            'restoring','restored','failed','conflict')),
                  updated_at, error)
 
@@ -254,7 +254,7 @@ Index : `file_record(root_id, presence)`, `(content_id)`, `(size)`, `(ext)`, `(h
 | S-02 | **Aucune exécution** | Aucun `subprocess`/`ctypes`/`os.exec*`/`os.system`/`open` (Finder)/import dynamique ; DLL et `#import` seulement signalés ; aucune prévisualisation Quick Look | Test statique sur le code + inspection du bundle |
 | S-03 | Archives **sans extraction sur disque**, limites strictes | Lecture en flux de chaque entrée vers le hacheur, limites configurables (§ 8.3) | Tests archives hostiles |
 | S-04 | Quarantaine et bibliothèque organisée sur des **destinations distinctes des sources** | Refus si la destination est dans une racine source, contient une racine source, ou est la même ; vérif. sur chemins résolus (realpath) et (device, inode) | Tests unitaires + intégration |
-| S-05 | Pas de permission d'écriture inutile sur les sources | En mode `copy` (défaut proposé), aucune écriture source jamais. Le mode `move` (si validé, Q-04) est la **seule** opération qui touche une source, après confirmation | Tests + revue |
+| S-05 | Pas de permission d'écriture sur les sources | La quarantaine est une **copie uniquement** (décision du propriétaire) : l'application n'écrit, ne déplace ni ne supprime **jamais** rien dans les sources, à aucun moment | Invariant « sources inchangées » incluant la quarantaine |
 | S-06 | **En cas de doute : arrêt et demande d'intervention** | Changement de fichier (taille/mtime/inode/hash), permission insuffisante, espace insuffisant, hash incohérent → l'opération s'arrête, état persistant, message clair | Tests d'injection de fautes |
 | S-07 | **Pas de télémétrie**, pas de réseau | Aucune bibliothèque réseau utilisée ; test statique ; aucun envoi de noms/chemins/contenus | Test statique |
 | S-08 | Fichiers iCloud non téléchargés (macOS) | Détectés (`SF_DATALESS`) et **non lus** (la lecture déclencherait un téléchargement) | Test macOS |
@@ -326,10 +326,10 @@ Identité logique = clé normalisée du nom (minuscules, suppression des marqueu
 ### 8.9 Quarantaine et restauration (F8)
 1. **Simulation (dry-run)** obligatoire : liste, tailles, destination, espace requis, motifs d'inadmissibilité → rapport enregistré.
 2. **Confirmation explicite** de l'utilisateur (jeton lié au rapport de simulation ; tout changement invalide la confirmation).
-3. Pour chaque entrée, **manifeste transactionnel** (JSON dans la destination + table) : `planned → copying → copied → verified [→ source_removed]`. Copie en flux vers un fichier temporaire dans la destination, `fsync`, hash de la copie = hash attendu, renommage atomique au nom final, puis `verified`.
-4. **Mode `copy`** (défaut proposé) : la source n'est pas touchée. **Mode `move`** (option, Q-04) : suppression de la source **uniquement** après `verified`, après re-vérification que la source n'a pas changé ; jamais avant.
-5. **Échec** à toute étape (disque plein, interruption, hash différent, destination existante) ⇒ arrêt, état persistant, **une copie vérifiée est toujours préservée** (soit l'original, soit la copie vérifiée).
-6. **Restauration** : vers le chemin d'origine si libre ; conflit ⇒ arrêt et choix utilisateur (autre nom/annuler), jamais d'écrasement ; vérification du hash après restauration ; la copie de quarantaine est conservée.
+3. Pour chaque entrée, **manifeste transactionnel** (JSON dans la destination + table) : `planned → copying → copied → verified`. Copie en flux vers un fichier temporaire dans la destination, `fsync`, hash de la copie = hash attendu, renommage atomique au nom final, puis `verified`.
+4. **Copie uniquement** (décision du propriétaire, D-007) : la source n'est jamais touchée. La quarantaine est **proposée** (simulation) et n'est exécutée **qu'après confirmation** ; les fichiers en quarantaine sont marqués comme tels dans l'index et exclus de la bibliothèque organisée (F9). Il n'existe aucun mode de déplacement ni de suppression.
+5. **Échec** à toute étape (disque plein, interruption, hash différent, destination existante) ⇒ arrêt, état persistant, **l'original est toujours intact** ; une copie partielle est signalée et jamais marquée `verified`.
+6. **Restauration** (sortie de quarantaine) : le fichier est retiré de l'état « en quarantaine » dans l'index ; si l'original a disparu entre-temps (supprimé hors de l'application), la copie vérifiée peut être recopiée vers son chemin d'origine si libre ; conflit ⇒ arrêt et choix utilisateur (autre nom/annuler), jamais d'écrasement ; vérification du hash après restauration ; la copie de quarantaine est conservée.
 7. **Aucun bouton de purge**. Au redémarrage, les lots non terminés sont présentés pour reprise ou annulation (jamais d'action automatique destructive).
 
 ### 8.10 Bibliothèque organisée (F9)

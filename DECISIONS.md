@@ -21,7 +21,7 @@
 
 ## D-001 — Pile technologique
 
-**Statut : Proposée — choix final au propriétaire (Q-01).**
+**Statut : Acceptée — choix du propriétaire le 2026-11-10 : Python/PySide6.**
 
 **Contexte.** La spécification (§ 5) impose de comparer au moins une solution native (Swift/SwiftUI) et une solution multiplateforme (ex. Python/PySide), selon : dépendances, performances, compatibilité macOS, signature, maintenance, facilité de build. Contexte décisif : le propriétaire est **débutant**, pilote **depuis Android**, et n'aura un Mac qu'en **phase 12** ; chaque phase doit fournir des **résultats de tests réellement exécutés** (§ 7, § 9). L'environnement de développement distant est Linux (Python 3.13 présent, PySide6 installable ; pas de Swift).
 
@@ -58,85 +58,85 @@
 
 ## D-002 — Version minimale de macOS
 
-**Statut : Proposée, à arbitrer selon le Mac du propriétaire (Q-02).**
+**Statut : Acceptée (approbation Phase 0 du 2026-11-10), à arbitrer selon le Mac du propriétaire (Q-02).**
 Proposition : **macOS 12 Monterey ou plus récent** (PySide6 6.x récent exige macOS 12+ ; à revérifier sur la version épinglée). Rien n'est annoncé compatible sans preuve (matrice § F13).
 
 ---
 
 ## D-003 — Persistance : SQLite (module standard `sqlite3`), WAL, FTS5
 
-**Statut : Proposée.** Conforme § F10 (« SQLite ou équivalent »). Aucune dépendance externe ; transactions, migrations versionnées maison (scripts SQL numérotés + `PRAGMA user_version`), sauvegarde par `sqlite3.Connection.backup` avant migration et avant chaque quarantaine. ORM rejeté : contrôle fin des lots et des requêtes paginées nécessaire à 100k.
+**Statut : Acceptée (approbation Phase 0 du 2026-11-10).** Conforme § F10 (« SQLite ou équivalent »). Aucune dépendance externe ; transactions, migrations versionnées maison (scripts SQL numérotés + `PRAGMA user_version`), sauvegarde par `sqlite3.Connection.backup` avant migration et avant chaque quarantaine. ORM rejeté : contrôle fin des lots et des requêtes paginées nécessaire à 100k.
 
 ---
 
 ## D-004 — Empreinte : SHA-256 en flux, protocole de stabilité
 
-**Statut : Proposée** (SHA-256 imposé § F2/F7). Blocs de 1 Mio, `fstat` avant/après, quatre états + `stale`. Collision « théorique » (§ F7) : option comparaison octet par octet avant quarantaine.
+**Statut : Acceptée (approbation Phase 0 du 2026-11-10)** (SHA-256 imposé § F2/F7). Blocs de 1 Mio, `fstat` avant/après, quatre états + `stale`. Collision « théorique » (§ F7) : option comparaison octet par octet avant quarantaine.
 
 ---
 
 ## D-005 — EX4/EX5 : binaires opaques
 
-**Statut : Proposée** (conforme § 2, § F4). Seuls nom, taille, dates, signature et SHA-256. Type déduit seulement du dossier ou d'une source appariée, certitude ≤ « probable ». Aucune lecture de structure interne, aucune décompilation, aucune extraction de paramètres. Toute éventuelle lecture d'en-tête future exigerait une documentation publique vérifiable et une nouvelle décision.
+**Statut : Acceptée (approbation Phase 0 du 2026-11-10)** (conforme § 2, § F4). Seuls nom, taille, dates, signature et SHA-256. Type déduit seulement du dossier ou d'une source appariée, certitude ≤ « probable ». Aucune lecture de structure interne, aucune décompilation, aucune extraction de paramètres. Toute éventuelle lecture d'en-tête future exigerait une documentation publique vérifiable et une nouvelle décision.
 
 ---
 
 ## D-006 — Archives : ZIP en lecture en flux sans extraction ; autres formats identifiés seulement
 
-**Statut : Proposée.** `zipfile` standard ; aucune écriture sur disque ; limites de profondeur, taille, ratio, nombre d'entrées (valeurs § ARCHITECTURE 8.3, à valider Q-09). RAR/7z : signature uniquement (éviter dépendances natives et outils externes = risque d'exécution). Les fichiers dans des archives ne sont jamais mis en quarantaine.
+**Statut : Acceptée (approbation Phase 0 du 2026-11-10).** `zipfile` standard ; aucune écriture sur disque ; limites de profondeur, taille, ratio, nombre d'entrées (valeurs § ARCHITECTURE 8.3, à valider Q-09). RAR/7z : signature uniquement (éviter dépendances natives et outils externes = risque d'exécution). Les fichiers dans des archives ne sont jamais mis en quarantaine.
 
 ---
 
-## D-007 — Quarantaine : destination distincte, copie vérifiée, mode `copy` par défaut
+## D-007 — Quarantaine : destination distincte, copie vérifiée uniquement
 
-**Statut : Proposée — mode `move` à trancher (Q-04).**
+**Statut : Acceptée — décision du propriétaire le 2026-11-10 : pas de déplacement ; la quarantaine est seulement proposée, puis exécutée après confirmation.**
 - Destination choisie par l'utilisateur, **hors de toute source** (§ 6) ; vérification par chemins résolus et (device, inode).
 - Protocole : simulation → confirmation (jeton lié à la simulation) → copie en flux vers fichier temporaire → `fsync` → hash → renommage atomique → `verified`.
-- **`copy` (défaut)** : sources jamais modifiées ; la quarantaine sert de mise à l'écart vérifiée, et la bibliothèque organisée (F9) exclut les doublons.
-- **`move` (option)** : suppression de l'original **après** `verified` et re-vérification de stabilité ; seule opération de toute l'application qui écrit dans une source ; nécessite confirmation renforcée.
+- **Copie uniquement** : sources jamais modifiées, jamais déplacées, jamais supprimées ; la quarantaine est une mise à l'écart vérifiée et tracée, et la bibliothèque organisée (F9) exclut les fichiers en quarantaine.
+- Mode « déplacement » : **rejeté** par le propriétaire. L'application ne contient donc aucune opération d'écriture dans les sources.
 - Pas de corbeille macOS (non traçable), pas de purge (§ F8).
 
 ---
 
 ## D-008 — Distinction doublon exact / équivalent / similaire / version
 
-**Statut : Proposée** (§ F6, F7). Quatre classes, tables et onglets distincts ; seuls les doublons **exacts admissibles** peuvent entrer en quarantaine. Similarité : Jaccard sur shingles de 5 tokens, MinHash 128 + LSH, recalcul exact affiché, seuil par défaut 0,80 (Q-10). `engine_version` stocké avec chaque résultat.
+**Statut : Acceptée (approbation Phase 0 du 2026-11-10)** (§ F6, F7). Quatre classes, tables et onglets distincts ; seuls les doublons **exacts admissibles** peuvent entrer en quarantaine. Similarité : Jaccard sur shingles de 5 tokens, MinHash 128 + LSH, recalcul exact affiché, seuil par défaut 0,80 (Q-10). `engine_version` stocké avec chaque résultat.
 
 ---
 
 ## D-009 — Associations robot↔SET : score pondéré explicable, plafonné sans source
 
-**Statut : Proposée** (§ F5). Critères et poids : ARCHITECTURE § 8.6. Règles dures : pas de niveau « forte » sans preuve paramétrique ; robot sans source lisible ⇒ plafond « à vérifier » ; aucune association validée sans l'utilisateur.
+**Statut : Acceptée (approbation Phase 0 du 2026-11-10)** (§ F5). Critères et poids : ARCHITECTURE § 8.6. Règles dures : pas de niveau « forte » sans preuve paramétrique ; robot sans source lisible ⇒ plafond « à vérifier » ; aucune association validée sans l'utilisateur.
 
 ---
 
 ## D-010 — Audit append-only chaîné + journaux rotatifs
 
-**Statut : Proposée** (§ 5, § F12). Table `audit_event` avec `prev_hash`/`hash`, triggers interdisant `UPDATE`/`DELETE`, export JSONL ; `logging` rotatif.
+**Statut : Acceptée (approbation Phase 0 du 2026-11-10)** (§ 5, § F12). Table `audit_event` avec `prev_hash`/`hash`, triggers interdisant `UPDATE`/`DELETE`, export JSONL ; `logging` rotatif.
 
 ---
 
 ## D-011 — Aucune maquette, actions « non disponible » explicites
 
-**Statut : Proposée** (§ 7). Registre central d'actions ; action non implémentée = désactivée avec libellé « non disponible » ; test qui échoue si une action activée n'est pas branchée ; générateur synthétique non empaqueté (test de contenu du bundle).
+**Statut : Acceptée (approbation Phase 0 du 2026-11-10)** (§ 7). Registre central d'actions ; action non implémentée = désactivée avec libellé « non disponible » ; test qui échoue si une action activée n'est pas branchée ; générateur synthétique non empaqueté (test de contenu du bundle).
 
 ---
 
 ## D-012 — Outillage qualité
 
-**Statut : Proposée.** `uv` (ou `pip-tools`) avec fichier de verrouillage ; `ruff` (lint + format) ; `mypy --strict` sur `src/mtlm` ; `pytest`, `pytest-qt`, `hypothesis` (tests de propriétés), `pytest-cov` ; `import-linter` (règles de dépendances) ; couverture ≥ 85 % moteur, 100 % des branches de `transfer`.
+**Statut : Acceptée (approbation Phase 0 du 2026-11-10).** `uv` (ou `pip-tools`) avec fichier de verrouillage ; `ruff` (lint + format) ; `mypy --strict` sur `src/mtlm` ; `pytest`, `pytest-qt`, `hypothesis` (tests de propriétés), `pytest-cov` ; `import-linter` (règles de dépendances) ; couverture ≥ 85 % moteur, 100 % des branches de `transfer`.
 
 ---
 
 ## D-013 — CI : Linux à chaque commit, macOS ciblé, charge 100k la nuit
 
-**Statut : Proposée** (coût macOS — R-12). `ci.yml` (Linux) : lint, types, tests, sécurité statique, invariant lecture seule 50k. `macos.yml` (PR + manuel) : tests sur `macos-14`/`macos-13`, invariant macOS, build `.app`. `perf-nightly.yml` (manuel/planifié) : 100k, rapport de charge en artefact.
+**Statut : Acceptée (approbation Phase 0 du 2026-11-10)** (coût macOS — R-12). `ci.yml` (Linux) : lint, types, tests, sécurité statique, invariant lecture seule 50k. `macos.yml` (PR + manuel) : tests sur `macos-14`/`macos-13`, invariant macOS, build `.app`. `perf-nightly.yml` (manuel/planifié) : 100k, rapport de charge en artefact.
 
 ---
 
 ## D-014 — Données de test : 100 % synthétiques dans le dépôt
 
-**Statut : Proposée** (§ 9). Générateur à graine fixe produisant robots/SET **fictifs** et vérité terrain ; les exemples fictifs fournis par le propriétaire (Annexe) sont acceptés s'ils ne contiennent aucune donnée réelle. Aucun vrai robot, SET, DLL dans Git (contrôle `.gitignore` + test qui refuse `.ex4/.ex5/.dll` hors `tests/synthetic` générés à la volée).
+**Statut : Acceptée (approbation Phase 0 du 2026-11-10)** (§ 9). Générateur à graine fixe produisant robots/SET **fictifs** et vérité terrain ; les exemples fictifs fournis par le propriétaire (Annexe) sont acceptés s'ils ne contiennent aucune donnée réelle. Aucun vrai robot, SET, DLL dans Git (contrôle `.gitignore` + test qui refuse `.ex4/.ex5/.dll` hors `tests/synthetic` générés à la volée).
 
 ---
 

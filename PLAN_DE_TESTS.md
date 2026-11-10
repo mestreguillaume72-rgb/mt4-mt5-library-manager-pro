@@ -1,6 +1,6 @@
 # PLAN DE TESTS — MT4 MT5 Library Manager PRO
 
-> Phase 0 — Statut : **PROPOSITION, en attente de validation.**
+> Phase 0 — Statut : **APPROUVÉ le 2026-11-10** (voir [docs/VALIDATIONS.md](docs/VALIDATIONS.md)).
 > Référence : `docs/specification/MT4-MT5-Library-Manager-PRO_dossier-developpeur_v3.0.pdf`.
 > Principe (§ 7) : une fonctionnalité n'est acceptée que si ses tests existent, ont été **réellement exécutés**, et que la commande, l'environnement et les résultats sont consignés. Les tests doivent **échouer si une fonction n'est pas branchée**.
 
@@ -119,10 +119,11 @@ Cas imposés : **dry-run, confirmation, disque plein, interruption, destination 
 - Sans confirmation, ou confirmation liée à une autre simulation ⇒ refus.
 - Destination dans une source (ou l'inverse) ⇒ refus.
 - Disque plein (système de fichiers de taille limitée en test / écriture injectée échouant) ⇒ arrêt, original intact.
-- Interruption (kill) à chaque état `copying/copied/verified/source_removed` ⇒ au redémarrage, état récupérable, **au moins une copie vérifiée** existe toujours.
+- Interruption (kill) à chaque état `copying/copied/verified` ⇒ au redémarrage, état récupérable, **l'original est intact** et aucune copie partielle n'est marquée `verified`.
 - Hash de copie différent (corruption injectée) ⇒ `failed`, source intacte.
 - Destination existante ⇒ jamais écrasée.
-- Mode `move` (si validé) : original supprimé **seulement** après `verified` ; source modifiée entre-temps ⇒ arrêt.
+- Aucune opération de déplacement/suppression n'existe : test statique + invariant « sources inchangées » exécuté **après** une quarantaine réelle.
+- Source modifiée entre simulation et exécution ⇒ arrêt, confirmation invalidée.
 - Restauration : hash identique ; conflit de chemin ⇒ arrêt + choix ; 1 000 allers-retours sans perte.
 - Aucun bouton/commande de purge (test du registre d'actions).
 - Chaque étape produit un `audit_event`.
@@ -180,10 +181,10 @@ Exécution sur Linux (env. distant) **et** CI macOS ; rapport `docs/rapports/cha
 
 1. Générer le corpus (50k à chaque PR des phases concernées, 100k en manuel/nuit).
 2. **Instantané avant** : pour chaque entrée (sans suivre les liens) : chemin en octets, type, taille, SHA-256, `mtime_ns`, `ctime_ns`, mode, propriétaire, xattrs (macOS/Linux) ; liste de chaque dossier.
-3. Exécuter tous les moteurs : scan, hash, archives, reconnaissance, SET, associations, familles, doublons, dry-run de quarantaine, quarantaine en mode `copy`, organisation, exports.
+3. Exécuter tous les moteurs : scan, hash, archives, reconnaissance, SET, associations, familles, doublons, dry-run de quarantaine, quarantaine (copie), restauration, organisation, exports.
 4. **Instantané après** : comparaison stricte, **zéro différence** exigée ; aucun fichier créé dans les sources.
 5. `atime` : contrôlé et documenté séparément (peut dépendre des options de montage ; l'app n'utilise pas d'API qui le modifie explicitement).
-6. Exception testée à part : mode `move` (si validé), dont l'effet doit être exactement le plan confirmé.
+6. Aucune exception : la quarantaine étant une copie (décision du propriétaire), l'application n'a **aucune** opération autorisée à modifier les sources.
 
 ---
 
