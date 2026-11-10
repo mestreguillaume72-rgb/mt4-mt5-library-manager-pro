@@ -23,6 +23,7 @@ from mtlm.ui.pages_actions import (
 )
 from mtlm.ui.pages_analysis import DuplicatesPage, FamiliesPage, SetsPage
 from mtlm.ui.pages_main import AnalysisPage, DashboardPage, DetailPage, ExplorerPage, SourcesPage
+from mtlm.ui.theme import apply_theme
 from mtlm.ui.window import MainWindow, UiApp
 
 #: Les 13 écrans exigés par la spécification (F11), dans l'ordre de la barre latérale.
@@ -81,6 +82,7 @@ def autotest(source: Path) -> int:
     import tempfile
 
     qt_app = QApplication.instance() or QApplication([])
+    apply_theme(qt_app)  # type: ignore[arg-type]
     with tempfile.TemporaryDirectory(prefix="mtlm-autotest-") as home:
         dialogs = AutoDialogs(source)
         window = build_window(default_paths({"MTLM_HOME": home}), dialogs)
@@ -116,6 +118,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return autotest(target)
     qt_app = QApplication.instance() or QApplication(args)
     qt_app.setApplicationName(APP_NAME)
+    apply_theme(qt_app)  # type: ignore[arg-type]
     qt_app.setApplicationVersion(__version__)
     try:
         window = build_window(default_paths())

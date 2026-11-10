@@ -22,6 +22,9 @@ from mtlm.ui.main import build_window
 def main(out: Path) -> int:
     out.mkdir(parents=True, exist_ok=True)
     app = QApplication.instance() or QApplication([])
+    from mtlm.ui.theme import apply_theme
+
+    apply_theme(app)  # type: ignore[arg-type]
     with tempfile.TemporaryDirectory() as tmp:
         base = Path(tmp)
         library = base / "Bibliotheque-FICTIVE"

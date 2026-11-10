@@ -38,6 +38,11 @@ jobs:
           uname -m
       - name: Dépendances (verrou uv.lock)
         run: uv sync --frozen --group build
+      - name: Icône de l'application (.icns)
+        run: |
+          uv run python tools/icone.py packaging/macos/AppIcon.iconset
+          iconutil -c icns packaging/macos/AppIcon.iconset -o packaging/macos/AppIcon.icns
+          ls -la packaging/macos/AppIcon.icns
       - name: Construire l'application
         run: uv run --group build pyinstaller --noconfirm packaging/macos/mtlm.spec
       - name: Vérifier l'application

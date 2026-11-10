@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.1.0] — Interface simple et soignée
+
+### Ajouté / modifié
+- Nouveau design : barre latérale sombre organisée en sections avec icônes, cartes, couleurs,
+  boutons principaux mis en valeur, tableaux aérés ; mode sombre de macOS suivi
+  automatiquement ; icône d'application (Finder, Dock).
+- Accueil guidé en 3 étapes (choisir la bibliothèque, analyser, voir les résultats) avec la
+  progression affichée sur l'accueil, pause/annulation, résumé en phrases simples et cartes
+  de résultats cliquables.
+- Écrans renommés en langage simple (« Mes dossiers », « Robots et SET », « Bibliothèque
+  rangée »…), sous-titre explicatif sur chaque écran, étapes numérotées pour la quarantaine
+  et le rangement, explorateur avec nom, type, plateforme et dossier en clair.
+
 ## [1.0.0] — Phases 11 et 12 : performance et livraison macOS
 
 ### Ajouté

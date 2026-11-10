@@ -23,6 +23,7 @@ from mtlm.app.context import AppContext
 from mtlm.core.clock import Clock
 from mtlm.core.control import TaskControl
 from mtlm.ui.base import ActionRegistry, Dialogs, TaskFunction, TaskRunner
+from mtlm.ui.theme import app_icon
 
 
 class UiApp:
@@ -37,6 +38,7 @@ class UiApp:
         self.runner: TaskRunner | None = None
         self.control: TaskControl | None = None
         self._listeners: list[Callable[[], None]] = []
+        self.last_message = ""
 
     # -- erreurs et messages --------------------------------------------------------------------
     def _show_error(self, action: str, exc: Exception) -> None:
@@ -44,6 +46,7 @@ class UiApp:
             self.dialogs.error(self.window, action, str(exc))
 
     def status(self, text: str) -> None:
+        self.last_message = text
         if self.window is not None:
             self.window.statusBar().showMessage(text)
 
@@ -112,47 +115,107 @@ class UiApp:
             self.runner.wait(timeout_ms)
 
 
+SECTIONS: list[tuple[str, list[str]]] = [
+    ("COMMENCER", ["tableau", "sources", "analyse"]),
+    ("RÉSULTATS", ["explorateur", "detail", "sets", "familles", "doublons"]),
+    ("ACTIONS", ["quarantaine", "organisation", "rapports"]),
+    ("RÉGLAGES", ["parametres", "aide"]),
+]
+
+
 class MainWindow(QMainWindow):
     def __init__(self, app: UiApp, page_factories: list[Callable[[UiApp], Any]]) -> None:
         super().__init__()
         self.app = app
         app.window = self
-        self.setWindowTitle(f"{APP_NAME} {__version__}")
-        self.resize(1280, 820)
-        self.sidebar = QListWidget()
-        self.sidebar.setObjectName("navigation")
-        self.sidebar.setAccessibleName("Navigation entre les écrans")
-        self.sidebar.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.sidebar.setFixedWidth(230)
-        self.stack = QStackedWidget()
+        self.setWindowTitle(APP_NAME)
+        self.setWindowIcon(app_icon())
+        self.resize(1320, 840)
+        self.setMinimumSize(1080, 700)
         self.pages: dict[str, Any] = {}
+        self.stack = QStackedWidget()
         for factory in page_factories:
             page = factory(app)
             self.pages[page.key] = page
             self.stack.addWidget(page)
-            item = QListWidgetItem(page.title)
-            item.setData(Qt.ItemDataRole.UserRole, page.key)
-            self.sidebar.addItem(item)
-        self.sidebar.currentRowChanged.connect(self._show_row)
-        header = QLabel(f"<b>{APP_NAME}</b><br><small>Originaux en lecture seule</small>")
-        header.setTextFormat(Qt.TextFormat.RichText)
-        left = QVBoxLayout()
-        left.addWidget(header)
-        left.addWidget(self.sidebar)
-        container = QWidget()
-        layout = QHBoxLayout(container)
+        self.sidebar = QListWidget()
+        self.sidebar.setObjectName("navigation")
+        self.sidebar.setAccessibleName("Navigation entre les écrans")
+        self.sidebar.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        placed: list[str] = []
+        for section, keys in SECTIONS:
+            header = QListWidgetItem(section)
+            header.setFlags(Qt.ItemFlag.NoItemFlags)
+            self.sidebar.addItem(header)
+            for key in keys:
+                if key in self.pages:
+                    self._add_nav(key)
+                    placed.append(key)
+        for key in self.pages:  # écrans non classés (sécurité) : ajoutés à la fin
+            if key not in placed:
+                self._add_nav(key)
+        self.sidebar.currentItemChanged.connect(self._on_item)
         side = QWidget()
-        side.setLayout(left)
+        side.setObjectName("sidebar")
+        side.setFixedWidth(250)
+        left = QVBoxLayout(side)
+        left.setContentsMargins(10, 18, 10, 12)
+        brand_row = QHBoxLayout()
+        logo = QLabel()
+        logo.setPixmap(app_icon(64).pixmap(40, 40))
+        brand = QLabel("MT4 MT5\nLibrary Manager PRO")
+        brand.setObjectName("brand")
+        brand_row.addWidget(logo)
+        brand_row.addWidget(brand, 1)
+        left.addLayout(brand_row)
+        safe = QLabel("🔒 Vos originaux restent intacts")
+        safe.setObjectName("brandSub")
+        left.addWidget(safe)
+        left.addSpacing(6)
+        left.addWidget(self.sidebar, 1)
+        version = QLabel(f"Version {__version__}")
+        version.setObjectName("brandSub")
+        left.addWidget(version)
+        container = QWidget()
+        container.setObjectName("central")
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
         layout.addWidget(side)
-        layout.addWidget(self.stack, 1)
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(26, 20, 26, 14)
+        content_layout.addWidget(self.stack)
+        layout.addWidget(content, 1)
         self.setCentralWidget(container)
         self._menu()
-        self.sidebar.setCurrentRow(0)
+        self.navigate(next(iter(self.pages)))
         app.on_task_finished(self.refresh_current)
         self.statusBar().showMessage("Prêt. Vos fichiers d'origine ne sont jamais modifiés.")
 
+    def _add_nav(self, key: str) -> None:
+        page = self.pages[key]
+        item = QListWidgetItem(f"{page.icon}   {page.title}")
+        item.setData(Qt.ItemDataRole.UserRole, key)
+        self.sidebar.addItem(item)
+
+    def _row_of(self, key: str) -> int:
+        for row in range(self.sidebar.count()):
+            if self.sidebar.item(row).data(Qt.ItemDataRole.UserRole) == key:
+                return row
+        raise KeyError(key)
+
+    def _on_item(self, current: QListWidgetItem | None, _previous: object = None) -> None:
+        if current is None:
+            return
+        key = current.data(Qt.ItemDataRole.UserRole)
+        if key is None:
+            return
+        self.stack.setCurrentWidget(self.pages[key])
+        self.refresh_current()
+
     def _menu(self) -> None:
-        file_menu = self.menuBar().addMenu("&Fichier")
+        file_menu = self.menuBar().addMenu("&Aller à")
         for index, page in enumerate(self.pages.values()):
             action = QAction(page.title, self)
             if index < 9:
@@ -165,15 +228,12 @@ class MainWindow(QMainWindow):
         quit_action.triggered.connect(self.close)
         file_menu.addAction(quit_action)
 
-    def _show_row(self, row: int) -> None:
-        if row < 0:
-            return
-        self.stack.setCurrentIndex(row)
-        self.refresh_current()
+    def current_key(self) -> str:
+        page = self.stack.currentWidget()
+        return str(getattr(page, "key", ""))
 
     def navigate(self, key: str, **kwargs: Any) -> None:
-        keys = list(self.pages)
-        self.sidebar.setCurrentRow(keys.index(key))
+        self.sidebar.setCurrentRow(self._row_of(key))
         page = self.pages[key]
         if kwargs and hasattr(page, "show_item"):
             page.show_item(**kwargs)

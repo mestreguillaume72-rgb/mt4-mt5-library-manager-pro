@@ -35,3 +35,5 @@ build/
 
 # macOS
 .DS_Store
+packaging/macos/AppIcon.iconset/
+packaging/macos/AppIcon.icns

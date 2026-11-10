@@ -10,6 +10,7 @@ from PyInstaller.utils.hooks import collect_data_files
 ROOT = Path(SPECPATH).parents[1]  # noqa: F821 — variable fournie par PyInstaller
 VERSION = re.search(r'__version__ = "([^"]+)"', (ROOT / "src/mtlm/__init__.py").read_text()).group(1)
 NAME = "MT4 MT5 Library Manager PRO"
+ICON = ROOT / "packaging/macos/AppIcon.icns"
 
 analysis = Analysis(  # noqa: F821
     [str(ROOT / "packaging/macos/launcher.py")],
@@ -31,7 +32,7 @@ if sys.platform == "darwin":
     app = BUNDLE(  # noqa: F821
         collected,
         name=f"{NAME}.app",
-        icon=None,
+        icon=str(ICON) if ICON.exists() else None,
         bundle_identifier="fr.mtlm.library-manager-pro",
         version=VERSION,
         info_plist={

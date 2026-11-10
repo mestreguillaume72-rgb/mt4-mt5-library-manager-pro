@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFormLayout,
+    QFrame,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
@@ -41,15 +42,25 @@ from mtlm.ui.window import MainWindow, UiApp
 class Page(QWidget):
     key = ""
     title = ""
+    icon = "•"
+    subtitle = ""
 
     def __init__(self, app: UiApp) -> None:
         super().__init__()
         self.app = app
         self.setObjectName(f"page-{self.key}")
         self.layout_ = QVBoxLayout(self)
-        heading = QLabel(f"<h2>{self.title}</h2>")
-        heading.setTextFormat(Qt.TextFormat.RichText)
+        self.layout_.setContentsMargins(0, 0, 0, 0)
+        self.layout_.setSpacing(10)
+        heading = QLabel(self.title)
+        heading.setObjectName("pageTitle")
         self.layout_.addWidget(heading)
+        if self.subtitle:
+            sub = QLabel(self.subtitle)
+            sub.setObjectName("pageSubtitle")
+            sub.setWordWrap(True)
+            self.layout_.addWidget(sub)
+        self.layout_.addSpacing(4)
 
     @property
     def conn(self) -> Any:
@@ -69,66 +80,238 @@ class Page(QWidget):
         self.layout_.addLayout(row)
         return row
 
-    def btn(self, action_id: str, label: str, handler: Any, tooltip: str = "") -> QPushButton:
-        return self.app.registry.button(f"{self.key}.{action_id}", label, handler, tooltip)
+    def btn(
+        self, action_id: str, label: str, handler: Any, tooltip: str = "", role: str = ""
+    ) -> QPushButton:
+        return self.app.registry.button(f"{self.key}.{action_id}", label, handler, tooltip, role)
+
+    def banner(self, text: str, kind: str = "banner") -> QFrame:
+        frame = QFrame()
+        frame.setObjectName(kind)
+        layout = QHBoxLayout(frame)
+        layout.setContentsMargins(14, 10, 14, 10)
+        label = QLabel(text)
+        label.setWordWrap(True)
+        label.setTextFormat(Qt.TextFormat.RichText)
+        layout.addWidget(label, 1)
+        self.layout_.addWidget(frame)
+        return frame
 
     def refresh(self) -> None:
         """Recharge l'écran depuis la base (aucune donnée fictive)."""
 
 
+def card(parent_layout: QGridLayout | QHBoxLayout | QVBoxLayout | None = None) -> QFrame:
+    frame = QFrame()
+    frame.setObjectName("card")
+    return frame
+
+
+def restyle(widget: QWidget) -> None:
+    """Réapplique la feuille de style après un changement de propriété (état d'une carte)."""
+    widget.style().unpolish(widget)
+    widget.style().polish(widget)
+
+
+def fmt(n: int) -> str:
+    return f"{n:,}".replace(",", " ")
+
+
 # ---------------------------------------------------------------------------------------------
 class DashboardPage(Page):
-    key, title = "tableau", "Tableau de bord"
+    key, title, icon = "tableau", "Accueil", "🏠"
+    subtitle = (
+        "Rangez et analysez votre bibliothèque MetaTrader en 3 étapes — sans jamais "
+        "toucher à vos fichiers d'origine."
+    )
 
     def __init__(self, app: UiApp) -> None:
         super().__init__(app)
         self.empty = QLabel()
+        self.empty.setObjectName("muted")
         self.empty.setWordWrap(True)
+        # --- les 3 étapes ---------------------------------------------------------------
+        steps = QHBoxLayout()
+        steps.setSpacing(14)
+        self.step_cards: list[QFrame] = []
+        self.step_numbers: list[QLabel] = []
+        self.step_status: list[QLabel] = []
+        definitions = [
+            (
+                "1",
+                "Ma bibliothèque",
+                "Choisissez le dossier qui contient vos robots, "
+                "indicateurs et SET. Il est seulement lu.",
+                self.btn(
+                    "ajouter",
+                    "📁  Choisir un dossier…",
+                    self.add_source,
+                    "Ajouter un dossier à analyser (lecture seule).",
+                    role="big",
+                ),
+            ),
+            (
+                "2",
+                "Analyser",
+                "Inventaire, empreintes, reconnaissance des robots, SET, "
+                "familles et doublons — automatiquement.",
+                self.btn(
+                    "analyser",
+                    "▶  Tout analyser",
+                    self.analyse_all,
+                    "Lance toutes les étapes d'analyse.",
+                    role="big",
+                ),
+            ),
+            (
+                "3",
+                "Résultats",
+                "Vérifiez les associations robot ↔ SET, les doublons, puis "
+                "rangez votre bibliothèque.",
+                self.btn(
+                    "resultats",
+                    "✨  Voir les résultats",
+                    self.open_results,
+                    "Ouvre les associations robot ↔ SET.",
+                    role="big",
+                ),
+            ),
+        ]
+        for number, title, text, button in definitions:
+            frame = card()
+            box = QVBoxLayout(frame)
+            box.setContentsMargins(18, 16, 18, 16)
+            box.setSpacing(8)
+            top = QHBoxLayout()
+            circle = QLabel(number)
+            circle.setObjectName("stepNumber")
+            circle.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            heading = QLabel(title)
+            heading.setObjectName("sectionTitle")
+            top.addWidget(circle)
+            top.addWidget(heading, 1)
+            box.addLayout(top)
+            desc = QLabel(text)
+            desc.setObjectName("cardText")
+            desc.setWordWrap(True)
+            box.addWidget(desc, 1)
+            status = QLabel("")
+            box.addWidget(status)
+            box.addWidget(button)
+            steps.addWidget(frame, 1)
+            self.step_cards.append(frame)
+            self.step_numbers.append(circle)
+            self.step_status.append(status)
+        self.layout_.addLayout(steps)
+        # --- progression de l'analyse en cours -------------------------------------------
+        self.progress_card = card()
+        progress_box = QVBoxLayout(self.progress_card)
+        progress_box.setContentsMargins(18, 12, 18, 12)
+        self.progress_text = QLabel("")
+        self.progress = QProgressBar()
+        self.progress.setRange(0, 0)
+        progress_row = QHBoxLayout()
+        progress_row.addWidget(self.progress, 1)
+        progress_row.addWidget(self.btn("pause", "⏸  Pause", self.toggle_pause, role="ghost"))
+        progress_row.addWidget(self.btn("annuler", "Annuler", self.cancel, role="danger"))
+        progress_box.addWidget(self.progress_text)
+        progress_box.addLayout(progress_row)
+        self.progress_card.setVisible(False)
+        self.layout_.addWidget(self.progress_card)
+        # --- résumé en phrases + chiffres clés --------------------------------------------
+        self.summary = QLabel("")
+        self.summary.setWordWrap(True)
+        self.summary.setTextFormat(Qt.TextFormat.RichText)
+        self.layout_.addWidget(self.summary)
         self.layout_.addWidget(self.empty)
         grid = QGridLayout()
+        grid.setSpacing(12)
         self.values: dict[str, QLabel] = {}
-        labels = [
-            ("sources", "Sources"),
-            ("files", "Fichiers présents"),
-            ("size", "Volume"),
-            ("missing", "Fichiers disparus"),
-            ("hashed", "Empreintes validées"),
-            ("hash_todo", "Empreintes à calculer"),
-            ("robots", "Robots / indicateurs / scripts"),
-            ("sets", "SET analysés"),
-            ("assoc_strong", "Associations fortes"),
-            ("assoc_check", "Associations à vérifier"),
-            ("assoc_ok", "Associations acceptées"),
-            ("orphans", "SET orphelins"),
-            ("families", "Familles"),
-            ("dup_groups", "Groupes de doublons exacts"),
-            ("reclaim", "Doublons admissibles"),
-            ("quarantined", "Fichiers en quarantaine"),
+        tiles = [
+            ("robots", "🤖  Robots, indicateurs, scripts", "sets", "Voir"),
+            ("sets", "🧾  Fichiers SET", "sets", "Voir"),
+            ("assoc_strong", "✅  SET reliés avec certitude", "sets", "Voir"),
+            ("assoc_check", "🟠  Associations à vérifier", "sets", "Vérifier"),
+            ("dup_groups", "👯  Groupes de doublons exacts", "doublons", "Voir"),
+            ("reclaim", "♻️  Copies en trop (quarantaine possible)", "quarantaine", "Traiter"),
+            ("families", "🧬  Familles de robots", "familles", "Voir"),
+            ("files", "📄  Fichiers analysés", "explorateur", "Explorer"),
         ]
-        for i, (key, label) in enumerate(labels):
+        for i, (key, label, target, action) in enumerate(tiles):
+            frame = card()
+            box = QVBoxLayout(frame)
+            box.setContentsMargins(16, 12, 16, 12)
+            caption = QLabel(label)
+            caption.setObjectName("cardTitle")
             value = QLabel("—")
-            value.setObjectName(f"tableau.valeur.{key}")
-            value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-            grid.addWidget(QLabel(label), i // 2, (i % 2) * 2)
-            grid.addWidget(value, i // 2, (i % 2) * 2 + 1)
+            value.setObjectName("cardValue")
+            value.setAccessibleName(label)
+            go = self.btn(
+                f"voir_{key}", f"{action} →", lambda t=target: self.win.navigate(t), role="ghost"
+            )
+            row = QHBoxLayout()
+            row.addWidget(value, 1)
+            row.addWidget(go)
+            box.addWidget(caption)
+            box.addLayout(row)
+            grid.addWidget(frame, i // 4, i % 4)
             self.values[key] = value
         self.layout_.addLayout(grid)
-        self.button_row(
-            self.btn(
-                "analyser",
-                "Tout analyser",
-                self.analyse_all,
-                "Lance toutes les étapes d'analyse (écran Analyse).",
-            ),
-            self.btn("actualiser", "Actualiser", self.refresh),
-        )
-        self.jobs = make_table(["Tâche", "Type", "État", "Traités", "Erreurs", "Créée le"])
-        self.layout_.addWidget(QLabel("Dernières tâches"))
-        self.layout_.addWidget(self.jobs, 1)
+        # Valeurs secondaires (lues par les tests et le résumé).
+        for key in (
+            "sources",
+            "size",
+            "missing",
+            "hashed",
+            "hash_todo",
+            "assoc_ok",
+            "orphans",
+            "quarantined",
+        ):
+            self.values[key] = QLabel("—")
+        self.layout_.addStretch(1)
+        self.button_row(self.btn("actualiser", "Actualiser", self.refresh, role="ghost"))
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self._tick)
+        self.timer.start(400)
+
+    # -- actions --------------------------------------------------------------------------------
+    def add_source(self) -> None:
+        self.win.pages["sources"].add()
+        self.refresh()
 
     def analyse_all(self) -> None:
-        self.win.navigate("analyse")
         self.win.pages["analyse"].start_all()
+        self._tick()
+
+    def open_results(self) -> None:
+        self.win.navigate("sets")
+
+    def toggle_pause(self) -> None:
+        control = self.app.control
+        if not self.app.busy or control is None:
+            return
+        if control.paused:
+            control.resume()
+        else:
+            control.pause()
+        self._tick()
+
+    def cancel(self) -> None:
+        if self.app.busy and self.app.control is not None:
+            self.app.control.cancel()
+
+    def _tick(self) -> None:
+        busy = self.app.busy
+        self.progress_card.setVisible(busy)
+        if busy:
+            paused = self.app.control is not None and self.app.control.paused
+            text = (
+                "En pause — cliquez sur « Pause » pour reprendre."
+                if paused
+                else (self.app.last_message or "Analyse en cours…")
+            )
+            self.progress_text.setText(f"⏳  {text}")
 
     def _count(self, sql: str) -> int:
         return int(self.conn.execute(sql).fetchone()[0] or 0)
@@ -136,7 +319,10 @@ class DashboardPage(Page):
     def refresh(self) -> None:
         stats = InventoryService(self.conn).stats()
         sources = self._count("SELECT count(*) FROM source_root WHERE status <> 'removed'")
-        values = {
+        analysed = self._count(
+            "SELECT count(*) FROM job WHERE kind = 'duplicates' AND state = 'completed'"
+        )
+        values: dict[str, Any] = {
             "sources": sources,
             "files": stats.files,
             "size": human_size(stats.total_bytes),
@@ -148,9 +334,13 @@ class DashboardPage(Page):
                 " ('ea', 'indicator', 'script')"
             ),
             "sets": self._count("SELECT count(*) FROM set_file"),
-            "assoc_strong": self._count("SELECT count(*) FROM association WHERE level = 'forte'"),
+            "assoc_strong": self._count(
+                "SELECT count(DISTINCT set_file_id) FROM association"
+                " WHERE level = 'forte' AND user_decision <> 'rejected'"
+                " OR user_decision = 'accepted'"
+            ),
             "assoc_check": self._count(
-                "SELECT count(*) FROM association WHERE level = 'a_verifier'"
+                "SELECT count(*) FROM association WHERE user_decision = 'none' AND level <> 'forte'"
             ),
             "assoc_ok": self._count(
                 "SELECT count(*) FROM association WHERE user_decision = 'accepted'"
@@ -167,45 +357,65 @@ class DashboardPage(Page):
             "quarantined": self._count("SELECT count(*) FROM file_record WHERE in_quarantine = 1"),
         }
         for key, value in values.items():
-            self.values[key].setText(str(value))
+            self.values[key].setText(fmt(value) if isinstance(value, int) else str(value))
+        # États des 3 étapes.
+        done = [sources > 0, analysed > 0, values["assoc_ok"] > 0 or values["quarantined"] > 0]
+        texts = [
+            f"✓  {sources} dossier(s) ajouté(s)" if sources else "À faire",
+            f"✓  {fmt(stats.files)} fichier(s) analysé(s)"
+            if analysed
+            else ("Prêt à lancer" if sources else "Ajoutez d'abord un dossier"),
+            "✓  Résultats consultés" if done[2] else ("Prêt" if analysed else "Après l'analyse"),
+        ]
+        current = next((i for i, d in enumerate(done) if not d), None)
+        for i, frame in enumerate(self.step_cards):
+            state = "done" if done[i] else ("current" if i == current else "")
+            frame.setProperty("state", state)
+            self.step_numbers[i].setProperty("state", "done" if done[i] else "")
+            self.step_numbers[i].setText("✓" if done[i] else str(i + 1))
+            self.step_status[i].setText(texts[i])
+            self.step_status[i].setObjectName("badgeOk" if done[i] else "badgeTodo")
+            for widget in (frame, self.step_numbers[i], self.step_status[i]):
+                restyle(widget)
         if sources == 0:
             self.empty.setText(
-                "Aucune source n'est encore ajoutée. Allez dans « Sources » et "
-                "cliquez sur « Ajouter un dossier… ». Rien n'y sera modifié."
+                "Aucune source n'est encore ajoutée. Commencez par l'étape 1 : "
+                "rien ne sera modifié dans vos dossiers."
             )
+            self.summary.setText("")
         else:
             self.empty.setText(
-                "Toutes les valeurs ci-dessous proviennent de l'analyse réelle de vos dossiers."
+                "Toutes les valeurs proviennent de l'analyse réelle de vos dossiers."
             )
-        jobs = JobStore(self.conn, self.app.ctx.clock).recent(15)
-        fill_table(
-            self.jobs,
-            [
-                (
-                    j.id,
-                    JOB_KIND_LABELS.get(j.kind, j.kind),
-                    JOB_STATE_LABELS.get(j.state, j.state),
-                    j.progress_done,
-                    j.errors_count,
-                    j.created_at,
+            if analysed:
+                self.summary.setText(
+                    f"<b>Votre bibliothèque</b> : {fmt(stats.files)} fichiers "
+                    f"({values['size']}), dont <b>{fmt(int(values['robots']))}</b> robots, "
+                    f"indicateurs ou scripts et <b>{fmt(int(values['sets']))}</b> SET. "
+                    f"<b>{fmt(int(values['assoc_check']))}</b> association(s) attendent votre "
+                    f"vérification ; <b>{fmt(int(values['reclaim']))}</b> copie(s) en trop "
+                    "peuvent être mises en quarantaine."
                 )
-                for j in jobs
-            ],
-        )
+            else:
+                self.summary.setText("Étape suivante : cliquez sur <b>« Tout analyser »</b>.")
+        self._tick()
 
 
 # ---------------------------------------------------------------------------------------------
 class SourcesPage(Page):
-    key, title = "sources", "Sources"
+    key, title, icon = "sources", "Mes dossiers", "📁"
+    subtitle = (
+        "Les dossiers de votre bibliothèque MetaTrader. Ils sont seulement lus : "
+        "l'application n'y écrit, ne renomme et ne supprime jamais rien."
+    )
 
     def __init__(self, app: UiApp) -> None:
         super().__init__(app)
-        info = QLabel(
+        self.banner(
             "Les dossiers sources sont lus en <b>lecture seule</b> : l'application n'y "
-            "écrit, ne renomme et ne supprime jamais rien."
+            "écrit, ne renomme et ne supprime jamais rien.",
+            "bannerSafe",
         )
-        info.setWordWrap(True)
-        self.layout_.addWidget(info)
         self.table = make_table(["N°", "Nom", "Chemin", "État", "Dernier inventaire"])
         self.layout_.addWidget(self.table, 1)
         self.button_row(
@@ -284,7 +494,11 @@ class SourcesPage(Page):
 
 # ---------------------------------------------------------------------------------------------
 class AnalysisPage(Page):
-    key, title = "analyse", "Analyse"
+    key, title, icon = "analyse", "Analyse", "🔎"
+    subtitle = (
+        "Lancez l'analyse complète ou certaines étapes. Vous pouvez mettre en pause, "
+        "reprendre ou annuler à tout moment sans risque."
+    )
 
     def __init__(self, app: UiApp) -> None:
         super().__init__(app)
@@ -401,7 +615,11 @@ class AnalysisPage(Page):
 
 # ---------------------------------------------------------------------------------------------
 class ExplorerPage(Page):
-    key, title = "explorateur", "Explorateur"
+    key, title, icon = "explorateur", "Explorer", "🗂"
+    subtitle = (
+        "Tous les fichiers analysés. Cherchez par nom (les accents sont ignorés) et filtrez "
+        "par type ou plateforme ; double-cliquez pour le détail."
+    )
     PAGE_SIZE = 500
 
     def __init__(self, app: UiApp) -> None:
@@ -439,7 +657,7 @@ class ExplorerPage(Page):
         )
         self.counter = QLabel()
         self.layout_.addWidget(self.counter)
-        self.table = make_table(["N°", "Extension", "Taille", "Empreinte", "Chemin"])
+        self.table = make_table(["N°", "Nom", "Type", "Plateforme", "Taille", "Dossier"])
         self.table.doubleClicked.connect(lambda _i: self.open_detail())
         self.layout_.addWidget(self.table, 1)
         self._cursors: list[int] = [0]
@@ -458,9 +676,28 @@ class ExplorerPage(Page):
         flt = self._filter()
         rows = service.page(flt, after_id=self._cursors[-1], limit=self.PAGE_SIZE)
         total = service.count(flt)
+        kinds: dict[int, tuple[str, str]] = {}
+        if rows:
+            marks = ",".join("?" * len(rows))
+            for file_id, detected, platform in self.conn.execute(
+                f"SELECT file_id, detected_type, platform FROM file_analysis"
+                f" WHERE file_id IN ({marks})",
+                [r.id for r in rows],
+            ):
+                kinds[int(file_id)] = (detected, platform)
         fill_table(
             self.table,
-            [(r.id, r.ext or "—", human_size(r.size), r.hash_state, r.rel_path) for r in rows],
+            [
+                (
+                    r.id,
+                    r.name,
+                    TYPE_LABELS.get(kinds.get(r.id, ("", ""))[0], "non analysé"),
+                    {"mt4": "MT4", "mt5": "MT5"}.get(kinds.get(r.id, ("", ""))[1], "—"),
+                    human_size(r.size),
+                    r.rel_path.rpartition("/")[0] or "(racine)",
+                )
+                for r in rows
+            ],
         )
         start = (len(self._cursors) - 1) * self.PAGE_SIZE
         self.counter.setText(
@@ -497,7 +734,11 @@ class ExplorerPage(Page):
 
 # ---------------------------------------------------------------------------------------------
 class DetailPage(Page):
-    key, title = "detail", "Détail fichier"
+    key, title, icon = "detail", "Détail d'un fichier", "📄"
+    subtitle = (
+        "Tout ce que l'application sait d'un fichier, avec ses preuves et ses limites (rien "
+        "n'est inventé)."
+    )
 
     def __init__(self, app: UiApp) -> None:
         super().__init__(app)

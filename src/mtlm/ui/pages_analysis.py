@@ -28,16 +28,14 @@ POLARITY = {"pour": "+ pour", "contre": "− contre", "incertitude": "? incertit
 
 
 class SetsPage(Page):
-    key, title = "sets", "SET et associations"
+    key, title, icon = "sets", "Robots et SET", "🤖"
+    subtitle = (
+        "Pour chaque SET, les robots correspondants proposés avec un score et des preuves. "
+        "Rien n'est validé sans vous : acceptez ou rejetez."
+    )
 
     def __init__(self, app: UiApp) -> None:
         super().__init__(app)
-        note = QLabel(
-            "Chaque association est <b>proposée</b> avec un score, des preuves et des "
-            "incertitudes. Rien n'est validé sans vous."
-        )
-        note.setWordWrap(True)
-        self.layout_.addWidget(note)
         filters = QHBoxLayout()
         self.only_orphans = QCheckBox("SET orphelins uniquement")
         self.only_orphans.stateChanged.connect(lambda _s: self.refresh())
@@ -213,7 +211,11 @@ class SetsPage(Page):
 
 
 class FamiliesPage(Page):
-    key, title = "familles", "Familles et versions"
+    key, title, icon = "familles", "Familles et versions", "🧬"
+    subtitle = (
+        "Les fichiers d'un même robot regroupés : copies, versions, fichiers compilés et SET "
+        "associés."
+    )
 
     def __init__(self, app: UiApp) -> None:
         super().__init__(app)
@@ -293,17 +295,20 @@ class FamiliesPage(Page):
 
 
 class DuplicatesPage(Page):
-    key, title = "doublons", "Doublons"
+    key, title, icon = "doublons", "Doublons", "👯"
+    subtitle = (
+        "Doublons exacts (identiques octet pour octet) et fichiers seulement similaires, "
+        "toujours séparés."
+    )
 
     def __init__(self, app: UiApp) -> None:
         super().__init__(app)
-        note = QLabel(
+        self.banner(
             "<b>Doublons exacts</b> : contenu identique octet pour octet (seuls "
             "candidats possibles à la quarantaine). <b>Similaires</b> : jamais des "
-            "doublons, uniquement informatifs."
+            "doublons, uniquement informatifs.",
+            "banner",
         )
-        note.setWordWrap(True)
-        self.layout_.addWidget(note)
         tabs = QTabWidget()
         exact = QWidget()
         exact_layout = QVBoxLayout(exact)

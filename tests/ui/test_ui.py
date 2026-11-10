@@ -46,13 +46,30 @@ def click(window: MainWindow, qtbot: object, action_id: str) -> None:
     qtbot.mouseClick(button, Qt.MouseButton.LeftButton)  # type: ignore[attr-defined]
 
 
-def test_les_13_ecrans(window: MainWindow) -> None:
-    assert len(PAGES) == 13 == window.sidebar.count()
-    titles = [window.sidebar.item(i).text() for i in range(window.sidebar.count())]
-    assert titles == [p.title for p in PAGES]
+def page_keys(window: MainWindow) -> list[str]:
+    keys = []
     for row in range(window.sidebar.count()):
-        window.sidebar.setCurrentRow(row)
-        assert window.stack.currentIndex() == row
+        key = window.sidebar.item(row).data(Qt.ItemDataRole.UserRole)
+        if key is not None:
+            keys.append(key)
+    return keys
+
+
+def test_les_13_ecrans(window: MainWindow) -> None:
+    keys = page_keys(window)
+    assert len(PAGES) == 13 == len(keys) == len(set(keys))
+    assert set(keys) == {p.key for p in PAGES}
+    for key in keys:
+        window.navigate(key)
+        assert window.stack.currentWidget() is window.pages[key]
+        assert window.current_key() == key
+    # Les titres de section de la barre latérale ne sont pas sélectionnables.
+    headers = [
+        window.sidebar.item(r)
+        for r in range(window.sidebar.count())
+        if window.sidebar.item(r).data(Qt.ItemDataRole.UserRole) is None
+    ]
+    assert len(headers) == 4 and all(h.flags() == Qt.ItemFlag.NoItemFlags for h in headers)
 
 
 def test_etat_vide_honnete(window: MainWindow) -> None:
@@ -257,9 +274,35 @@ def test_annulation_et_reactivite(
 
 
 def test_navigation_au_clavier(window: MainWindow, qtbot: object) -> None:
+    window.navigate("tableau")
     window.sidebar.setFocus()
-    window.sidebar.setCurrentRow(0)
     qtbot.keyClick(window.sidebar, Qt.Key.Key_Down)  # type: ignore[attr-defined]
-    assert window.stack.currentIndex() == 1
+    assert window.current_key() == "sources"
+    qtbot.keyClick(window.sidebar, Qt.Key.Key_Down)  # type: ignore[attr-defined]
+    qtbot.keyClick(window.sidebar, Qt.Key.Key_Down)  # type: ignore[attr-defined]
+    assert window.current_key() == "explorateur"  # le titre de section est sauté
     qtbot.keyClick(window.sidebar, Qt.Key.Key_End)  # type: ignore[attr-defined]
-    assert window.stack.currentIndex() == 12
+    assert window.current_key() == "aide"
+
+
+def test_accueil_guide(
+    window: MainWindow, qtbot: object, dialogs: FakeDialogs, tmp_path: Path
+) -> None:
+    home: Any = window.pages["tableau"]
+    assert [s.text() for s in home.step_status] == [
+        "À faire",
+        "Ajoutez d'abord un dossier",
+        "Après l'analyse",
+    ]
+    lib = tmp_path / "lib"
+    build_library(lib)
+    dialogs.directories.append(lib)
+    click(window, qtbot, "tableau.ajouter")
+    assert home.step_status[0].text().startswith("✓")
+    click(window, qtbot, "tableau.analyser")
+    wait_idle(window, qtbot)
+    window.navigate("tableau")
+    assert home.step_status[1].text().startswith("✓  4 fichier")
+    assert "Votre bibliothèque" in home.summary.text()
+    click(window, qtbot, "tableau.resultats")
+    assert window.current_key() == "sets"

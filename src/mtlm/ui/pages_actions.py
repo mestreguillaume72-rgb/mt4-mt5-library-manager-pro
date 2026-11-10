@@ -29,17 +29,20 @@ from mtlm.ui.window import UiApp
 
 
 class QuarantinePage(Page):
-    key, title = "quarantaine", "Quarantaine et restauration"
+    key, title, icon = "quarantaine", "Quarantaine", "🛡"
+    subtitle = (
+        "Mettez de côté les copies en trop, par copie vérifiée vers un dossier séparé. Vos "
+        "originaux ne sont jamais modifiés ni déplacés."
+    )
 
     def __init__(self, app: UiApp) -> None:
         super().__init__(app)
-        note = QLabel(
+        self.banner(
             "La quarantaine est une <b>copie vérifiée</b> des doublons exacts vers un "
             "dossier séparé. <b>Vos originaux ne sont jamais modifiés, déplacés ni "
-            "supprimés.</b> Une simulation est obligatoire avant toute copie."
+            "supprimés.</b> Une simulation est obligatoire avant toute copie.",
+            "bannerSafe",
         )
-        note.setWordWrap(True)
-        self.layout_.addWidget(note)
         self.destination: Path | None = None
         self.destination_label = QLabel("Destination : non choisie")
         self.layout_.addWidget(self.destination_label)
@@ -48,11 +51,16 @@ class QuarantinePage(Page):
         self.summary.setReadOnly(True)
         self.summary.setObjectName("quarantaine.resume")
         self.summary.setMaximumHeight(120)
+        self.summary.setPlaceholderText(
+            "Comment faire : 1) choisissez un dossier de quarantaine sur un autre disque ou en "
+            "dehors de vos bibliothèques ; 2) cliquez sur « Simuler » pour voir ce qui serait "
+            "copié ; 3) si tout vous convient, « Confirmer et copier »."
+        )
         self.layout_.addWidget(self.summary)
         self.button_row(
-            self.btn("destination", "Choisir la destination…", self.choose),
-            self.btn("simuler", "Simuler (aucune copie)", self.simulate),
-            self.btn("executer", "Confirmer et copier", self.execute),
+            self.btn("destination", "1. Choisir la destination…", self.choose),
+            self.btn("simuler", "2. Simuler (aucune copie)", self.simulate),
+            self.btn("executer", "3. Confirmer et copier", self.execute),
         )
         self.batches = make_table(
             ["Lot", "État", "Fichiers", "Vérifiés", "Volume", "Destination", "Créé le"]
@@ -189,17 +197,20 @@ class QuarantinePage(Page):
 
 
 class OrganizePage(Page):
-    key, title = "organisation", "Bibliothèque organisée"
+    key, title, icon = "organisation", "Bibliothèque rangée", "📦"
+    subtitle = (
+        "Créez une copie bien rangée de votre bibliothèque (par plateforme, type, robot et "
+        "version) dans un nouveau dossier."
+    )
 
     def __init__(self, app: UiApp) -> None:
         super().__init__(app)
-        note = QLabel(
+        self.banner(
             "Crée une <b>copie rangée</b> de votre bibliothèque (par plateforme, type, "
             "famille, version, statut des SET) dans un nouveau dossier. Les originaux "
-            "ne sont pas modifiés."
+            "ne sont pas modifiés.",
+            "banner",
         )
-        note.setWordWrap(True)
-        self.layout_.addWidget(note)
         self.destination: Path | None = None
         self.destination_label = QLabel("Destination : non choisie")
         self.layout_.addWidget(self.destination_label)
@@ -212,11 +223,16 @@ class OrganizePage(Page):
         self.summary.setReadOnly(True)
         self.summary.setObjectName("organisation.resume")
         self.summary.setMaximumHeight(140)
+        self.summary.setPlaceholderText(
+            "Comment faire : 1) choisissez un dossier de destination (un nouveau sous-dossier y "
+            "sera créé) ; 2) « Prévisualiser » montre le rangement prévu ; 3) « Confirmer et "
+            "copier » crée la copie rangée. Vos originaux ne bougent pas."
+        )
         self.layout_.addWidget(self.summary)
         self.button_row(
-            self.btn("destination", "Choisir la destination…", self.choose),
-            self.btn("previsualiser", "Prévisualiser (aucune copie)", self.make_preview),
-            self.btn("executer", "Confirmer et copier", self.execute),
+            self.btn("destination", "1. Choisir la destination…", self.choose),
+            self.btn("previsualiser", "2. Prévisualiser (aucune copie)", self.make_preview),
+            self.btn("executer", "3. Confirmer et copier", self.execute),
             self.btn("actualiser", "Actualiser", self.refresh),
         )
         self.plans = make_table(["Plan", "Destination", "État", "Fichiers", "Copiés", "Collisions"])
@@ -295,7 +311,11 @@ class OrganizePage(Page):
 
 
 class ReportsPage(Page):
-    key, title = "rapports", "Rapports et journal"
+    key, title, icon = "rapports", "Rapports et journal", "📊"
+    subtitle = (
+        "Exportez vos résultats pour Excel (CSV) ou en JSON, et consultez le journal de "
+        "toutes les actions."
+    )
 
     def __init__(self, app: UiApp) -> None:
         super().__init__(app)
@@ -369,7 +389,8 @@ class ReportsPage(Page):
 
 
 class SettingsPage(Page):
-    key, title = "parametres", "Paramètres"
+    key, title, icon = "parametres", "Paramètres", "⚙️"
+    subtitle = "Réglages de l'analyse. Les valeurs par défaut conviennent dans la plupart des cas."
 
     def __init__(self, app: UiApp) -> None:
         super().__init__(app)
@@ -462,7 +483,8 @@ dossier ou d'une source de même nom (« probable » au mieux).</li>
 
 
 class HelpPage(Page):
-    key, title = "aide", "Aide"
+    key, title, icon = "aide", "Aide", "❓"
+    subtitle = "Mode d'emploi, garanties et limites de l'application."
 
     def __init__(self, app: UiApp) -> None:
         super().__init__(app)

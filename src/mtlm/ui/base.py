@@ -68,6 +68,30 @@ class QtDialogs:
 
 
 # ---- registre d'actions ---------------------------------------------------------------------
+#: Rôle visuel des boutons : « primary » = action principale de l'écran, « danger » = action
+#: à risque ou d'annulation, « ghost » = action secondaire discrète.
+DEFAULT_ROLES = {
+    "sources.ajouter": "primary",
+    "analyse.tout": "primary",
+    "analyse.lancer": "primary",
+    "analyse.annuler": "danger",
+    "explorateur.rechercher": "primary",
+    "detail.afficher": "primary",
+    "sets.accepter": "primary",
+    "sets.rejeter": "danger",
+    "familles.rechercher": "primary",
+    "quarantaine.simuler": "primary",
+    "quarantaine.executer": "primary",
+    "quarantaine.annuler": "danger",
+    "organisation.previsualiser": "primary",
+    "organisation.executer": "primary",
+    "rapports.exporter": "primary",
+    "parametres.enregistrer": "primary",
+    "aide.demarrer": "primary",
+    "sources.retirer": "danger",
+}
+
+
 @dataclass
 class ActionSpec:
     action_id: str
@@ -86,7 +110,12 @@ class ActionRegistry:
         self._on_error = on_error
 
     def button(
-        self, action_id: str, label: str, handler: Callable[[], None], tooltip: str = ""
+        self,
+        action_id: str,
+        label: str,
+        handler: Callable[[], None],
+        tooltip: str = "",
+        role: str = "",
     ) -> QPushButton:
         if action_id in self.specs:
             raise ValueError(f"Action en double : {action_id}")
@@ -97,6 +126,10 @@ class ActionRegistry:
         button.setAccessibleName(label)
         button.setToolTip(tooltip or label)
         button.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        button.setCursor(Qt.CursorShape.PointingHandCursor)
+        role = role or DEFAULT_ROLES.get(action_id, "")
+        if role:
+            button.setProperty("role", role)
         button.clicked.connect(lambda _checked=False: self.trigger(action_id))
         return button
 
