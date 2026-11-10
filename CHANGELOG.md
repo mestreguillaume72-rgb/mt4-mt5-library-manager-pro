@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0] — Phase 3 : empreintes SHA-256
+
+### Ajouté
+- Lecture seule en flux, SHA-256 avec protocole de stabilité, états d'empreinte, reprise.
+- Service d'empreintes parallèle, pause/annulation sans empreinte partielle.
+- CLI : `empreintes`, `fichier ID`.
+
 ## [0.2.0] — Phase 2 : scanner en lecture seule
 
 ### Ajouté

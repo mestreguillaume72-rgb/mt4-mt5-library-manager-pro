@@ -26,6 +26,20 @@ class FileRow:
 
 
 @dataclass(frozen=True)
+class FileDetail:
+    row: FileRow
+    source_path: str
+    rel_path_bytes: bytes
+    sha256_hex: str | None
+    hash_error: str | None
+    hashed_with_engine: str | None
+    first_seen_job: int | None
+    last_seen_job: int | None
+    is_dataless: bool
+    other_paths_same_content: int
+
+
+@dataclass(frozen=True)
 class FileFilter:
     source_id: int | None = None
     extensions: tuple[str, ...] = ()
@@ -147,6 +161,51 @@ class InventoryService:
         ):
             result.by_hash_state[state] = int(n)
         return result
+
+    def detail(self, file_id: int) -> FileDetail | None:
+        row = self._conn.execute(
+            f"SELECT {_COLUMNS}, s.path, f.rel_path_bytes, c.sha256, f.hash_error,"  # noqa: S608
+            " f.hashed_with_engine, f.first_seen_job, f.last_seen_job, f.is_dataless,"
+            " f.content_id FROM file_record f JOIN source_root s ON s.id = f.root_id"
+            " LEFT JOIN content c ON c.id = f.content_id WHERE f.id = ?",
+            (file_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        base = FileRow(
+            int(row[0]),
+            int(row[1]),
+            row[2],
+            row[3],
+            row[4],
+            row[5],
+            row[6],
+            row[7],
+            row[8],
+            row[9],
+            bool(row[10]),
+        )
+        same = 0
+        if row[19] is not None:
+            same = int(
+                self._conn.execute(
+                    "SELECT count(*) FROM file_record WHERE content_id = ? AND id <> ?"
+                    " AND presence = 'present'",
+                    (row[19], file_id),
+                ).fetchone()[0]
+            )
+        return FileDetail(
+            row=base,
+            source_path=row[11],
+            rel_path_bytes=bytes(row[12]),
+            sha256_hex=bytes(row[13]).hex() if row[13] is not None else None,
+            hash_error=row[14],
+            hashed_with_engine=row[15],
+            first_seen_job=row[16],
+            last_seen_job=row[17],
+            is_dataless=bool(row[18]),
+            other_paths_same_content=same,
+        )
 
     def errors(self, job_id: int, limit: int = 1000) -> list[ScanErrorRow]:
         rows = self._conn.execute(

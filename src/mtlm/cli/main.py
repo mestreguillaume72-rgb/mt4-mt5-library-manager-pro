@@ -18,6 +18,7 @@ from typing import TextIO
 
 from mtlm import APP_NAME, ENGINE_VERSION, __version__
 from mtlm.app.context import AppContext, open_app
+from mtlm.app.hashing import HashService
 from mtlm.app.inventory import FileFilter, InventoryService
 from mtlm.app.jobs import JobStore
 from mtlm.app.scan import ScanService, ScanSummary
@@ -94,6 +95,16 @@ def build_parser() -> argparse.ArgumentParser:
     files.add_argument("--limite", type=int, default=50)
     files.add_argument("--apres", type=int, default=0, help="Identifiant de départ (pagination).")
 
+    hashes = sub.add_parser("empreintes", help="Calcule les empreintes SHA-256 (lecture seule).")
+    hashes.add_argument("--source", type=int, default=None)
+    hashes.add_argument(
+        "--reessayer-erreurs", action="store_true", help="Recalcule aussi les fichiers en erreur."
+    )
+    hashes.add_argument("--travailleurs", type=int, default=None, help="Calculs en parallèle.")
+
+    detail = sub.add_parser("fichier", help="Détail d'un fichier inventorié.")
+    detail.add_argument("id", type=int)
+
     sub.add_parser("taches", help="Dernières tâches et leur état.")
     errors = sub.add_parser("erreurs", help="Erreurs d'une tâche d'inventaire.")
     errors.add_argument("tache", type=int)
@@ -146,6 +157,8 @@ def _dispatch(
             "scanner": _scan,
             "inventaire": _inventory,
             "fichiers": _files,
+            "empreintes": _hashes,
+            "fichier": _detail,
             "taches": _jobs,
             "erreurs": _errors,
         }
@@ -310,6 +323,59 @@ def _files(args: argparse.Namespace, ctx: AppContext, out: TextIO, _err: TextIO)
     print(f"{len(rows)} affiché(s) sur {total}.", file=out)
     if rows and len(rows) == args.limite:
         print(f"Suite : ajoutez --apres {rows[-1].id}", file=out)
+    return EXIT_OK
+
+
+def _hashes(args: argparse.Namespace, ctx: AppContext, out: TextIO, err: TextIO) -> int:
+    if args.travailleurs is not None and args.travailleurs < 1:
+        print("--travailleurs doit être au moins 1.", file=err)
+        return EXIT_USAGE
+    summary = HashService(ctx.conn, ctx.clock, ctx.journal).run(
+        args.source, retry_errors=args.reessayer_erreurs, workers=args.travailleurs
+    )
+    print(
+        f"Empreintes (tâche {summary.job_id}) : {summary.hashed} calculée(s), "
+        f"{summary.errors} erreur(s) sur {summary.candidates} fichier(s) ; "
+        f"{human_size(summary.bytes_read)} lus en {summary.seconds:.1f} s "
+        f"({summary.mib_per_second:.1f} Mio/s).",
+        file=out,
+    )
+    if summary.errors:
+        print(
+            "  Fichiers en erreur : mtlm fichiers (colonne « error »), "
+            "puis mtlm fichier ID pour le détail.",
+            file=out,
+        )
+    return EXIT_OK
+
+
+def _detail(args: argparse.Namespace, ctx: AppContext, out: TextIO, err: TextIO) -> int:
+    detail = InventoryService(ctx.conn).detail(args.id)
+    if detail is None:
+        print(f"Fichier {args.id} inconnu.", file=err)
+        return EXIT_ERROR
+    row = detail.row
+    lines = [
+        ("Chemin", row.rel_path),
+        ("Source", detail.source_path),
+        ("Nom", row.name),
+        ("Extension", row.ext or "(aucune)"),
+        ("Type d'entrée", row.file_type),
+        (
+            "Taille",
+            f"{human_size(row.size)} ({row.size} octets)" if row.size is not None else "inconnue",
+        ),
+        ("Présence", row.presence),
+        ("iCloud non téléchargé", "oui (jamais lu)" if detail.is_dataless else "non"),
+        ("État de l'empreinte", row.hash_state),
+        ("SHA-256", detail.sha256_hex or "non calculée"),
+        ("Erreur d'empreinte", detail.hash_error or "aucune"),
+        ("Moteur", detail.hashed_with_engine or "—"),
+        ("Autres emplacements au contenu identique", str(detail.other_paths_same_content)),
+        ("En quarantaine", "oui" if row.in_quarantine else "non"),
+    ]
+    for label, value in lines:
+        print(f"{label} : {value}", file=out)
     return EXIT_OK
 
 

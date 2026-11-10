@@ -21,4 +21,6 @@ Mise à jour à chaque phase. « Preuve » renvoie au rapport de phase contenant
 | F1 Sources et inventaire lecture seule | `fs/walker.py`, `fs/paths.py`, `app/sources.py`, `app/scan.py` | `test_walker.py` (20), `test_scan.py` (17), `test_cli.py` | phase-02 | ✅ Phase 2 |
 | F11/F12 Pause, reprise, annulation, reprise après fermeture | `core/control.py`, `app/jobs.py` | `test_pause_puis_reprise`, `test_annulation_ne_declare_aucun_manquant`, `test_tache_interrompue_detectee_au_demarrage` | phase-02 | ✅ moteur |
 | F10 Recherche paginée, filtres (base) | `app/inventory.py` | `test_pagination_filtres_et_recherche` | phase-02 | ✅ base |
-| F2 à F11, F13 | — | — | — | ⏳ phases 3 à 12 |
+| F2 Métadonnées et empreintes SHA-256 en flux | `fs/reader.py`, `hashing/sha256.py`, `app/hashing.py` | `test_sha256.py` (17), `test_hashing.py` (10) | phase-03 | ✅ Phase 3 |
+| F13 Compatibilité testée (macOS réels) | `.github/workflows/macos.yml` | suite complète sur macOS 15 arm64 et Intel | run 42908401882 | ✅ moteur (CI) |
+| F3 à F11, F13 (livraison) | — | — | — | ⏳ phases 4 à 12 |
