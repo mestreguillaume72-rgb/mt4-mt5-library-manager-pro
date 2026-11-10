@@ -391,7 +391,7 @@ Règles :
 - DMG : `hdiutil create` (outil système macOS).
 - Signature Developer ID + notarisation (`notarytool`) si distribution hors usage local : **nécessite un compte Apple Developer** (Q-03). Sans compte : usage local documenté (ouverture via clic droit → Ouvrir), limites indiquées.
 - **Matrice de compatibilité** (`docs/COMPATIBILITE.md`) : version macOS × architecture × statut × **preuve** (lien vers run CI ou rapport de test sur Mac réel) × limites. Aucune ligne sans preuve.
-- CI : GitHub Actions `macos-14` (Apple Silicon) et `macos-13` (Intel) pour tests + build `.app`/DMG ; Linux pour l'essentiel des tests à chaque commit (coût : minutes macOS ×10 en dépôt privé — R-12).
+- CI : GitHub Actions `macos-15` (Apple Silicon) et `macos-15-intel` (Intel) pour tests + build `.app`/DMG ; Linux pour l'essentiel des tests à chaque commit (coût : minutes macOS ×10 en dépôt privé — R-12).
 - Documentation utilisateur (français) : installation, mise à jour, désinstallation, sauvegarde/restauration de la base et procédure de restauration de quarantaine.
 
 ---

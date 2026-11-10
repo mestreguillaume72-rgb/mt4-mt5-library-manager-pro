@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv*/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Données locales de l'application (jamais dans Git)
+.mtlm-home/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+
+# SÉCURITÉ : aucune donnée MetaTrader réelle dans le dépôt (spécification § 9).
+# Les corpus de test sont générés à la volée dans des dossiers temporaires.
+*.ex4
+*.ex5
+*.dll
+*.mq4
+*.mq5
+*.mqh
+*.set
+*.hst
+*.hcc
+*.zip
+*.rar
+*.7z
+
+# macOS
+.DS_Store

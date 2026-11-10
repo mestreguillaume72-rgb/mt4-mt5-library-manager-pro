@@ -1,0 +1,56 @@
+# CI Linux : à chaque push et pull request (PLAN_DE_TESTS § 10).
+name: CI Linux
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Tests (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Installation reproductible (verrou uv.lock)
+        run: uv sync --frozen
+      - name: Lint
+        run: uv run ruff check .
+      - name: Format
+        run: uv run ruff format --check .
+      - name: Types
+        run: uv run mypy
+      - name: Tests + couverture
+        run: >
+          uv run pytest -W error::ResourceWarning
+          --cov --cov-report=term --cov-report=xml --cov-fail-under=85
+          --junitxml=pytest-report.xml
+      - name: Construction et vérification du paquet
+        run: |
+          uv build --wheel
+          uv run python tools/check_wheel.py dist/*.whl
+      - name: Installation du paquet dans un environnement vierge
+        run: |
+          python -m venv /tmp/venv-propre
+          /tmp/venv-propre/bin/pip install dist/*.whl
+          export MTLM_HOME="$RUNNER_TEMP/mtlm-home"
+          /tmp/venv-propre/bin/mtlm version
+          /tmp/venv-propre/bin/mtlm init
+          /tmp/venv-propre/bin/mtlm etat
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rapports-linux-py${{ matrix.python }}
+          path: |
+            pytest-report.xml
+            coverage.xml

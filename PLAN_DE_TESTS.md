@@ -221,5 +221,5 @@ Exécution sur Linux (env. distant) **et** CI macOS ; rapport `docs/rapports/cha
 | Workflow | Déclencheur | Contenu |
 |---|---|---|
 | `ci.yml` (Linux) | push / PR | ruff, mypy, pytest (unit, intégration, UI offscreen, sécurité), invariant 10k, couverture |
-| `macos.yml` | PR (phases sensibles) + manuel | pytest sur `macos-14` (arm64) et `macos-13` (Intel), invariant 50k, build `.app` |
+| `macos.yml` | PR (phases sensibles) + manuel | pytest sur `macos-15` (arm64) et `macos-15-intel` (Intel), invariant 50k, build `.app` |
 | `perf.yml` | manuel / planifié | charge 50k/100k, rapport en artefact |

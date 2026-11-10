@@ -46,7 +46,7 @@
 (Score = Σ note × poids ; ex. A = 60+15+75+50+50+25+25+20+25+5 = 350 ; B = 100+60+60+30+30+20+10+50+20+25 = 405. Les notes sont des jugements d'ingénierie argumentés ci-dessus, pas des mesures. Les poids reflètent les priorités de la spécification : « fiabilité, traçabilité et protection avant vitesse ou apparence ».)
 
 **Recommandation : B — Python 3.12+ / PySide6.**
-- Toutes les phases 1 à 11 produisent des **résultats de tests réels** dès maintenant (Linux) et sur macOS réel via GitHub Actions (`macos-14` arm64, `macos-13` Intel).
+- Toutes les phases 1 à 11 produisent des **résultats de tests réels** dès maintenant (Linux) et sur macOS réel via GitHub Actions (`macos-15` arm64, `macos-15-intel` Intel).
 - Le moteur est un paquet Python pur, testable sans interface (§ 5).
 - Plus lisible et explicable au propriétaire.
 
@@ -130,7 +130,7 @@ Proposition : **macOS 12 Monterey ou plus récent** (PySide6 6.x récent exige m
 
 ## D-013 — CI : Linux à chaque commit, macOS ciblé, charge 100k la nuit
 
-**Statut : Acceptée (approbation Phase 0 du 2026-11-10)** (coût macOS — R-12). `ci.yml` (Linux) : lint, types, tests, sécurité statique, invariant lecture seule 50k. `macos.yml` (PR + manuel) : tests sur `macos-14`/`macos-13`, invariant macOS, build `.app`. `perf-nightly.yml` (manuel/planifié) : 100k, rapport de charge en artefact.
+**Statut : Acceptée (approbation Phase 0 du 2026-11-10)** (coût macOS — R-12). `ci.yml` (Linux) : lint, types, tests, sécurité statique, invariant lecture seule 50k. `macos.yml` (PR + manuel) : tests sur `macos-15`/`macos-15-intel`, invariant macOS, build `.app`. `perf-nightly.yml` (manuel/planifié) : 100k, rapport de charge en artefact.
 
 ---
 

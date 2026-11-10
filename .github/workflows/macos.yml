@@ -1,0 +1,44 @@
+# CI macOS : vrais Mac Apple Silicon et Intel (compatibilité testée, non supposée — F13).
+# Déclenchée sur pull request et manuellement pour limiter la consommation de minutes macOS
+# (facturées x10 sur un dépôt privé — RISQUES R-12).
+name: CI macOS
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Tests macOS (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Étiquettes à confirmer au premier lancement (catalogue GitHub susceptible d'évoluer).
+        runner: [macos-15, macos-15-intel]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - name: Environnement
+        run: |
+          sw_vers
+          uname -m
+          uv run python -c "import sqlite3, sys; print(sys.version); print('SQLite', sqlite3.sqlite_version)"
+      - run: uv sync --frozen
+      - name: Tests + couverture
+        run: >
+          uv run pytest -W error::ResourceWarning
+          --cov --cov-report=term --cov-fail-under=85
+          --junitxml=pytest-report.xml
+      - name: Invariant « sources inchangées » à 50 000 fichiers
+        run: uv run pytest -m slow -s -k "50000" --junitxml=pytest-charge.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rapports-${{ matrix.runner }}
+          path: pytest-*.xml

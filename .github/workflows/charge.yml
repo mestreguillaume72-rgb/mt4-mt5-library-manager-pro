@@ -1,0 +1,33 @@
+# Tests de charge 50 000 et 100 000 fichiers synthétiques (F12) — lancement manuel.
+name: Charge 50k-100k
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  charge:
+    name: Charge (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, macos-15]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - run: uv sync --frozen
+      - name: Charge et invariant
+        shell: bash  # active pipefail : l'échec de pytest n'est pas masqué par tee
+        run: uv run pytest -m slow -s --junitxml=pytest-charge.xml 2>&1 | tee charge.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: charge-${{ matrix.runner }}
+          path: |
+            charge.log
+            pytest-charge.xml
