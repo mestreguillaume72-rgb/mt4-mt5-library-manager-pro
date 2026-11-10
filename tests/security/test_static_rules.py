@@ -217,6 +217,8 @@ def check_source(
             name = call_name or ""
             if name in FORBIDDEN_CALLS:
                 flag(node, f"appel interdit : {name}")
+            if package == "app" and name in WRITE_CALLS:
+                flag(node, f"écriture directe interdite dans app (passer par transfer) : {name}")
             if analysis:
                 if name in WRITE_CALLS:
                     flag(node, f"écriture interdite dans un module d'analyse : {name}")
@@ -336,6 +338,19 @@ def test_detecte_ecriture_dans_analyse(snippet: str) -> None:
 )
 def test_lecture_autorisee_dans_analyse(snippet: str) -> None:
     assert check_source(snippet, "x.py", analysis=True, package="fs") == []
+
+
+@pytest.mark.parametrize(
+    "snippet",
+    [
+        "import os\nos.replace('a', 'b')",
+        "import shutil\nshutil.copy('a', 'b')",
+        "import os\nos.makedirs('d')",
+        "import os\nos.remove('f')",
+    ],
+)
+def test_app_n_ecrit_pas_directement(snippet: str) -> None:
+    assert check_source(snippet, "x.py", analysis=False, package="app")
 
 
 @pytest.mark.parametrize(

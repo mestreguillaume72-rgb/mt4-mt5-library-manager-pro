@@ -27,4 +27,9 @@ Mise à jour à chaque phase. « Preuve » renvoie au rapport de phase contenant
 | F4 Reconnaissance MetaTrader avec certitude et limites | `metatrader/*.py`, `app/recognize.py` | `test_mql.py`, `test_classify.py`, `test_recognize.py` | phase-05 | ✅ Phase 5 |
 | F5 Analyse SET maximale + associations avec preuves | `setfiles/parser.py`, `matching/associations.py`, `app/sets.py` | `test_setfiles.py`, `test_associations.py`, `test_sets_associations.py` | phase-06 | ✅ Phase 6 |
 | F6 Familles et versions (identité logique, homonymes, versions) | `matching/names.py`, `matching/families.py`, `app/families.py` | `test_families.py`, `test_families_service.py` | phase-07 | ✅ Phase 7 |
-| F7 à F11, F13 (livraison) | — | — | — | ⏳ phases 8 à 12 |
+| F7 Doublons exacts / similaires séparés | `app/duplicates.py` | `test_quarantine_organize.py` | phase-08-09 | ✅ Phase 8 |
+| F8 Quarantaine par copie vérifiée, restauration (décision du propriétaire) | `transfer/*.py`, `app/quarantine.py` | `test_transfer.py`, `test_quarantine_organize.py`, invariant | phase-08-09 | ✅ Phase 8 |
+| F9 Bibliothèque organisée | `app/organize.py` | `test_quarantine_organize.py`, invariant | phase-08-09 | ✅ Phase 9 |
+| F10 Exports CSV/JSON | `app/reports.py`, `transfer/exports.py` | `test_reports.py` | phase-08-09 | ✅ moteur |
+| § 6 Destinations distinctes des sources, arrêt au moindre doute | `transfer/guards.py`, services | tests de destination, référence, disque plein | phase-08-09 | ✅ |
+| F11, F12 (rapport final), F13 (livraison) | — | — | — | ⏳ phases 10 à 12 |

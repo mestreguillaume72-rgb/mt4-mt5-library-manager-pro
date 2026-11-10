@@ -18,6 +18,7 @@ REQUIRED = {
     "mtlm/store/migrations/0002_file_type.sql",
     "mtlm/store/migrations/0003_archives_analysis.sql",
     "mtlm/store/migrations/0004_sets_families.sql",
+    "mtlm/store/migrations/0005_quarantine_organize.sql",
     "mtlm/cli/main.py",
 }
 FORBIDDEN_SUFFIXES = {

@@ -46,6 +46,9 @@ def all_commands(corpus: Path, export_dir: Path) -> list[list[str]]:
         ["orphelins"],
         ["regrouper"],
         ["familles"],
+        ["doublons"],
+        ["groupes"],
+        ["similaires"],
         ["inventaire"],
         ["fichiers", "--limite", "10"],
         ["taches"],
@@ -54,16 +57,39 @@ def all_commands(corpus: Path, export_dir: Path) -> list[list[str]]:
     ]
 
 
+def _run(args: list[str], environ: dict[str, str], clock: FixedClock) -> str:
+    out = io.StringIO()
+    code = main(args, environ=environ, clock=clock, out=out, err=io.StringIO())
+    assert code == EXIT_OK, (args, out.getvalue())
+    return out.getvalue()
+
+
 def run_all_commands(
     environ: dict[str, str], clock: FixedClock, corpus: Path, export_dir: Path
 ) -> dict[str, float]:
-    """Exécute toutes les commandes ; retourne la durée cumulée par commande."""
+    """Exécute toutes les commandes, y compris celles qui ÉCRIVENT (quarantaine par copie,
+    restauration, bibliothèque organisée) ; retourne la durée cumulée par commande."""
     durations: dict[str, float] = {}
-    for args in all_commands(corpus, export_dir):
+
+    def timed(key: str, args: list[str]) -> str:
         started = time.perf_counter()
-        code = main(args, environ=environ, clock=clock, out=io.StringIO(), err=io.StringIO())
-        assert code == EXIT_OK, args
-        durations[args[0]] = durations.get(args[0], 0.0) + time.perf_counter() - started
+        output = _run(args, environ, clock)
+        durations[key] = durations.get(key, 0.0) + time.perf_counter() - started
+        return output
+
+    for args in all_commands(corpus, export_dir):
+        timed(args[0], args)
+    quarantine_dir = export_dir / "quarantaine"
+    quarantine_dir.mkdir()
+    out = timed("quarantaine", ["quarantaine", "simuler", str(quarantine_dir)])
+    token = out.split("--jeton ")[1].split()[0]
+    timed("quarantaine", ["quarantaine", "executer", "1", "--jeton", token])
+    organized = export_dir / "rangement"
+    organized.mkdir()
+    out = timed("organiser", ["organiser", "previsualiser", str(organized)])
+    token = out.split("--jeton ")[1].split()[0]
+    timed("organiser", ["organiser", "executer", "1", "--jeton", token])
+    timed("quarantaine", ["quarantaine", "restaurer", "1"])
     return durations
 
 
@@ -114,6 +140,8 @@ def test_charge_corpus_et_invariant(
         f"formats {durations['formats']:.1f}s ; reconnaissance {durations['reconnaitre']:.1f}s ; "
         f"SET {durations['sets']:.1f}s ; associations {durations['associer']:.1f}s ; "
         f"familles {durations['regrouper']:.1f}s ; "
+        f"doublons {durations['doublons']:.1f}s ; quarantaine {durations['quarantaine']:.1f}s ; "
+        f"organisation {durations['organiser']:.1f}s ; "
         f"RAM max processus {rss_mib:.0f} Mio"
     )
     assert files == n_files == len(manifest.entries)

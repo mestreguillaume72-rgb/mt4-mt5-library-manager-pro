@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.9.0] — Phases 8 et 9 : doublons, quarantaine par copie, bibliothèque organisée
+
+### Ajouté
+- Module `transfer` (seul écrivain) : copie vérifiée sans écrasement, contrôles de destination.
+- Doublons exacts avec référence choisie, vérification octet par octet ; similarités séparées.
+- Quarantaine : simulation, confirmation par jeton, copie vérifiée, manifeste, reprise, restauration.
+- Bibliothèque organisée : prévisualisation, collisions rapportées, copie vérifiée, reprise.
+- Exports CSV/JSON, paramètres persistants, pipeline `analyser`. Migration 0005.
+
 ## [0.7.0] — Phase 7 : familles et versions
 
 ### Ajouté

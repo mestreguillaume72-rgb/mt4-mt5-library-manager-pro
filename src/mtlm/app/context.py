@@ -13,12 +13,13 @@ from types import TracebackType
 
 from mtlm import ENGINE_VERSION, __version__
 from mtlm.app.jobs import JobStore
+from mtlm.app.quarantine import QuarantineService
 from mtlm.audit.journal import ACTOR_SYSTEM, AuditJournal
 from mtlm.audit.logs import setup_logging
 from mtlm.core.clock import Clock, SystemClock
 from mtlm.core.paths import AppPaths
 from mtlm.store.backup import backup_database
-from mtlm.store.database import connect
+from mtlm.store.database import connect, transaction
 from mtlm.store.migrations_engine import Migrator
 
 log = logging.getLogger("mtlm.app")
@@ -52,7 +53,7 @@ class AppContext:
         self.close()
 
 
-def open_app(paths: AppPaths, clock: Clock | None = None) -> AppContext:
+def open_app(paths: AppPaths, clock: Clock | None = None, *, recover: bool = True) -> AppContext:
     """Prépare les dossiers de l'application, ouvre la base et applique les migrations.
 
     N'accède à aucun dossier source : uniquement aux dossiers propres à l'application.
@@ -78,14 +79,32 @@ def open_app(paths: AppPaths, clock: Clock | None = None) -> AppContext:
                 str(paths.database),
                 details={"versions": applied, "app_version": __version__},
             )
-        interrupted = JobStore(conn, used_clock).mark_interrupted()
-        if interrupted:
-            journal.append(
-                ACTOR_SYSTEM,
-                "job.interrupted",
-                "démarrage",
-                details={"jobs": interrupted, "note": "tâches interrompues par une fermeture"},
-            )
+        if recover:  # désactivé pour les connexions secondaires (tâches de fond)
+            interrupted = JobStore(conn, used_clock).mark_interrupted()
+            interrupted_batches = QuarantineService(
+                conn, used_clock, journal, paths
+            ).mark_interrupted()
+            with transaction(conn):
+                cursor = conn.execute(
+                    "UPDATE organize_plan SET status = 'interrupted' WHERE status = 'running'"
+                )
+            if interrupted_batches or cursor.rowcount:
+                journal.append(
+                    ACTOR_SYSTEM,
+                    "transfer.interrupted",
+                    "démarrage",
+                    details={
+                        "lots_quarantaine": interrupted_batches,
+                        "plans_organisation": cursor.rowcount,
+                    },
+                )
+            if interrupted:
+                journal.append(
+                    ACTOR_SYSTEM,
+                    "job.interrupted",
+                    "démarrage",
+                    details={"jobs": interrupted, "note": "tâches interrompues par une fermeture"},
+                )
     except BaseException:
         conn.close()
         raise

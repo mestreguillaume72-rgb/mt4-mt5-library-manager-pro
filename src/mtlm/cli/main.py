@@ -18,18 +18,25 @@ from typing import TextIO
 
 from mtlm import APP_NAME, ENGINE_VERSION, __version__
 from mtlm.app.context import AppContext, open_app
+from mtlm.app.duplicates import DuplicateService
 from mtlm.app.families import FamilyService
 from mtlm.app.formats import FormatService
 from mtlm.app.hashing import HashService
 from mtlm.app.inventory import FileFilter, InventoryService, analysis_of
 from mtlm.app.jobs import JobStore
+from mtlm.app.organize import OrganizeService
+from mtlm.app.pipeline import STEPS, run_steps
+from mtlm.app.quarantine import QuarantineService
 from mtlm.app.recognize import RecognitionService
+from mtlm.app.reports import KINDS, ReportService
 from mtlm.app.scan import ScanService, ScanSummary
 from mtlm.app.sets import LEVEL_LABELS, AssociationService, SetService
+from mtlm.app.settings import SPECS, SettingsService
 from mtlm.app.sources import SourceService
 from mtlm.audit.journal import ACTOR_USER
 from mtlm.audit.logs import setup_logging, shutdown_logging
 from mtlm.core.clock import Clock, SystemClock
+from mtlm.core.control import TaskControl
 from mtlm.core.errors import MtlmError
 from mtlm.core.paths import AppPaths, default_paths
 from mtlm.store.backup import BACKUP_SUFFIX, restore_database
@@ -154,6 +161,71 @@ def build_parser() -> argparse.ArgumentParser:
     fam.add_argument("id", type=int)
     fam.add_argument("--fichier", action="store_true", help="ID est un identifiant de fichier.")
 
+    dups = sub.add_parser("doublons", help="Calcule doublons exacts et similarités.")
+    dups.add_argument("--seuil", type=float, default=0.80, help="Seuil de similarité (0-1).")
+    groups = sub.add_parser("groupes", help="Groupes de doublons exacts.")
+    groups.add_argument("--limite", type=int, default=50)
+    group = sub.add_parser("groupe", help="Membres d'un groupe de doublons exacts.")
+    group.add_argument("id", type=int)
+    ref = sub.add_parser("reference", help="Choisit le fichier conservé (référence) d'un groupe.")
+    ref.add_argument("groupe", type=int)
+    ref.add_argument("fichier", type=int)
+    bytewise = sub.add_parser(
+        "verifier-octets", help="Compare octet par octet les membres d'un groupe."
+    )
+    bytewise.add_argument("groupe", type=int)
+    similar = sub.add_parser("similaires", help="Fichiers similaires (jamais des doublons).")
+    similar.add_argument(
+        "--type", choices=["text_normalized_equal", "text_similar", "set_similar"], default=None
+    )
+    similar.add_argument("--limite", type=int, default=50)
+
+    quarantine = sub.add_parser("quarantaine", help="Quarantaine par copie vérifiée.")
+    q_sub = quarantine.add_subparsers(dest="q_command", required=True, metavar="ACTION")
+    q_sim = q_sub.add_parser("simuler", help="Prépare un lot (aucune copie).")
+    q_sim.add_argument("destination", type=Path)
+    q_sim.add_argument("--fichiers", type=int, nargs="*", default=None)
+    q_exec = q_sub.add_parser("executer", help="Exécute un lot simulé (confirmation exigée).")
+    q_exec.add_argument("lot", type=int)
+    q_exec.add_argument("--jeton", required=True, help="Jeton donné par la simulation.")
+    q_sub.add_parser("lots", help="Lots de quarantaine.")
+    q_lot = q_sub.add_parser("lot", help="Contenu d'un lot.")
+    q_lot.add_argument("lot", type=int)
+    q_rest = q_sub.add_parser("restaurer", help="Sort les fichiers d'un lot de la quarantaine.")
+    q_rest.add_argument("lot", type=int)
+    q_rest.add_argument(
+        "--recopier-originaux-absents",
+        action="store_true",
+        help="Recopie depuis la quarantaine un original disparu (sans écraser).",
+    )
+    q_cancel = q_sub.add_parser("annuler", help="Annule un lot non terminé.")
+    q_cancel.add_argument("lot", type=int)
+
+    organize = sub.add_parser("organiser", help="Bibliothèque organisée par copie vérifiée.")
+    o_sub = organize.add_subparsers(dest="o_command", required=True, metavar="ACTION")
+    o_prev = o_sub.add_parser("previsualiser", help="Calcule l'arborescence (aucune copie).")
+    o_prev.add_argument("destination", type=Path)
+    o_prev.add_argument("--avec-doublons", action="store_true")
+    o_exec = o_sub.add_parser("executer", help="Copie selon un plan (confirmation exigée).")
+    o_exec.add_argument("plan", type=int)
+    o_exec.add_argument("--jeton", required=True)
+    o_sub.add_parser("plans", help="Plans d'organisation.")
+    o_items = o_sub.add_parser("plan", help="Contenu d'un plan.")
+    o_items.add_argument("plan", type=int)
+    o_items.add_argument("--limite", type=int, default=100)
+
+    exporter = sub.add_parser("exporter", help="Exporte des résultats en CSV ou JSON.")
+    exporter.add_argument("type", choices=sorted(KINDS))
+    exporter.add_argument("fichier", type=Path, help="Destination .csv ou .json (nouvelle).")
+
+    analyse = sub.add_parser(
+        "analyser", help="Lance tout le pipeline d'analyse (ou certaines étapes)."
+    )
+    analyse.add_argument("--etapes", nargs="*", choices=[s.key for s in STEPS], default=None)
+    settings = sub.add_parser("parametres", help="Affiche ou modifie les paramètres.")
+    settings.add_argument("--definir", nargs=2, metavar=("CLE", "VALEUR"))
+    settings.add_argument("--reinitialiser", metavar="CLE")
+
     sub.add_parser("taches", help="Dernières tâches et leur état.")
     errors = sub.add_parser("erreurs", help="Erreurs d'une tâche d'inventaire.")
     errors.add_argument("tache", type=int)
@@ -222,6 +294,17 @@ def _dispatch(
             "regrouper": _regroup,
             "familles": _families,
             "famille": _family,
+            "doublons": _duplicates,
+            "groupes": _groups,
+            "groupe": _group,
+            "reference": _reference,
+            "verifier-octets": _bytewise,
+            "similaires": _similar,
+            "quarantaine": _quarantine,
+            "organiser": _organize,
+            "exporter": _export,
+            "analyser": _analyse,
+            "parametres": _settings,
             "taches": _jobs,
             "erreurs": _errors,
         }
@@ -654,6 +737,241 @@ def _family(args: argparse.Namespace, ctx: AppContext, out: TextIO, err: TextIO)
             f" — version {m.estimated_version} ({m.version_basis})" if m.estimated_version else ""
         )
         print(f"  {RELATION_LABELS.get(m.relation, m.relation)}\t{m.rel_path}{version}", file=out)
+    return EXIT_OK
+
+
+def _duplicates(args: argparse.Namespace, ctx: AppContext, out: TextIO, _err: TextIO) -> int:
+    summary = DuplicateService(ctx.conn, ctx.clock, ctx.journal).compute(threshold=args.seuil)
+    print(
+        f"Doublons exacts (tâche {summary.job_id}) : {summary.groups} groupe(s), "
+        f"{summary.duplicate_files} copie(s) en trop, {summary.admissible} admissible(s) à la "
+        f"quarantaine ({human_size(summary.reclaimable_bytes)}).",
+        file=out,
+    )
+    print(
+        f"Séparés des doublons (jamais mis en quarantaine) : {summary.normalized_equal} "
+        f"équivalent(s) normalisé(s), {summary.similar_text} source(s) similaire(s), "
+        f"{summary.similar_sets} SET similaire(s).",
+        file=out,
+    )
+    return EXIT_OK
+
+
+def _groups(args: argparse.Namespace, ctx: AppContext, out: TextIO, _err: TextIO) -> int:
+    rows = DuplicateService(ctx.conn, ctx.clock, ctx.journal).groups(limit=args.limite)
+    if not rows:
+        print("Aucun doublon exact (lancez « mtlm doublons »).", file=out)
+    for g in rows:
+        chosen = " (choisie par vous)" if g.reference_chosen_by_user else ""
+        print(
+            f"{g.id}\t{g.member_count} fichiers\t{human_size(g.size)}\tSHA-256 "
+            f"{g.sha256_hex[:16]}…\tréférence : fichier {g.reference_file_id}{chosen}",
+            file=out,
+        )
+    return EXIT_OK
+
+
+def _group(args: argparse.Namespace, ctx: AppContext, out: TextIO, err: TextIO) -> int:
+    members = DuplicateService(ctx.conn, ctx.clock, ctx.journal).members(args.id)
+    if not members:
+        print(f"Groupe {args.id} inconnu.", file=err)
+        return EXIT_ERROR
+    for m in members:
+        role = (
+            "RÉFÉRENCE"
+            if m.is_reference
+            else ("admissible" if m.admissible else f"non admissible ({m.reason})")
+        )
+        print(f"{m.file_id}\t{role}\t{m.rel_path}", file=out)
+    return EXIT_OK
+
+
+def _reference(args: argparse.Namespace, ctx: AppContext, out: TextIO, _err: TextIO) -> int:
+    DuplicateService(ctx.conn, ctx.clock, ctx.journal).set_reference(args.groupe, args.fichier)
+    print(
+        f"Fichier {args.fichier} désormais conservé comme référence du groupe {args.groupe}.",
+        file=out,
+    )
+    return EXIT_OK
+
+
+def _bytewise(args: argparse.Namespace, ctx: AppContext, out: TextIO, err: TextIO) -> int:
+    identical = DuplicateService(ctx.conn, ctx.clock, ctx.journal).verify_bytewise(args.groupe)
+    if identical:
+        print(f"Groupe {args.groupe} : contenus identiques octet par octet.", file=out)
+        return EXIT_OK
+    print(f"Groupe {args.groupe} : contenus DIFFÉRENTS — aucun membre n'est admissible.", file=err)
+    return EXIT_ERROR
+
+
+_SIMILAR_LABELS = {
+    "text_normalized_equal": "équivalent normalisé",
+    "text_similar": "source similaire",
+    "set_similar": "SET similaire",
+}
+
+
+def _similar(args: argparse.Namespace, ctx: AppContext, out: TextIO, _err: TextIO) -> int:
+    rows = DuplicateService(ctx.conn, ctx.clock, ctx.journal).similar(args.type, args.limite)
+    if not rows:
+        print("Aucune similarité (lancez « mtlm doublons »).", file=out)
+    for r in rows:
+        print(
+            f"{r.score:.2f}\t{_SIMILAR_LABELS[r.kind]}\t{r.path_a}  ~  {r.path_b}\t({r.method})",
+            file=out,
+        )
+    return EXIT_OK
+
+
+def _quarantine(args: argparse.Namespace, ctx: AppContext, out: TextIO, err: TextIO) -> int:
+    service = QuarantineService(ctx.conn, ctx.clock, ctx.journal, ctx.paths)
+    if args.q_command == "simuler":
+        sim = service.simulate(args.destination, file_ids=args.fichiers)
+        print(
+            f"SIMULATION — aucun fichier copié. Lot {sim.batch_id} : {sim.entries} doublon(s) "
+            f"exact(s), {human_size(sim.total_bytes)} vers {sim.destination}",
+            file=out,
+        )
+        for file_id, reason in sim.excluded:
+            print(f"  exclu : fichier {file_id} — {reason}", file=out)
+        print(f"Rapport : {sim.report_path}", file=out)
+        print("Les originaux ne seront ni modifiés ni déplacés (copie vérifiée).", file=out)
+        print(
+            f"Pour confirmer : mtlm quarantaine executer {sim.batch_id} --jeton {sim.token}",
+            file=out,
+        )
+        return EXIT_OK
+    if args.q_command == "executer":
+        result = service.execute(args.lot, args.jeton)
+        print(
+            f"Lot {result.batch_id} : {result.status} — {result.verified} copie(s) vérifiée(s), "
+            f"{result.failed} échec(s).",
+            file=out,
+        )
+        if result.stopped_reason:
+            print(f"Arrêt : {result.stopped_reason}", file=err)
+            return EXIT_ERROR
+        return EXIT_OK
+    if args.q_command == "lots":
+        batches = service.batches()
+        if not batches:
+            print("Aucun lot de quarantaine.", file=out)
+        for b in batches:
+            print(
+                f"{b.id}\t{b.status}\t{b.verified}/{b.entries} vérifié(s)\t"
+                f"{human_size(b.total_bytes)}\t{b.destination}\t{b.created_at}",
+                file=out,
+            )
+        return EXIT_OK
+    if args.q_command == "lot":
+        for file_id, path, state, error in service.entries(args.lot):
+            print(f"{file_id}\t{state}\t{path}" + (f"\t{error}" if error else ""), file=out)
+        return EXIT_OK
+    if args.q_command == "restaurer":
+        restored, recopied, conflicts = service.restore(
+            args.lot, recopy_missing=args.recopier_originaux_absents
+        )
+        print(
+            f"Lot {args.lot} : {restored} fichier(s) sorti(s) de quarantaine, {recopied} "
+            f"original(aux) recopié(s), {conflicts} conflit(s) (rien d'écrasé).",
+            file=out,
+        )
+        return EXIT_OK if conflicts == 0 else EXIT_ERROR
+    service.cancel(args.lot)
+    print(f"Lot {args.lot} annulé.", file=out)
+    return EXIT_OK
+
+
+def _organize(args: argparse.Namespace, ctx: AppContext, out: TextIO, err: TextIO) -> int:
+    service = OrganizeService(ctx.conn, ctx.clock, ctx.journal, ctx.paths)
+    if args.o_command == "previsualiser":
+        preview = service.preview(args.destination, include_duplicates=args.avec_doublons)
+        print(
+            f"PRÉVISUALISATION — aucun fichier copié. Plan {preview.plan_id} : "
+            f"{preview.items} fichier(s), {human_size(preview.total_bytes)} vers "
+            f"{preview.destination}",
+            file=out,
+        )
+        print(
+            f"Collisions de noms résolues : {preview.collisions} ; exclus : "
+            f"{preview.excluded_quarantine} en quarantaine, {preview.excluded_duplicates} "
+            "doublon(s) (une seule copie par contenu).",
+            file=out,
+        )
+        for folder, n in preview.tree.items():
+            print(f"  {folder}/\t{n}", file=out)
+        print(
+            f"Pour confirmer : mtlm organiser executer {preview.plan_id} --jeton {preview.token}",
+            file=out,
+        )
+        return EXIT_OK
+    if args.o_command == "executer":
+        result = service.execute(args.plan, args.jeton)
+        print(
+            f"Plan {result.plan_id} : {result.status} — {result.verified} copie(s) "
+            f"vérifiée(s), {result.skipped} déjà faite(s), {result.failed} échec(s).",
+            file=out,
+        )
+        if result.stopped_reason:
+            print(f"Arrêt : {result.stopped_reason}", file=err)
+            return EXIT_ERROR
+        return EXIT_OK
+    if args.o_command == "plans":
+        plans = service.plans()
+        if not plans:
+            print("Aucun plan d'organisation.", file=out)
+        for plan_id, dest, status, total, done, collisions in plans:
+            print(
+                f"{plan_id}\t{status}\t{done}/{total} copié(s)\t{collisions} collision(s)\t{dest}",
+                file=out,
+            )
+        return EXIT_OK
+    for file_id, target, state, collision in service.items(args.plan, args.limite):
+        note = f"\t(collision avec le fichier {collision})" if collision else ""
+        print(f"{file_id}\t{state}\t{target}{note}", file=out)
+    return EXIT_OK
+
+
+def _export(args: argparse.Namespace, ctx: AppContext, out: TextIO, _err: TextIO) -> int:
+    count = ReportService(ctx.conn, ctx.journal, ctx.paths).export(args.type, args.fichier)
+    print(
+        f"Export « {KINDS[args.type].label} » : {count} ligne(s) écrite(s) dans {args.fichier}",
+        file=out,
+    )
+    return EXIT_OK
+
+
+def _analyse(args: argparse.Namespace, ctx: AppContext, out: TextIO, _err: TextIO) -> int:
+    keys = args.etapes or [s.key for s in STEPS]
+    for label, summary in run_steps(ctx, keys, TaskControl(), lambda _m: None):
+        print(f"{label} : {summary}", file=out)
+    return EXIT_OK
+
+
+def _settings(args: argparse.Namespace, ctx: AppContext, out: TextIO, err: TextIO) -> int:
+    service = SettingsService(ctx.conn, ctx.journal)
+    if args.definir:
+        key, raw = args.definir
+        try:
+            value = float(raw.replace(",", "."))
+        except ValueError:
+            print(f"Valeur numérique attendue : {raw}", file=err)
+            return EXIT_USAGE
+        print(f"{key} = {service.set(key, value):g}", file=out)
+        return EXIT_OK
+    if args.reinitialiser:
+        print(
+            f"{args.reinitialiser} = {service.reset(args.reinitialiser):g} (valeur par défaut)",
+            file=out,
+        )
+        return EXIT_OK
+    for key, value in service.all().items():
+        spec = SPECS[key]
+        print(
+            f"{key} = {value:g}\t({spec.label} ; {spec.minimum:g}–{spec.maximum:g}, "
+            f"défaut {spec.default:g})",
+            file=out,
+        )
     return EXIT_OK
 
 
