@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Guide d'installation</title>
+<style>
+  @page { size: A4; margin: 16mm 16mm 14mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Inter", "Helvetica Neue", Arial, sans-serif; color: #0f172a; margin: 0;
+         font-size: 12.5pt; line-height: 1.45; }
+  header { background: #0b0f19; color: #f8fafc; border-radius: 14px; padding: 18px 22px;
+           margin-bottom: 16px; }
+  header h1 { margin: 0 0 4px; font-size: 21pt; }
+  header p { margin: 0; color: #a5b4cf; font-size: 11.5pt; }
+  h2 { font-size: 15pt; margin: 18px 0 8px; color: #1e3a8a; }
+  .step { display: flex; gap: 14px; align-items: flex-start; margin: 10px 0; padding: 12px 14px;
+          border: 1px solid #dbe3f0; border-radius: 12px; background: #f8fafc;
+          break-inside: avoid; }
+  .num { flex: none; width: 34px; height: 34px; border-radius: 50%; color: #fff; font-weight: 700;
+         display: flex; align-items: center; justify-content: center; font-size: 14pt;
+         background: linear-gradient(135deg, #3b82f6, #6366f1); }
+  .step p { margin: 3px 0; }
+  .file { font-family: "SF Mono", Menlo, Consolas, monospace; background: #e0e7ff; color: #1e1b4b;
+          padding: 1px 6px; border-radius: 5px; font-size: 11pt; }
+  .note { border-left: 4px solid #f59e0b; background: #fffbeb; padding: 10px 14px;
+          border-radius: 8px; margin: 10px 0; break-inside: avoid; }
+  .ok { border-left: 4px solid #22c55e; background: #f0fdf4; padding: 10px 14px;
+        border-radius: 8px; margin: 10px 0; break-inside: avoid; }
+  ul { margin: 4px 0 4px 20px; padding: 0; }
+  img { width: 88%; display: block; margin-left: auto; margin-right: auto; border-radius: 10px; border: 1px solid #dbe3f0; margin-top: 6px; }
+  .page-break { break-before: page; }
+  footer { color: #64748b; font-size: 9.5pt; margin-top: 14px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>MT4 MT5 Library Manager PRO</h1>
+  <p>Guide d'installation sur Mac — environ 2 minutes</p>
+</header>
+
+<h2>Installation (méthode simple)</h2>
+
+<div class="step"><div class="num">1</div><div>
+  <p><b>Ouvrez ce dossier</b> d'installation. Il contient :</p>
+  <ul>
+    <li><span class="file">Installer.command</span> — l'installateur ;</li>
+    <li><span class="file">Guide d'installation.pdf</span> — ce guide ;</li>
+    <li><span class="file">Fichiers d'installation</span> — l'application (ne rien y changer).</li>
+  </ul>
+</div></div>
+
+<div class="step"><div class="num">2</div><div>
+  <p><b>Double-cliquez sur <span class="file">Installer.command</span>.</b></p>
+  <p>Une fenêtre de Terminal s'ouvre et fait tout toute seule : elle reconnaît votre Mac
+  (Apple Silicon ou Intel), vérifie que le fichier est intact, installe l'application dans
+  <b>Applications</b> puis l'ouvre.</p>
+</div></div>
+
+<div class="note">
+  <p><b>Si le Mac affiche « Apple n'a pas pu vérifier… » ou « développeur non identifié »</b>
+  (normal la première fois : l'application n'est pas vendue sur l'App Store) :</p>
+  <ul>
+    <li>cliquez sur <b>Terminé</b> (ou <b>OK</b>) ;</li>
+    <li>ouvrez <b>Réglages Système → Confidentialité et sécurité</b>, descendez tout en bas ;</li>
+    <li>à côté de « Installer.command a été bloqué », cliquez sur <b>Ouvrir quand même</b>,
+        puis confirmez avec votre mot de passe ou Touch ID.</li>
+  </ul>
+  <p>Sur un macOS plus ancien : <b>clic droit</b> sur <span class="file">Installer.command</span>
+  → <b>Ouvrir</b> → <b>Ouvrir</b>.</p>
+</div>
+
+<div class="step"><div class="num">3</div><div>
+  <p>Quand le Terminal affiche <b>« ✅ Installation terminée »</b>, fermez sa fenêtre.
+  C'est fini : l'application est dans <b>Applications</b> et dans le Launchpad.</p>
+</div></div>
+
+<div class="ok">
+  <b>Vos fichiers ne risquent rien.</b> L'installateur ne touche qu'à l'application elle-même.
+  L'application lit vos dossiers MetaTrader sans jamais les modifier, déplacer ni supprimer.
+</div>
+
+<h2 class="page-break">Première utilisation</h2>
+<p>L'écran d'accueil vous guide en 3 étapes : <b>1.</b> choisir votre dossier MetaTrader,
+<b>2.</b> lancer l'analyse, <b>3.</b> voir les résultats (robots, SET, doublons…).</p>
+<img src="../../../docs/captures/01-tableau.png" alt="Écran d'accueil">
+
+<h2>Méthode manuelle (si l'installateur ne s'ouvre pas)</h2>
+<div class="step"><div class="num">A</div><div>
+  <p>Menu <b>Pomme</b> (en haut à gauche) → <b>À propos de ce Mac</b> : « Puce Apple M… » = <b>Apple-Silicon</b> ;
+  « Intel » = <b>Intel</b>.</p>
+</div></div>
+<div class="step"><div class="num">B</div><div>
+  <p>Dans <span class="file">Fichiers d'installation</span>, double-cliquez sur le fichier
+  <span class="file">.dmg</span> correspondant, puis glissez l'application sur
+  <b>Applications</b>.</p>
+</div></div>
+<div class="step"><div class="num">C</div><div>
+  <p>Ouvrez l'application depuis Applications. Si elle est bloquée : <b>Réglages Système →
+  Confidentialité et sécurité → Ouvrir quand même</b> (une seule fois).</p>
+</div></div>
+
+<h2 style="margin-top:12px">Désinstaller</h2>
+<p>Glissez <b>MT4 MT5 Library Manager PRO</b> du dossier Applications vers la Corbeille.</p>
+
+<footer>Mac Apple Silicon ou Intel. Vérifié sur macOS 15 Sequoia ; les versions 12 à 14 sont prises en charge mais pas encore testées.</footer>
+</body>
+</html>

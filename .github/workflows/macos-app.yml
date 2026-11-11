@@ -83,6 +83,41 @@ jobs:
           "$MNT/MT4 MT5 Library Manager PRO.app/Contents/MacOS/mtlm-gui" --autotest \
             "$MNT/MT4 MT5 Library Manager PRO.app/Contents" | tee autotest-dmg.log
           hdiutil detach "$MNT"
+      - name: Tester l'installateur (Installer.command)
+        shell: bash
+        env:
+          MTLM_NO_LAUNCH: "1"
+          MTLM_NO_PAUSE: "1"
+        run: |
+          KIT="$RUNNER_TEMP/kit"
+          FILES="$KIT/Fichiers d'installation"
+          mkdir -p "$FILES"
+          cp packaging/macos/installation/Installer.command "$KIT/"
+          cp "$DMG" "$DMG.sha256" "$FILES/"
+          export MTLM_INSTALL_DIR="$RUNNER_TEMP/Applications"
+          mkdir -p "$MTLM_INSTALL_DIR"
+          INSTALLED="$MTLM_INSTALL_DIR/MT4 MT5 Library Manager PRO.app"
+          # 1) première installation (fichier téléchargé : attribut de quarantaine présent)
+          xattr -w com.apple.quarantine "0081;00000000;Safari;" "$FILES/$DMG"
+          "$KIT/Installer.command" | tee installateur.log
+          test -d "$INSTALLED"
+          if xattr "$INSTALLED" | grep -q com.apple.quarantine; then exit 1; fi
+          "$INSTALLED/Contents/MacOS/mtlm-gui" --autotest "$INSTALLED/Contents" | tee -a installateur.log
+          # 2) mise à jour : l'ancienne version de l'application est remplacée
+          "$KIT/Installer.command" | tee -a installateur.log
+          grep -q "Ancienne version remplacée" installateur.log
+          codesign --verify --deep --strict "$INSTALLED"
+          # 3) un élément étranger du même nom n'est jamais touché
+          rm -rf "$INSTALLED" && mkdir -p "$INSTALLED/Contents" && echo garder > "$INSTALLED/garder.txt"
+          if "$KIT/Installer.command" >> installateur.log; then exit 1; fi
+          test "$(cat "$INSTALLED/garder.txt")" = garder
+          rm -rf "$INSTALLED"
+          # 4) fichier d'installation abîmé : refus, rien d'installé
+          printf 'x' >> "$FILES/$DMG"
+          if "$KIT/Installer.command" >> installateur.log; then exit 1; fi
+          grep -q "abîmé" installateur.log
+          test ! -e "$INSTALLED"
+          echo "Installateur : 4 scénarios vérifiés."
       - name: Gatekeeper (information — application non notarisée)
         shell: bash
         run: spctl --assess --type execute -vv "$APP" 2>&1 | tee gatekeeper.txt || true
@@ -105,6 +140,7 @@ jobs:
             autotest.log
             autotest-dmg.log
             gatekeeper.txt
+            installateur.log
 
   release:
     name: Pré-version GitHub
@@ -121,18 +157,31 @@ jobs:
           pattern: DMG-*
           merge-multiple: true
           path: dmg
+      - name: Dossier d'installation (installateur + guide + DMG)
+        run: |
+          VERSION=$(grep -m1 '__version__' src/mtlm/__init__.py | cut -d'"' -f2)
+          NAME="MT4 MT5 Library Manager PRO - Installation"
+          mkdir -p "kit/$NAME/Fichiers d'installation"
+          cp packaging/macos/installation/Installer.command "kit/$NAME/"
+          chmod 755 "kit/$NAME/Installer.command"
+          cp "packaging/macos/installation/Guide d'installation.pdf" "kit/$NAME/"
+          cp dmg/*.dmg dmg/*.dmg.sha256 "kit/$NAME/Fichiers d'installation/"
+          ZIP="MT4-MT5-Library-Manager-PRO-${VERSION}-Installation-macOS.zip"
+          (cd kit && zip -r -X "../dmg/$ZIP" "$NAME")
+          (cd dmg && sha256sum "$ZIP" > "$ZIP.sha256")
+          unzip -l "dmg/$ZIP"
       - name: Publier la pré-version
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           VERSION=$(grep -m1 '__version__' src/mtlm/__init__.py | cut -d'"' -f2)
           TAG="v${VERSION}"
-          NOTES="Application macOS (Apple Silicon et Intel), construite et testée sur Mac (auto-diagnostic depuis le DMG monté). Non notarisée : au premier lancement, clic droit sur l'application puis « Ouvrir ». Voir docs/utilisateur/installation.md et docs/rapports/phase-12.md."
+          NOTES="Application macOS (Apple Silicon et Intel), construite et testée sur Mac (auto-diagnostic depuis le DMG monté). Le plus simple : téléchargez le fichier « Installation-macOS.zip », ouvrez-le puis double-cliquez sur « Installer.command » (voir le « Guide d'installation.pdf » inclus). Application non notarisée. Voir docs/utilisateur/installation.md et docs/rapports/phase-12.md."
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber dmg/*.dmg dmg/*.dmg.sha256
+            gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber dmg/*.dmg dmg/*.dmg.sha256 dmg/*.zip dmg/*.zip.sha256
           else
             gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
               --prerelease --title "MT4 MT5 Library Manager PRO $TAG" --notes "$NOTES" \
-              dmg/*.dmg dmg/*.dmg.sha256
+              dmg/*.dmg dmg/*.dmg.sha256 dmg/*.zip dmg/*.zip.sha256
           fi
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY"

@@ -2,6 +2,12 @@
 
 ## [1.2.0] — Direction artistique « Sombre Pro »
 
+### Ajouté
+- Dossier d'installation prêt à l'emploi (`…-Installation-macOS.zip`) : `Installer.command`
+  (choix automatique Apple Silicon / Intel, vérification SHA-256, installation dans
+  Applications, autorisation de l'application, lancement), guide PDF illustré et les deux DMG.
+  Installateur testé en CI sur Mac (installation, mise à jour, élément étranger, fichier abîmé).
+
 ### Modifié
 - Thème sombre haut de gamme : fond `#0B0F19`, cartes surélevées `#131C31` à bordures fines,
   titres blancs, textes secondaires gris doux, marges plus aérées, police système moderne.

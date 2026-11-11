@@ -1,5 +1,22 @@
 # Installer MT4 MT5 Library Manager PRO sur votre Mac
 
+## Le plus simple : le dossier d'installation
+Dans **Releases**, téléchargez `MT4-MT5-Library-Manager-PRO-<version>-Installation-macOS.zip`,
+ouvrez-le, puis double-cliquez sur **`Installer.command`**. Il choisit tout seul la version
+adaptée à votre Mac (Apple Silicon ou Intel), vérifie l'empreinte du fichier, installe
+l'application dans **Applications** (une ancienne version de cette application est remplacée,
+vos données et réglages sont conservés), l'autorise et l'ouvre. Il ne touche à rien d'autre.
+
+La première fois, macOS peut bloquer `Installer.command` : **Réglages Système →
+Confidentialité et sécurité → Ouvrir quand même** (ou clic droit → **Ouvrir** sur un macOS plus
+ancien). Le **Guide d'installation.pdf** inclus explique tout avec une capture.
+
+Ce script est testé à chaque construction sur de vrais Mac (Apple Silicon et Intel) :
+première installation, mise à jour, refus de toucher un élément étranger du même nom, refus
+d'un fichier abîmé.
+
+La méthode manuelle ci-dessous reste possible.
+
 ## 1. Télécharger
 Sur GitHub (dépôt privé), onglet **Releases** : téléchargez le fichier `.dmg` correspondant à
 votre Mac :
