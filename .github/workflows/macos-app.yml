@@ -53,6 +53,9 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "$APP" 2>&1 | tee signature.txt
           plutil -p "$APP/Contents/Info.plist" | tee info-plist.txt
           du -sh "$APP" | tee taille.txt
+      - name: Version minimale de macOS réellement exigée (tous les binaires)
+        shell: bash
+        run: tools/verifier_minos.sh "$APP" | tee minos.txt
       - name: Auto-diagnostic (lecture seule du contenu de l'application)
         shell: bash
         run: |
@@ -117,7 +120,12 @@ jobs:
           if "$KIT/Installer.command" >> installateur.log; then exit 1; fi
           grep -q "abîmé" installateur.log
           test ! -e "$INSTALLED"
-          echo "Installateur : 4 scénarios vérifiés."
+          # 5) Mac trop ancien : refus clair avant toute copie
+          cp "$DMG" "$FILES/"  # image intacte (abîmée exprès au scénario 4)
+          if MTLM_FAKE_OS_VERSION=11.7 "$KIT/Installer.command" >> installateur.log; then exit 1; fi
+          grep -q "demande macOS 12.0 ou plus récent" installateur.log
+          test ! -e "$INSTALLED"
+          echo "Installateur : 5 scénarios vérifiés."
       - name: Gatekeeper (information — application non notarisée)
         shell: bash
         run: spctl --assess --type execute -vv "$APP" 2>&1 | tee gatekeeper.txt || true
@@ -141,6 +149,7 @@ jobs:
             autotest-dmg.log
             gatekeeper.txt
             installateur.log
+            minos.txt
 
   release:
     name: Pré-version GitHub

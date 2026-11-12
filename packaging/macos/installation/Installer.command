@@ -12,6 +12,7 @@
 #
 # Variables pour les tests automatiques : MTLM_INSTALL_DIR (dossier de destination),
 # MTLM_NO_LAUNCH=1 (ne pas ouvrir l'application), MTLM_NO_PAUSE=1 (ne pas attendre Entrée).
+# MTLM_FAKE_OS_VERSION (simuler une version de macOS pour tester le refus).
 set -euo pipefail
 
 APP_NAME="MT4 MT5 Library Manager PRO"
@@ -89,9 +90,25 @@ if [ ! -d "$MNT/$APP" ]; then
     exit 1
 fi
 
+# Version de macOS : refus clair AVANT toute copie si ce Mac est trop ancien.
+version_ge() {  # version_ge 12.7.6 12.0 -> vrai si $1 >= $2
+    awk -v a="$1" -v b="$2" 'BEGIN { split(a, x, "."); split(b, y, ".");
+        for (i = 1; i <= 3; i++) { if (x[i] + 0 > y[i] + 0) exit 0; if (x[i] + 0 < y[i] + 0) exit 1 }
+        exit 0 }'
+}
+OS_VERSION="${MTLM_FAKE_OS_VERSION:-$(sw_vers -productVersion)}"
+MIN_VERSION="$(/usr/libexec/PlistBuddy -c "Print :LSMinimumSystemVersion" \
+    "$MNT/$APP/Contents/Info.plist" 2>/dev/null || echo 0)"
+if ! version_ge "$OS_VERSION" "$MIN_VERSION"; then
+    echo "Ce Mac a macOS ${OS_VERSION} ; cette application demande macOS ${MIN_VERSION} ou plus récent."
+    echo "Rien n'a été installé."
+    exit 1
+fi
+echo "• macOS ${OS_VERSION} : compatible (minimum ${MIN_VERSION})"
+
 if [ -e "$DEST/$APP" ]; then
-    existing_id="$(plutil -extract CFBundleIdentifier raw "$DEST/$APP/Contents/Info.plist" \
-        2>/dev/null || true)"
+    existing_id="$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" \
+        "$DEST/$APP/Contents/Info.plist" 2>/dev/null || true)"
     if [ "$existing_id" != "$BUNDLE_ID" ]; then
         echo "Un autre élément nommé « $APP » existe déjà dans $DEST : je n'y touche pas."
         exit 1

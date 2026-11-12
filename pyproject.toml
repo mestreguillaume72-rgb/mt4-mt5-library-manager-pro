@@ -1,12 +1,14 @@
 [project]
 name = "mtlm"
-version = "1.2.0"
+version = "1.2.1"
 description = "MT4 MT5 Library Manager PRO — gestion et analyse sécurisée de bibliothèques MetaTrader (macOS)"
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "Propriétaire — tous droits réservés" }
 dependencies = [
-    "pyside6-essentials>=6.8",
+    # Qt 6.10+ exige macOS 13, Qt 6.12 macOS 14 : 6.9 est la dernière branche compatible
+    # macOS 12 Monterey (dernier système des Mac Intel 2015-2016). Vérifié en CI (minos).
+    "pyside6-essentials>=6.9.3,<6.10",
 ]
 
 [project.scripts]

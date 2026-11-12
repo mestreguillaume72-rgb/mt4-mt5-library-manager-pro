@@ -59,7 +59,7 @@
 ## D-002 — Version minimale de macOS
 
 **Statut : Acceptée (approbation Phase 0 du 2026-11-10), à arbitrer selon le Mac du propriétaire (Q-02).**
-Proposition : **macOS 12 Monterey ou plus récent** (PySide6 6.x récent exige macOS 12+ ; à revérifier sur la version épinglée). Rien n'est annoncé compatible sans preuve (matrice § F13).
+Proposition : **macOS 12 Monterey ou plus récent** (PySide6 épinglé sur la branche 6.9, dernière compatible macOS 12 ; vérifié à chaque construction par `tools/verifier_minos.sh` — correction 1.2.1 après l'échec de la 1.2.0 sur macOS 12). Rien n'est annoncé compatible sans preuve (matrice § F13).
 
 ---
 

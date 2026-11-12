@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.2.1] — Compatibilité macOS 12 Monterey (Mac Intel 2015-2016)
+
+### Corrigé
+- L'application 1.2.0 ne s'ouvrait pas sur macOS 12 : PySide6 6.12 exige macOS 14 alors que
+  l'application déclarait 12.0. PySide6 est désormais limité à la branche 6.9 (macOS 12).
+- Nouvelle preuve en CI : `tools/verifier_minos.sh` lit la version minimale réelle de chaque
+  binaire de l'application et fait échouer la construction si l'un d'eux exige plus que macOS 12.
+- Installateur : refus clair, avant toute copie, si le Mac est trop ancien (scénario testé en
+  CI) ; lecture des réglages avec PlistBuddy (disponible sur toutes les versions de macOS).
+
 ## [1.2.0] — Direction artistique « Sombre Pro »
 
 ### Ajouté

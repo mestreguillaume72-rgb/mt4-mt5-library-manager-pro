@@ -275,7 +275,7 @@ class BadgeDelegate(QStyledItemDelegate):
         self,
         painter: QPainter,
         option: QStyleOptionViewItem,
-        index: QModelIndex | QPersistentModelIndex | QPersistentModelIndex,
+        index: QModelIndex | QPersistentModelIndex,
     ) -> None:
         from mtlm.ui.theme import TONES
 
@@ -284,17 +284,19 @@ class BadgeDelegate(QStyledItemDelegate):
             super().paint(painter, option, index)
             return
         painter.save()
-        if option.state & QStyle.StateFlag.State_Selected:
-            painter.fillRect(option.rect, QColor(59, 130, 246, 46))
+        # Les annotations de PySide6 6.9 omettent state/rect/font (présents à l'exécution).
+        opt: Any = option
+        if opt.state & QStyle.StateFlag.State_Selected:
+            painter.fillRect(opt.rect, QColor(59, 130, 246, 46))
         color, soft = TONES[badge_tone(text)]
-        font = QFont(option.font)
-        font.setPointSizeF(max(option.font.pointSizeF() - 1.0, 9.0))
+        font = QFont(opt.font)
+        font.setPointSizeF(max(opt.font.pointSizeF() - 1.0, 9.0))
         font.setWeight(QFont.Weight.DemiBold)
         painter.setFont(font)
         metrics = painter.fontMetrics()
-        width = min(metrics.horizontalAdvance(text) + 20, option.rect.width() - 12)
+        width = min(metrics.horizontalAdvance(text) + 20, opt.rect.width() - 12)
         height = metrics.height() + 6
-        rect = QRectF(option.rect.x() + 8, option.rect.center().y() - height / 2 + 1, width, height)
+        rect = QRectF(opt.rect.x() + 8, opt.rect.center().y() - height / 2 + 1, width, height)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         background = QColor(color)
         background.setAlpha(40)
@@ -312,7 +314,7 @@ class BadgeDelegate(QStyledItemDelegate):
     def sizeHint(
         self,
         option: QStyleOptionViewItem,
-        index: QModelIndex | QPersistentModelIndex | QPersistentModelIndex,
+        index: QModelIndex | QPersistentModelIndex,
     ) -> QSize:
         hint = super().sizeHint(option, index)
         return QSize(hint.width() + 24, max(hint.height(), 30))
