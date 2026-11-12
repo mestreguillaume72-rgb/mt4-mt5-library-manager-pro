@@ -268,6 +268,7 @@ BADGE_RULES: list[tuple[str, tuple[str, ...]]] = [
             "oui",
             "avec son robot",
             "avec son outil",
+            "dossier metatrader prévu",
             "remis en place",
         ),
     ),
@@ -348,12 +349,19 @@ class BadgeDelegate(QStyledItemDelegate):
         return QSize(hint.width() + 24, max(hint.height(), 30))
 
 
-def make_table(headers: Sequence[str], badge_columns: Sequence[int] = ()) -> QTableWidget:
+def make_table(
+    headers: Sequence[str], badge_columns: Sequence[int] = (), *, multi: bool = False
+) -> QTableWidget:
+    """``multi`` : sélection de plusieurs lignes (Cmd+clic, Maj+clic, Cmd+A)."""
     table = QTableWidget(0, len(headers))
     table.setHorizontalHeaderLabels([h.upper() for h in headers])
     table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
     table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-    table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+    table.setSelectionMode(
+        QAbstractItemView.SelectionMode.ExtendedSelection
+        if multi
+        else QAbstractItemView.SelectionMode.SingleSelection
+    )
     table.verticalHeader().setVisible(False)
     table.verticalHeader().setDefaultSectionSize(40)
     table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
@@ -391,3 +399,14 @@ def selected_value(table: QTableWidget, column: int = 0) -> str | None:
         return None
     item = table.item(rows[0].row(), column)
     return item.text() if item is not None else None
+
+
+def selected_values(table: QTableWidget, column: int = 0) -> list[str]:
+    """Valeurs de la colonne pour toutes les lignes sélectionnées, dans l'ordre affiché."""
+    rows = sorted({index.row() for index in table.selectionModel().selectedRows()})
+    values = []
+    for row in rows:
+        item = table.item(row, column)
+        if item is not None and item.text():
+            values.append(item.text())
+    return values

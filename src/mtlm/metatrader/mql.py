@@ -58,6 +58,8 @@ class MqlSource:
     #: Fichiers cités par le code (``#resource`` ou chaîne se terminant par une extension connue)
     #: : (nom de fichier, « resource » ou « chaine », ligne). Lecture du texte seulement.
     references: list[tuple[str, str, int]] = field(default_factory=list)
+    #: Indicateurs appelés par ``iCustom(symbole, période, "Nom", …)`` : (nom, ligne).
+    custom_calls: list[tuple[str, int]] = field(default_factory=list)
     inputs: list[MqlInput] = field(default_factory=list)
     entry_points: list[str] = field(default_factory=list)
     line_count: int = 0
@@ -130,6 +132,9 @@ REFERENCE_EXTS = {
     "ex5",
     "dll",
 }
+_ICUSTOM_RE = re.compile(
+    r'\biCustom\s*\(\s*[^,;()]*(?:\(\))?\s*,\s*[^,;()]*(?:\(\))?\s*,\s*"((?:[^"\\\\\n]|\\\\.)+)"'
+)
 _LITERAL_RE = re.compile(r'"((?:[^"\\\n]|\\.){1,240})"')
 
 
@@ -233,6 +238,17 @@ def parse_mql(text: str) -> MqlSource:
             literal = _string_literal(value)
             if literal:
                 result.references.append((_file_name(literal), "resource", line))
+
+    # Indicateurs utilisés par le code : iCustom(symbole, période, "Nom", …).
+    seen_calls: set[str] = set()
+    for match in _ICUSTOM_RE.finditer(no_comments):
+        name = _file_name(match.group(1))
+        stem, dot, ext = name.rpartition(".")
+        if dot and ext.casefold() in ("ex4", "ex5", "mq4", "mq5"):
+            name = stem
+        if name and name.casefold() not in seen_calls:
+            seen_calls.add(name.casefold())
+            result.custom_calls.append((name, no_comments.count("\n", 0, match.start()) + 1))
 
     # Autres fichiers cités dans des chaînes (images d'objets graphiques, sons, SET…).
     seen = {name.casefold() for name, _kind, _line in result.references}

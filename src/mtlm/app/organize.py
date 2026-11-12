@@ -64,6 +64,7 @@ COMPANION_DIRS = {
     "document": "Documents",
     "modele": "Modèles",
     "include": "Include",
+    "dll": "Bibliothèques",
     "autre": "Autres",
 }
 
@@ -441,19 +442,15 @@ class OrganizeService:
                 linked.setdefault(row.companion_id, row.kind)
         return linked
 
-    def preview_family(self, destination: Path, family_id: int) -> Preview:
-        """Proposition : toute la famille (versions, copies renommées, compilés, SET associés)
-        réunie dans **un dossier au nom du robot**, chaque fichier sous le nom de son dossier
-        d'origine (« tous les dossiers ensemble ») ; les fichiers liés (images, sons,
-        documents…) rangés dans « Images », « Sons », « Documents »… Copie vérifiée après
-        validation."""
+    def _family_selection(
+        self, family_id: int, prefix: str = ""
+    ) -> tuple[str, list[tuple[tuple[Any, ...], str]]]:
+        """Fichiers d'une famille et tout ce qui va avec, avec leur emplacement cible."""
         head = self._conn.execute(
             "SELECT display_name FROM file_family WHERE id = ?", (family_id,)
         ).fetchone()
         if head is None:
             raise OrganizeError(f"Famille {family_id} inconnue : relancez l'étape « Familles »")
-        target_root = self._destination(destination)
-        plan_root = self._unique_folder(target_root, _component(str(head[0])))
         members = [
             int(r[0])
             for r in self._conn.execute(
@@ -467,27 +464,76 @@ class OrganizeService:
         selection = []
         for r in files.values():
             folder = str(r[10]).rpartition("/")[0].rpartition("/")[2] or "Racine"
-            selection.append((r, f"{_component(folder)}/{_component(str(r[9]))}"))
-        # Fichiers liés (images, sons, documents…) d'indice « certain » ou « probable ».
-        linked = self._linked(members)
+            selection.append((r, f"{prefix}{_component(folder)}/{_component(str(r[9]))}"))
+        taken = set(files)
+        # Outils dont la famille a besoin : indicateurs appelés, bibliothèques importées.
+        companions = CompanionService(self._conn, self._clock, self._journal)
+        used: dict[int, str] = {}
+        for dep in companions.dependencies(members):
+            if dep.user_id in files and dep.used_id not in taken:
+                used.setdefault(dep.used_id, dep.kind)
+        for used_id, r in self._files(sorted(used)).items():
+            folder = "Indicateurs utilisés" if used[used_id] == "icustom" else "Bibliothèques"
+            selection.append((r, f"{prefix}{folder}/{_component(str(r[9]))}"))
+            taken.add(used_id)
+        # Fichiers liés (images, sons, documents, modèles, DLL…) : « certain » ou « probable ».
+        linked = self._linked(sorted(taken))
         for companion_id, kind in linked.items():
-            if companion_id not in files:
+            if companion_id not in taken:
                 for r in self._files([companion_id]).values():
-                    selection.append(
-                        (r, f"{COMPANION_DIRS.get(kind, 'Autres')}/{_component(str(r[9]))}")
-                    )
+                    folder = COMPANION_DIRS.get(kind, "Autres")
+                    selection.append((r, f"{prefix}{folder}/{_component(str(r[9]))}"))
+        return str(head[0]), selection
+
+    def preview_family(self, destination: Path, family_id: int) -> Preview:
+        """Proposition : toute la famille (versions, copies renommées, compilés, SET associés)
+        réunie dans **un dossier au nom du robot**, chaque fichier sous le nom de son dossier
+        d'origine (« tous les dossiers ensemble ») ; avec tout ce qui va avec : indicateurs
+        utilisés (iCustom), bibliothèques et DLL importées, modèles .tpl, images, sons,
+        documents. Copie vérifiée après validation."""
+        return self.preview_families(destination, [family_id])
+
+    def preview_families(self, destination: Path, family_ids: list[int]) -> Preview:
+        """Une ou plusieurs familles. Une seule : dossier au nom du robot. Plusieurs : un
+        dossier « Familles réunies <date> » avec un sous-dossier par robot."""
+        ids = list(dict.fromkeys(family_ids))
+        if not ids:
+            raise OrganizeError("Choisissez au moins une famille.")
+        target_root = self._destination(destination)
+        selection: list[tuple[tuple[Any, ...], str]] = []
+        names: list[str] = []
+        for family_id in ids:
+            name, items = self._family_selection(
+                family_id, "" if len(ids) == 1 else f"{_component(self._family_name(family_id))}/"
+            )
+            names.append(name)
+            selection.extend(items)
+        folder = (
+            _component(names[0])
+            if len(ids) == 1
+            else f"Familles réunies {self._clock.now():%Y-%m-%d}"
+        )
+        plan_root = self._unique_folder(target_root, folder)
         planned, collisions, excluded_q, excluded_d = self._place(selection)
         if not planned:
-            raise OrganizeError("Aucun fichier présent dans cette famille.")
+            raise OrganizeError("Aucun fichier présent dans ces familles.")
         return self._record_plan(
             plan_root,
             planned,
             collisions,
-            "famille-v1",
-            {"famille": family_id, "nom": str(head[0])},
+            "famille-v2",
+            {"familles": ids, "noms": names},
             excluded_q,
             excluded_d,
         )
+
+    def _family_name(self, family_id: int) -> str:
+        row = self._conn.execute(
+            "SELECT display_name FROM file_family WHERE id = ?", (family_id,)
+        ).fetchone()
+        if row is None:
+            raise OrganizeError(f"Famille {family_id} inconnue : relancez l'étape « Familles »")
+        return str(row[0])
 
     def preview_sources(self, destination: Path) -> Preview:
         """Proposition : isoler les sources MQ4/MQ5 avec leurs SET. Chaque source va dans
@@ -539,6 +585,24 @@ class OrganizeService:
                 tool_of.setdefault(row.companion_id, row.tool_id)
         for companion_id, r in self._files(sorted(tool_of)).items():
             selection.append((r, f"{folder_of[tool_of[companion_id]]}/{_component(str(r[9]))}"))
+        # Indicateurs utilisés et bibliothèques importées : avec le robot qui en a besoin.
+        user_of: dict[int, int] = {}
+        for dep in CompanionService(self._conn, self._clock, self._journal).dependencies(
+            list(folder_of)
+        ):
+            if dep.user_id in folder_of:
+                user_of.setdefault(dep.used_id, dep.user_id)
+        # Un indicateur ou une bibliothèque utilisé par un robot va avec ce robot (le premier
+        # qui l'utilise), à la place de son propre dossier : tout ensemble.
+        moved = {
+            int(r[0]): f"{folder_of[user_of[used_id]]}/{_component(str(r[9]))}"
+            for used_id, r in self._files(sorted(user_of)).items()
+        }
+        selection = [(r, moved.get(int(r[0]), target)) for r, target in selection]
+        known = {int(r[0]) for r, _t in selection}
+        for used_id, r in self._files(sorted(user_of)).items():
+            if used_id not in known:
+                selection.append((r, moved[used_id]))
         planned, collisions, excluded_q, excluded_d = self._place(selection)
         if not planned:
             raise OrganizeError("Aucune source MQ4/MQ5 analysée.")

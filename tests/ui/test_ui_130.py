@@ -30,14 +30,14 @@ def test_placement_affiche_et_filtre(
     page: Any = window.pages["sets"]
     page.refresh()
     assert page.sets.rowCount() == 1
-    # Le SET est dans « Presets », sans robot : en vrac, mais son robot a été retrouvé.
-    assert page.sets.item(0, 5).text() == "En vrac — correspondance trouvée"
+    # Le SET est dans « Presets » : le dossier prévu par MetaTrader, robot retrouvé ailleurs.
+    assert page.sets.item(0, 5).text() == "Rangé dans le dossier MetaTrader prévu (Presets)"
     page.placement.setCurrentIndex(1)  # « Rangé avec son robot »
     assert page.sets.rowCount() == 0
-    page.placement.setCurrentIndex(2)
+    page.placement.setCurrentIndex(4)  # « dossier MetaTrader prévu »
     assert page.sets.rowCount() == 1
     window.navigate("tableau")
-    assert "en vrac dont le robot a été retrouvé" in window.pages["tableau"].summary.text()
+    assert "dans le dossier Presets de MetaTrader" in window.pages["tableau"].summary.text()
 
 
 def test_corbeille_doublons_puis_remise_en_place(

@@ -90,6 +90,13 @@ class Page(QWidget):
     ) -> QPushButton:
         return self.app.registry.button(f"{self.key}.{action_id}", label, handler, tooltip, role)
 
+    def select_buttons(self, name: str, table: Any) -> tuple[Any, Any]:
+        """Boutons « Tout sélectionner » / « Tout désélectionner » pour une liste."""
+        return (
+            self.btn(f"tout_{name}", "Tout sélectionner", table.selectAll),
+            self.btn(f"aucun_{name}", "Tout désélectionner", table.clearSelection),
+        )
+
     def banner(self, text: str, kind: str = "banner") -> QFrame:
         frame = QFrame()
         frame.setObjectName(kind)
@@ -126,6 +133,21 @@ class Page(QWidget):
             "l'analyse et qu'une copie identique est conservée (comparaison octet par octet) ; "
             "sinon il n'est pas touché."
         )
+        from mtlm.app.companions import CompanionService
+
+        ctx = self.app.ctx
+        needed = CompanionService(ctx.conn, ctx.clock, ctx.journal).needed_by(list(file_ids))
+        if needed:
+            lines = [
+                f"• fichier n°{file_id} est utilisé par : {', '.join(users[:3])}"
+                + (" …" if len(users) > 3 else "")
+                for file_id, users in list(needed.items())[:8]
+            ]
+            intro += (
+                "\n\n⚠️ ATTENTION : des outils ont besoin de ces fichiers (indicateur appelé, "
+                "DLL, bibliothèque ou include). Sans eux, ils risquent de ne plus fonctionner :\n"
+                + "\n".join(lines)
+            )
         if not self.app.dialogs.confirm(
             self,
             "Mettre à la Corbeille",
@@ -564,17 +586,20 @@ class DashboardPage(Page):
             text += (
                 f"<br><b>SET</b> : <b>{fmt(counts['avec_son_robot'])}</b> rangé(s) avec leur "
                 f"robot, <b>{fmt(counts['en_vrac'])}</b> en vrac dont le robot a été retrouvé, "
-                f"<b>{fmt(counts['avec_autre_robot'])}</b> rangé(s) avec un autre robot "
-                f"(peut-être mal rangés), <b>{fmt(counts['orphelins'])}</b> sans robot trouvé."
+                f"<b>{fmt(counts['dossier_standard'])}</b> dans le dossier Presets de "
+                f"MetaTrader, <b>{fmt(counts['avec_autre_robot'])}</b> rangé(s) avec un autre "
+                f"robot (peut-être mal rangés), <b>{fmt(counts['orphelins'])}</b> sans robot "
+                "trouvé."
             )
         from mtlm.app.companions import CompanionService
 
         linked = CompanionService(ctx.conn, ctx.clock, ctx.journal).placement_counts()
         if sum(linked.values()):
             text += (
-                "<br><b>Images, sons, documents</b> : "
+                "<br><b>Images, sons, documents, modèles, DLL</b> : "
                 f"<b>{fmt(linked['avec_son_robot'])}</b> rangé(s) avec leur outil, "
                 f"<b>{fmt(linked['en_vrac'])}</b> en vrac dont l'outil a été retrouvé, "
+                f"<b>{fmt(linked['dossier_standard'])}</b> dans le dossier MetaTrader prévu, "
                 f"<b>{fmt(linked['avec_autre_robot'])}</b> rangé(s) avec un autre outil, "
                 f"<b>{fmt(linked['sans_outil'])}</b> sans outil trouvé."
             )

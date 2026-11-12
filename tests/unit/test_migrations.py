@@ -23,6 +23,8 @@ EXPECTED_TABLES = {
     "deletion_record",
     "mql_reference",
     "companion_link",
+    "mql_icustom",
+    "tool_dependency",
     "job",
     "job_checkpoint",
     "content",

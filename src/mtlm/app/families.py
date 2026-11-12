@@ -20,6 +20,15 @@ from mtlm.matching.families import METHOD_VERSION, FamilyInput, Member, build_fa
 from mtlm.store.database import transaction
 
 CODE_TYPES = ("ea", "indicator", "script", "library", "service", "include")
+#: Type principal d'une famille (le plus fréquent parmi ses fichiers de code).
+TYPE_LABELS = {
+    "ea": "Robot",
+    "indicator": "Indicateur",
+    "script": "Script",
+    "library": "Bibliothèque",
+    "include": "Include",
+    "service": "Service",
+}
 
 
 @dataclass
@@ -41,6 +50,7 @@ class FamilyRow:
     confidence: str
     members: int
     versions: int
+    tool_type: str = ""
 
 
 @dataclass(frozen=True)
@@ -157,24 +167,40 @@ class FamilyService:
         return summary
 
     def find(
-        self, *, text: str | None = None, min_members: int = 1, limit: int = 200
+        self,
+        *,
+        text: str | None = None,
+        min_members: int = 1,
+        limit: int = 200,
+        tool_type: str | None = None,
     ) -> list[FamilyRow]:
         clauses: list[str] = ["1 = 1"]
         params: list[object] = []
+        main_type = (
+            "(SELECT a.detected_type FROM family_member m JOIN file_analysis a"
+            " ON a.file_id = m.file_id WHERE m.family_id = ff.id AND a.detected_type IN"
+            f" ({','.join(repr(t) for t in CODE_TYPES)}) GROUP BY a.detected_type"
+            " ORDER BY count(*) DESC, a.detected_type LIMIT 1)"
+        )
+        if tool_type:
+            clauses.append(f"{main_type} = ?")
+            params.append(tool_type)
         if text:
             clauses.append("(ff.display_name LIKE ? OR ff.logical_key LIKE ?)")
             params += [f"%{text}%", f"%{text.casefold()}%"]
         rows = self._conn.execute(
             "SELECT ff.id, ff.display_name, ff.platform, ff.confidence, count(fm.file_id),"
             " count(CASE WHEN fm.relation IN ('version_variant', 'homonym_different',"
-            " 'source_of') THEN 1 END)"
+            f" 'source_of') THEN 1 END), {main_type}"
             " FROM file_family ff JOIN family_member fm ON fm.family_id = ff.id"
             " JOIN file_record pf ON pf.id = fm.file_id AND pf.presence = 'present'"
             f" WHERE {' AND '.join(clauses)} GROUP BY ff.id HAVING count(fm.file_id) >= ?"
             " ORDER BY count(fm.file_id) DESC, ff.display_name LIMIT ?",
             (*params, min_members, limit),
         ).fetchall()
-        return [FamilyRow(int(r[0]), r[1], r[2], r[3], int(r[4]), int(r[5])) for r in rows]
+        return [
+            FamilyRow(int(r[0]), r[1], r[2], r[3], int(r[4]), int(r[5]), r[6] or "") for r in rows
+        ]
 
     def detail(self, family_id: int) -> tuple[FamilyRow, list[str], list[MemberRow]] | None:
         head = self._conn.execute(

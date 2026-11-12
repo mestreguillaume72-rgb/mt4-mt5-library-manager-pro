@@ -97,6 +97,7 @@ PLACEMENT_LABELS = {
     "avec_son_robot": "Rangé avec son robot",
     "en_vrac": "En vrac — correspondance trouvée",
     "avec_autre_robot": "Rangé avec un autre robot",
+    "dossier_standard": "Rangé dans le dossier MetaTrader prévu (Presets)",
 }
 
 
@@ -107,6 +108,8 @@ def placement_of(
     dossier d'un autre robot (peut-être mal rangé) ; sinon « en_vrac »."""
     if (set_root, set_dir) == (robot_root, robot_dir):
         return "avec_son_robot"
+    if set_dir.rpartition("/")[2].casefold() in ("presets", "tester"):
+        return "dossier_standard"
     if (set_root, set_dir) in robot_dirs:
         return "avec_autre_robot"
     return "en_vrac"

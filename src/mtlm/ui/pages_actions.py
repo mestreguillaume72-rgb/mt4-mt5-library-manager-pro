@@ -28,7 +28,8 @@ from mtlm.app.presenters import human_size
 from mtlm.app.quarantine import QuarantineService, Simulation
 from mtlm.app.reports import KINDS, ReportService
 from mtlm.app.settings import SPECS, SettingsService
-from mtlm.ui.base import fill_table, make_table, selected_value
+from mtlm.core.errors import MtlmError
+from mtlm.ui.base import fill_table, make_table, selected_value, selected_values
 from mtlm.ui.pages_main import Page, two_columns
 from mtlm.ui.window import UiApp
 
@@ -72,6 +73,7 @@ class QuarantinePage(Page):
         self.batches = make_table(
             ["Lot", "État", "Fichiers", "Vérifiés", "Volume", "Destination", "Créé le"],
             badge_columns=(1,),
+            multi=True,
         )
         self.batches.itemSelectionChanged.connect(self.load_entries)
         self.entries = make_table(["Fichier", "État", "Original", "Erreur"], badge_columns=(1,))
@@ -95,9 +97,10 @@ class QuarantinePage(Page):
             self._row(
                 self.btn(
                     "corbeille",
-                    "4. Valider : originaux du lot à la Corbeille",
+                    "4. Valider : originaux des lots choisis à la Corbeille",
                     self.trash_batch,
-                )
+                ),
+                *self.select_buttons("lots", self.batches),
             )
         )
         tabs.addTab(lots, "Lots de quarantaine")
@@ -114,10 +117,14 @@ class QuarantinePage(Page):
         self.trashed = make_table(
             ["N°", "Fichier", "Origine", "Copie conservée", "État", "Chemin d'origine", "Le"],
             badge_columns=(4,),
+            multi=True,
         )
         bin_layout.addWidget(self.trashed, 1)
         bin_layout.addLayout(
-            self._row(self.btn("remettre", "Remettre en place le fichier choisi", self.put_back))
+            self._row(
+                self.btn("remettre", "Remettre en place les fichiers choisis", self.put_back),
+                *self.select_buttons("corbeille", self.trashed),
+            )
         )
         tabs.addTab(bin_tab, "Corbeille")
         self.layout_.addWidget(tabs, 1)
@@ -137,40 +144,52 @@ class QuarantinePage(Page):
         return DeletionService(ctx.conn, ctx.clock, ctx.journal, ctx.trash)
 
     def trash_batch(self) -> None:
-        batch = self._batch()
-        if batch is None:
-            self.app.dialogs.info(self.win, "Corbeille", "Sélectionnez un lot de quarantaine.")
+        batches = [int(v) for v in selected_values(self.batches)]
+        if not batches:
+            self.app.dialogs.info(
+                self.win, "Corbeille", "Sélectionnez un ou plusieurs lots de quarantaine."
+            )
             return
-        originals = self._deletion().originals_of_batch(batch)
+        deletion = self._deletion()
+        originals = [f for batch in batches for f in deletion.originals_of_batch(batch)]
         if not originals:
             self.app.dialogs.info(
                 self.win,
                 "Corbeille",
-                "Ce lot n'a aucune copie vérifiée : lancez d'abord « Confirmer et copier ».",
+                "Ces lots n'ont aucune copie vérifiée : lancez d'abord « Confirmer et copier ».",
             )
             return
         self.trash_with_confirmation(
             originals,
             "quarantaine",
-            f"Lot {batch} : les {len(originals)} original(aux) en trop, déjà copiés et vérifiés "
-            "en quarantaine, partent à la Corbeille. La référence de chaque groupe et la copie "
-            "de quarantaine sont conservées.",
+            f"{len(batches)} lot(s) choisi(s) : les {len(originals)} original(aux) en trop, déjà "
+            "copiés et vérifiés en quarantaine, partent à la Corbeille. La référence de chaque "
+            "groupe et la copie de quarantaine sont conservées.",
         )
 
     def put_back(self) -> None:
-        value = selected_value(self.trashed)
-        if value is None:
+        values = [int(v) for v in selected_values(self.trashed)]
+        if not values:
             self.app.dialogs.info(
-                self.win, "Remettre en place", "Sélectionnez un fichier mis à la Corbeille."
+                self.win,
+                "Remettre en place",
+                "Sélectionnez un ou plusieurs fichiers mis à la Corbeille.",
             )
             return
-        self._deletion().put_back(int(value))
-        self.app.dialogs.info(
-            self.win,
-            "Remettre en place",
-            "Fichier remis à son emplacement d'origine. Relancez l'analyse pour mettre à jour "
-            "les doublons.",
-        )
+        deletion = self._deletion()
+        done, failed = 0, []
+        for deletion_id in values:
+            try:
+                deletion.put_back(deletion_id)
+                done += 1
+            except MtlmError as exc:
+                failed.append(f"• n°{deletion_id} : {exc}")
+        text = f"{done} fichier(s) remis à leur emplacement d'origine."
+        if failed:
+            text += f"\n{len(failed)} non remis :\n" + "\n".join(failed[:10])
+        if done:
+            text += "\nRelancez l'analyse pour mettre à jour les doublons."
+        self.app.dialogs.info(self.win, "Remettre en place", text)
         self.refresh()
 
     def _service(self) -> QuarantineService:

@@ -272,7 +272,13 @@ class RecognitionService:
     ) -> None:
         props = parsed.properties
         with self._tx():
-            for table in ("mql_input", "mql_include", "mql_import", "mql_reference"):
+            for table in (
+                "mql_input",
+                "mql_include",
+                "mql_import",
+                "mql_reference",
+                "mql_icustom",
+            ):
                 self._conn.execute(f"DELETE FROM {table} WHERE content_id = ?", (content_id,))
             self._conn.execute(
                 "INSERT INTO mql_source_meta(content_id, encoding, encoding_confidence,"
@@ -329,6 +335,10 @@ class RecognitionService:
                     (content_id, target, target.casefold(), kind, line)
                     for target, kind, line in parsed.references
                 ],
+            )
+            self._conn.executemany(
+                "INSERT INTO mql_icustom(content_id, target, target_key, line) VALUES (?, ?, ?, ?)",
+                [(content_id, name, name.casefold(), line) for name, line in parsed.custom_calls],
             )
 
     def _paired_type(self, item: _File) -> str | None:

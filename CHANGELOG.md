@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.4.0] — Tout ce qui va avec un outil, indicateurs, sélection multiple
+
+### Ajouté
+- **Indicateurs** : les modèles de graphique `.tpl` sont lus (texte, MT4 et MT5) et reliés de
+  façon certaine aux robots et indicateurs qu'ils chargent ; les appels `iCustom(…)` relient un
+  robot aux indicateurs qu'il utilise ; filtre Robots / Indicateurs / Scripts dans « Familles
+  et versions », colonne Type.
+- **DLL et bibliothèques** : `#import "x.dll"` relie la DLL à son robot (elle est seulement
+  copiée, jamais chargée ni exécutée) ; `#import "x.ex4"` et `#resource "…ex4"` relient les
+  bibliothèques et indicateurs intégrés.
+- **Tout ensemble** : le dossier de famille réunit aussi les indicateurs utilisés
+  (« Indicateurs utilisés »), bibliothèques et DLL (« Bibliothèques »), modèles (« Modèles »),
+  images, sons et documents ; l'isolement MQ4/MQ5 place les indicateurs utilisés avec le robot.
+  Plusieurs familles d'un coup : « Familles réunies <date> », un sous-dossier par robot.
+- Onglet **Dépendances** (qui utilise quoi) dans « Familles et versions ».
+- **Avertissement** avant de mettre à la Corbeille un fichier dont un autre outil a besoin
+  (indicateur appelé, DLL, bibliothèque, include), avec le nom de l'outil concerné.
+- Placement **« Rangé dans le dossier MetaTrader prévu »** (Libraries, Include, Images,
+  Sounds, Files, Templates, Presets) : ces fichiers ne sont plus comptés « en vrac ».
+- **Sélection multiple** (Cmd+clic, Maj+clic, Cmd+A) et boutons « Tout sélectionner » /
+  « Tout désélectionner » : Corbeille de plusieurs groupes ou fichiers, accepter/rejeter
+  plusieurs associations, « Accepter la meilleure proposition des SET choisis », lots de
+  quarantaine et remise en place groupées — une seule confirmation à chaque fois.
+
 ## [1.3.0] — Corbeille, placement des SET, familles réunies, dossiers proposés
 
 ### Ajouté

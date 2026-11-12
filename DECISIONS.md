@@ -184,3 +184,14 @@ fichiers datés du même instant** (≤ 20 fichiers à 2 s près ; les grands lo
 une bibliothèque — sont ignorés car ils ne prouvent rien). Ce sont des indices expliqués, jamais
 une validation automatique. Écarté : date de création (non fiable après copie) et contenu des
 images (aucune analyse d'image).
+
+## D-019 — Tout ce qui va avec un outil (1.4.0)
+
+Demande du propriétaire : « tout type de fichier qui correspond à un robot ou autre doit se
+retrouver ensemble », indicateurs compris. Liens retenus, tous lus dans le texte (jamais
+d'exécution) : `iCustom` (robot → indicateur, cherché parmi les fichiers de la même plateforme),
+`#import` (DLL, bibliothèques .ex4/.ex5), `#resource` (.ex4/.ex5 intégrés, images, sons),
+`#include` (.mqh), modèles `.tpl` (robots et indicateurs chargés). Les DLL sont seulement
+copiées. Dans l'isolement MQ4/MQ5, un indicateur utilisé va avec le premier robot qui
+l'utilise (un fichier n'apparaît qu'une fois par copie). Les dossiers standards de MetaTrader
+(Libraries, Include, Images, Sounds, Files, Templates, Presets) sont un placement à part entière.

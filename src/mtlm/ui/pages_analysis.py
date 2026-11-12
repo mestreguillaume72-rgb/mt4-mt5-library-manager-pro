@@ -15,14 +15,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from mtlm.app.companions import KIND_LABELS, CompanionService
+from mtlm.app.companions import DEPENDENCY_LABELS, KIND_LABELS, CompanionService
 from mtlm.app.companions import PLACEMENT_LABELS as LINK_PLACEMENTS
 from mtlm.app.deletion import DeletionService
 from mtlm.app.duplicates import DuplicateService
-from mtlm.app.families import FamilyService
+from mtlm.app.families import TYPE_LABELS, FamilyService
 from mtlm.app.presenters import RELATION_LABELS, human_size
 from mtlm.app.sets import LEVEL_LABELS, PLACEMENT_LABELS, AssociationService, SetService
-from mtlm.ui.base import fill_table, make_table, selected_value
+from mtlm.ui.base import fill_table, make_table, selected_value, selected_values
 from mtlm.ui.pages_main import Page, two_columns
 from mtlm.ui.window import UiApp
 
@@ -64,6 +64,7 @@ class SetsPage(Page):
             (PLACEMENT_LABELS["avec_son_robot"], "avec_son_robot"),
             (PLACEMENT_LABELS["en_vrac"], "en_vrac"),
             (PLACEMENT_LABELS["avec_autre_robot"], "avec_autre_robot"),
+            (PLACEMENT_LABELS["dossier_standard"], "dossier_standard"),
         ):
             self.placement.addItem(label, value)
         self.placement.currentIndexChanged.connect(lambda _i: self.refresh())
@@ -72,7 +73,9 @@ class SetsPage(Page):
         filters.addWidget(self.only_orphans)
         self.layout_.addLayout(filters)
         self.sets = make_table(
-            ["N°", "SET", "Format", "Paramètres", "Associations", "Placement"], badge_columns=(5,)
+            ["N°", "SET", "Format", "Paramètres", "Associations", "Placement"],
+            badge_columns=(5,),
+            multi=True,
         )
         self.sets.itemSelectionChanged.connect(self.load_selected)
         self.params = make_table(
@@ -80,7 +83,9 @@ class SetsPage(Page):
         )
         self.layout_.addWidget(two_columns(self.sets, self.params), 2)
         self.assoc = make_table(
-            ["N°", "Score", "Niveau", "Décision", "Placement", "Robot"], badge_columns=(2, 3, 4)
+            ["N°", "Score", "Niveau", "Décision", "Placement", "Outil (robot, indicateur…)"],
+            badge_columns=(2, 3, 4),
+            multi=True,
         )
         self.assoc.itemSelectionChanged.connect(self.load_evidence)
         self.evidence = QPlainTextEdit()
@@ -96,6 +101,15 @@ class SetsPage(Page):
         compare_row.addStretch(1)
         self.layout_.addLayout(compare_row)
         self.button_row(
+            *self.select_buttons("sets", self.sets),
+            self.btn(
+                "accepter_meilleure",
+                "Accepter la meilleure proposition des SET choisis",
+                self.accept_best,
+            ),
+        )
+        self.button_row(
+            *self.select_buttons("associations", self.assoc),
             self.btn("accepter", "Accepter l'association", lambda: self.decide("accepted")),
             self.btn("rejeter", "Rejeter l'association", lambda: self.decide("rejected")),
             self.btn("annuler", "Annuler ma décision", lambda: self.decide("none")),
@@ -220,13 +234,63 @@ class SetsPage(Page):
         self.evidence.setPlainText("\n".join(lines))
 
     def decide(self, decision: str) -> None:
-        assoc_id = self._assoc_id()
-        if assoc_id is None:
-            self.app.dialogs.info(self.win, "Associations", "Sélectionnez d'abord une association.")
+        assoc_ids = [int(v) for v in selected_values(self.assoc)]
+        if not assoc_ids:
+            self.app.dialogs.info(
+                self.win, "Associations", "Sélectionnez une ou plusieurs associations."
+            )
             return
-        self._assoc().decide(assoc_id, decision)
-        self.app.status(f"Association {assoc_id} : {DECISIONS[decision]}")
+        if len(assoc_ids) > 1 and not self.app.dialogs.confirm(
+            self,
+            "Associations",
+            f"Marquer {len(assoc_ids)} associations comme « {DECISIONS[decision]} » ?",
+        ):
+            return
+        service = self._assoc()
+        for assoc_id in assoc_ids:
+            service.decide(assoc_id, decision)
+        self.app.status(f"{len(assoc_ids)} association(s) : {DECISIONS[decision]}")
         self.load_selected()
+
+    def accept_best(self) -> None:
+        """Pour chaque SET choisi : accepte sa meilleure proposition (non rejetée)."""
+        set_ids = [int(v) for v in selected_values(self.sets)]
+        if not set_ids:
+            self.app.dialogs.info(self.win, "Associations", "Sélectionnez un ou plusieurs SET.")
+            return
+        service = self._assoc()
+        best = []
+        for set_id in set_ids:
+            rows = [
+                a
+                for a in service.find(set_file_id=set_id, limit=20)
+                if a.user_decision != "rejected"
+            ]
+            if rows:
+                best.append(rows[0])
+        if not best:
+            self.app.dialogs.info(
+                self.win, "Associations", "Aucune proposition pour les SET choisis."
+            )
+            return
+        weak = sum(a.level != "forte" for a in best)
+        if not self.app.dialogs.confirm(
+            self,
+            "Accepter les meilleures propositions",
+            f"Accepter la meilleure proposition de {len(best)} SET "
+            f"({len(set_ids) - len(best)} sans proposition)."
+            + (
+                f"\n⚠️ {weak} de ces propositions ne sont pas de niveau « forte » : "
+                "vérifiez leurs preuves avant d'accepter."
+                if weak
+                else ""
+            ),
+        ):
+            return
+        for association in best:
+            service.decide(association.id, "accepted")
+        self.app.status(f"{len(best)} association(s) acceptée(s).")
+        self.refresh()
 
     def compare(self) -> None:
         set_id = self._set_id()
@@ -260,8 +324,8 @@ class SetsPage(Page):
 class FamiliesPage(Page):
     key, title, icon = "familles", "Familles et versions", "🧬"
     subtitle = (
-        "Les fichiers d'un même robot regroupés : versions, copies, compilés, SET associés et "
-        "fichiers liés (images, sons, documents)."
+        "Chaque robot, indicateur ou script avec tout ce qui va avec : versions, copies, "
+        "compilés, SET, modèles, indicateurs utilisés, DLL, images, sons, documents."
     )
 
     def __init__(self, app: UiApp) -> None:
@@ -270,105 +334,155 @@ class FamiliesPage(Page):
         self.search = QLineEdit()
         self.search.setPlaceholderText("Rechercher une famille…")
         self.search.returnPressed.connect(self.refresh)
+        self.tool_type = QComboBox()
+        self.tool_type.setAccessibleName("Type d'outil")
+        self.tool_type.addItem("Tous les outils", None)
+        for value, label in TYPE_LABELS.items():
+            self.tool_type.addItem(f"{label}s" if not label.endswith("s") else label, value)
+        self.tool_type.currentIndexChanged.connect(lambda _i: self.refresh())
         row.addWidget(self.search)
+        row.addWidget(self.tool_type)
         self.layout_.addLayout(row)
         self.button_row(
             self.btn("rechercher", "Rechercher", self.refresh),
             self.btn("actualiser", "Actualiser", self.refresh),
         )
         self.banner(
-            "<b>Une famille = un robot ou outil et tout ce qui va avec</b> : ses versions, ses "
-            "copies (même sous un autre nom), ses fichiers compilés, ses SET et ses fichiers "
-            "liés (images, sons, documents). « Proposer un dossier pour cette famille » réunit "
-            "<b>cette famille seulement</b> dans un dossier au nom du robot : vous voyez "
-            "d'abord la proposition, puis vous validez (copie vérifiée).",
+            "<b>Une famille = un robot, un indicateur ou un script et tout ce qui va avec</b> "
+            ": versions, copies (même sous un autre nom), compilés, SET, modèles .tpl, "
+            "indicateurs qu'il utilise, DLL et bibliothèques importées, images, sons, "
+            "documents. Sélectionnez une ou plusieurs familles (Cmd+clic, Maj+clic) puis "
+            "« Proposer un dossier » : vous voyez d'abord la proposition, puis vous validez.",
             "banner",
         )
         self.families = make_table(
-            ["N°", "Famille", "Plateforme", "Membres", "Versions", "Confiance"], badge_columns=(5,)
+            ["N°", "Famille", "Plateforme", "Membres", "Versions", "Confiance", "Type"],
+            badge_columns=(5,),
+            multi=True,
         )
         self.families.itemSelectionChanged.connect(self.load_members)
+        self.button_row(*self.select_buttons("familles", self.families))
         self.reasons = QPlainTextEdit()
         self.reasons.setReadOnly(True)
         self.members = make_table(
-            ["Fichier", "Relation", "Version estimée", "Base", "Chemin"], badge_columns=(1,)
+            ["Fichier", "Relation", "Version estimée", "Base", "Chemin"],
+            badge_columns=(1,),
+            multi=True,
         )
         self.linked = make_table(
-            ["Fichier", "Type", "Lien", "Placement", "Outil", "Indices"], badge_columns=(2, 3)
+            ["Fichier", "Type", "Lien", "Placement", "Outil", "Indices", "Chemin"],
+            badge_columns=(2, 3),
+            multi=True,
         )
+        self.deps = make_table(["Outil", "A besoin de", "Comment", "Fichier utilisé"])
         self.layout_.addWidget(self.families, 2)
         self.layout_.addWidget(self.reasons, 1)
         tabs = QTabWidget()
         tabs.addTab(self.members, "Fichiers de la famille")
-        tabs.addTab(self.linked, "Fichiers liés (images, sons, documents…)")
+        tabs.addTab(self.linked, "Fichiers liés (images, sons, modèles, DLL…)")
+        tabs.addTab(self.deps, "Dépendances (indicateurs utilisés, bibliothèques)")
         self.tabs = tabs
         self.layout_.addWidget(tabs, 2)
         self.button_row(
-            self.btn("dossier", "Proposer un dossier pour cette famille…", self.propose_family),
-            self.btn("corbeille", "Mettre le fichier choisi à la Corbeille", self.trash_member),
+            self.btn(
+                "dossier", "Proposer un dossier pour les familles choisies…", self.propose_family
+            ),
+            self.btn("corbeille", "Mettre les fichiers choisis à la Corbeille", self.trash_member),
+            *self.select_buttons("fichiers", self.members),
         )
 
-    def _family(self) -> int | None:
-        value = selected_value(self.families)
-        return int(value) if value else None
+    def _families_selected(self) -> list[int]:
+        return [int(v) for v in selected_values(self.families)]
 
     def propose_family(self) -> None:
-        family = self._family()
-        if family is None:
-            self.app.dialogs.info(self.win, "Dossier de famille", "Sélectionnez une famille.")
+        families = self._families_selected()
+        if not families:
+            self.app.dialogs.info(
+                self.win, "Dossier de famille", "Sélectionnez une ou plusieurs familles."
+            )
             return
-        name = selected_value(self.families, 1) or ""
+        names = selected_values(self.families, 1)
+        what = (
+            f"Toute la famille « {names[0]} » réunie dans un dossier au nom du robot"
+            if len(families) == 1
+            else f"Les {len(families)} familles choisies réunies dans un dossier, un "
+            "sous-dossier par robot"
+        )
         self.propose_folder(
             "Dossier de famille",
-            f"Toute la famille « {name} » (versions, copies renommées, compilés et SET "
-            "associés) réunie dans un dossier au nom du robot ; chaque fichier est rangé "
-            "sous le nom de son dossier d'origine.",
-            lambda service, destination: service.preview_family(destination, family),
+            f"{what} : versions, copies, compilés, SET, modèles, indicateurs utilisés, DLL et "
+            "bibliothèques, images, sons et documents. Chaque fichier garde le nom de son "
+            "dossier d'origine ; les fichiers liés sont rangés dans « Images », « Modèles », "
+            "« Bibliothèques »…",
+            lambda service, destination: service.preview_families(destination, families),
         )
 
     def trash_member(self) -> None:
-        member = selected_value(self.members)
-        if member is None:
+        table = self.linked if self.tabs.currentIndex() == 1 else self.members
+        path_column = 6 if table is self.linked else 4
+        file_ids = [int(v) for v in selected_values(table)]
+        if not file_ids:
             self.app.dialogs.info(
-                self.win, "Corbeille", "Sélectionnez le fichier de la famille à supprimer."
+                self.win,
+                "Corbeille",
+                "Sélectionnez un ou plusieurs fichiers dans « Fichiers de la famille » ou "
+                "« Fichiers liés ».",
             )
             return
-        file_id = int(member)
-        copies = int(
-            self.conn.execute(
-                "SELECT count(*) FROM file_record o JOIN file_record f ON f.id = ?"
-                " WHERE o.content_id = f.content_id AND o.id <> f.id AND o.presence = 'present'",
-                (file_id,),
-            ).fetchone()[0]
-        )
-        path = selected_value(self.members, 4) or ""
-        self.trash_with_confirmation(
-            [file_id],
-            "familles",
-            f"Fichier : {path}"
-            + (
-                f"\n{copies} copie(s) identique(s) existe(nt) ailleurs et sera conservée."
-                if copies
-                else "\nCe fichier est le SEUL exemplaire de ce contenu (version unique)."
-            ),
-            allow_unique=copies == 0,
-        )
+        unique = [
+            file_id
+            for file_id in file_ids
+            if not int(
+                self.conn.execute(
+                    "SELECT count(*) FROM file_record o JOIN file_record f ON f.id = ?"
+                    " WHERE o.content_id = f.content_id AND o.id <> f.id"
+                    " AND o.presence = 'present'",
+                    (file_id,),
+                ).fetchone()[0]
+            )
+        ]
+        paths = selected_values(table, path_column)
+        intro = f"{len(file_ids)} fichier(s) choisi(s) : " + ", ".join(paths[:5])
+        if len(paths) > 5:
+            intro += " …"
+        if unique:
+            intro += (
+                f"\n{len(unique)} d'entre eux sont le SEUL exemplaire de leur contenu "
+                "(version unique) : aucune autre copie ne sera conservée."
+            )
+        self.trash_with_confirmation(file_ids, "familles", intro, allow_unique=bool(unique))
 
     def _service(self) -> FamilyService:
         ctx = self.app.ctx
         return FamilyService(ctx.conn, ctx.clock, ctx.journal)
 
     def refresh(self) -> None:
-        rows = self._service().find(text=self.search.text().strip() or None, limit=2000)
+        rows = self._service().find(
+            text=self.search.text().strip() or None,
+            limit=2000,
+            tool_type=self.tool_type.currentData(),
+        )
         fill_table(
             self.families,
-            [(r.id, r.display_name, r.platform, r.members, r.versions, r.confidence) for r in rows],
+            [
+                (
+                    r.id,
+                    r.display_name,
+                    r.platform,
+                    r.members,
+                    r.versions,
+                    r.confidence,
+                    TYPE_LABELS.get(r.tool_type, ""),
+                )
+                for r in rows
+            ],
         )
         self.load_members()
 
     def show_item(self, file_id: int) -> None:
         family_id = self._service().family_of(file_id)
         self.search.clear()
+        self.tool_type.setCurrentIndex(0)
         self.refresh()
         if family_id is None:
             self.reasons.setPlainText(
@@ -383,23 +497,33 @@ class FamiliesPage(Page):
                 return
 
     def load_members(self) -> None:
-        value = selected_value(self.families)
-        if value is None:
-            fill_table(self.members, [])
+        families = self._families_selected()
+        if not families:
+            for table in (self.members, self.linked, self.deps):
+                fill_table(table, [])
             self.reasons.clear()
             return
-        found = self._service().detail(int(value))
-        if found is None:
-            return
-        _row, basis, members = found
-        self.reasons.setPlainText("\n".join(f"Raison : {b}" for b in basis))
+        reasons: list[str] = []
+        members = []
+        for family_id in families[:50]:
+            found = self._service().detail(family_id)
+            if found is None:
+                continue
+            _row, basis, family_members = found
+            if len(families) == 1:
+                reasons += [f"Raison : {b}" for b in basis]
+            members += family_members
+        if len(families) > 1:
+            reasons.append(
+                f"{len(families)} familles choisies : leurs fichiers sont listés ensemble."
+            )
+        self.reasons.setPlainText("\n".join(reasons))
         ctx = self.app.ctx
-        linked = CompanionService(ctx.conn, ctx.clock, ctx.journal).for_tools(
-            [m.file_id for m in members]
-        )
+        companions = CompanionService(ctx.conn, ctx.clock, ctx.journal)
+        member_ids = [m.file_id for m in members]
         seen: set[int] = set()
         rows = []
-        for link in linked:
+        for link in companions.for_tools(member_ids):
             if link.companion_id in seen:
                 continue
             seen.add(link.companion_id)
@@ -414,8 +538,24 @@ class FamiliesPage(Page):
                     link.companion_path,
                 )
             )
-        fill_table(self.linked, [r[:6] for r in rows])
-        self.tabs.setTabText(1, f"Fichiers liés (images, sons, documents…) : {len(rows)}")
+        fill_table(self.linked, rows)
+        self.tabs.setTabText(1, f"Fichiers liés (images, sons, modèles, DLL…) : {len(rows)}")
+        dependencies = companions.dependencies(member_ids)
+        fill_table(
+            self.deps,
+            [
+                (
+                    d.user_path.rpartition("/")[2],
+                    d.used_path.rpartition("/")[2],
+                    DEPENDENCY_LABELS.get(d.kind, d.kind),
+                    d.used_path,
+                )
+                for d in dependencies
+            ],
+        )
+        self.tabs.setTabText(
+            2, f"Dépendances (indicateurs utilisés, bibliothèques) : {len(dependencies)}"
+        )
         fill_table(
             self.members,
             [
@@ -452,11 +592,24 @@ class DuplicatesPage(Page):
         self.groups = make_table(
             ["Groupe", "Fichiers", "Taille", "SHA-256", "Référence", "Choisie par vous"],
             badge_columns=(5,),
+            multi=True,
         )
         self.groups.itemSelectionChanged.connect(self.load_members)
-        self.members = make_table(["Fichier", "Rôle", "Chemin"], badge_columns=(1,))
+        self.members = make_table(
+            ["Fichier", "Rôle", "Chemin", "Groupe"], badge_columns=(1,), multi=True
+        )
         exact_layout.addWidget(self.groups, 1)
+        group_buttons = QHBoxLayout()
+        for button in self.select_buttons("groupes", self.groups):
+            group_buttons.addWidget(button)
+        group_buttons.addStretch(1)
+        exact_layout.addLayout(group_buttons)
         exact_layout.addWidget(self.members, 1)
+        member_buttons = QHBoxLayout()
+        for button in self.select_buttons("fichiers", self.members):
+            member_buttons.addWidget(button)
+        member_buttons.addStretch(1)
+        exact_layout.addLayout(member_buttons)
         tabs.addTab(exact, "Doublons exacts")
         similar = QWidget()
         similar_layout = QVBoxLayout(similar)
@@ -484,11 +637,11 @@ class DuplicatesPage(Page):
         self.button_row(
             self.btn(
                 "corbeille_groupe",
-                "Mettre à la Corbeille les copies en trop du groupe",
+                "Mettre à la Corbeille les copies en trop des groupes choisis",
                 self.trash_group,
             ),
             self.btn(
-                "corbeille_fichier", "Mettre le fichier choisi à la Corbeille", self.trash_one
+                "corbeille_fichier", "Mettre les fichiers choisis à la Corbeille", self.trash_one
             ),
         )
 
@@ -496,42 +649,59 @@ class DuplicatesPage(Page):
         ctx = self.app.ctx
         return DeletionService(ctx.conn, ctx.clock, ctx.journal, ctx.trash)
 
+    def _groups_selected(self) -> list[int]:
+        return [int(v) for v in selected_values(self.groups)]
+
     def trash_group(self) -> None:
-        group = self._group()
-        if group is None:
-            self.app.dialogs.info(self.win, "Corbeille", "Sélectionnez un groupe de doublons.")
+        groups = self._groups_selected()
+        if not groups:
+            self.app.dialogs.info(
+                self.win, "Corbeille", "Sélectionnez un ou plusieurs groupes de doublons."
+            )
             return
-        surplus = self._deletion().surplus_of_group(group)
+        deletion = self._deletion()
+        surplus = [f for group in groups for f in deletion.surplus_of_group(group)]
         self.trash_with_confirmation(
             surplus,
             "doublons",
-            f"Groupe {group} : la référence est conservée, ses {len(surplus)} copie(s) "
-            "identique(s) partent à la Corbeille.",
+            f"{len(groups)} groupe(s) choisi(s) : la référence de chaque groupe est conservée, "
+            f"leurs {len(surplus)} copie(s) identique(s) partent à la Corbeille.",
         )
 
     def trash_one(self) -> None:
-        group = self._group()
-        member = selected_value(self.members)
-        if group is None or member is None:
-            self.app.dialogs.info(
-                self.win, "Corbeille", "Sélectionnez un groupe puis le fichier à supprimer."
-            )
-            return
-        reference = self.conn.execute(
-            "SELECT reference_file_id FROM duplicate_group WHERE id = ?", (group,)
-        ).fetchone()
-        if reference is not None and reference[0] == int(member):
+        members = [int(v) for v in selected_values(self.members)]
+        if not members:
             self.app.dialogs.info(
                 self.win,
                 "Corbeille",
-                "Ce fichier est la RÉFÉRENCE conservée du groupe. Choisissez d'abord une autre "
-                "référence (« Conserver ce fichier comme référence »).",
+                "Sélectionnez un ou plusieurs groupes, puis les fichiers à supprimer.",
             )
             return
+        marks = ",".join("?" * len(members))
+        references = {
+            int(r[0])
+            for r in self.conn.execute(
+                "SELECT reference_file_id FROM duplicate_group"
+                f" WHERE reference_file_id IN ({marks})",
+                members,
+            )
+        }
+        kept = [m for m in members if m not in references]
+        if not kept:
+            self.app.dialogs.info(
+                self.win,
+                "Corbeille",
+                "Les fichiers choisis sont des RÉFÉRENCES conservées. Choisissez d'abord une "
+                "autre référence (« Conserver ce fichier comme référence »).",
+            )
+            return
+        note = (
+            f"\n{len(references)} référence(s) sélectionnée(s) ignorée(s) : elles restent en place."
+            if references
+            else ""
+        )
         self.trash_with_confirmation(
-            [int(member)],
-            "doublons",
-            f"Fichier : {selected_value(self.members, 2) or ''}",
+            kept, "doublons", f"{len(kept)} fichier(s) choisi(s) dans les doublons.{note}"
         )
 
     def _service(self) -> DuplicateService:
@@ -573,10 +743,8 @@ class DuplicatesPage(Page):
         return int(value) if value else None
 
     def load_members(self) -> None:
-        group = self._group()
-        if group is None:
-            fill_table(self.members, [])
-            return
+        groups = self._groups_selected()
+        service = self._service()
         fill_table(
             self.members,
             [
@@ -590,33 +758,39 @@ class DuplicatesPage(Page):
                         else f"non admissible : {m.reason}"
                     ),
                     m.rel_path,
+                    group,
                 )
-                for m in self._service().members(group)
+                for group in groups[:500]
+                for m in service.members(group)
             ],
         )
 
     def set_reference(self) -> None:
-        group = self._group()
         member = selected_value(self.members)
-        if group is None or member is None:
+        group = selected_value(self.members, 3)
+        if member is None or group is None:
             self.app.dialogs.info(
                 self.win, "Référence", "Sélectionnez un groupe puis le fichier à conserver."
             )
             return
-        self._service().set_reference(group, int(member))
+        self._service().set_reference(int(group), int(member))
         self.load_members()
 
     def verify_bytes(self) -> None:
-        group = self._group()
-        if group is None:
-            self.app.dialogs.info(self.win, "Vérification", "Sélectionnez un groupe.")
+        groups = self._groups_selected()
+        if not groups:
+            self.app.dialogs.info(self.win, "Vérification", "Sélectionnez un ou plusieurs groupes.")
             return
-        identical = self._service().verify_bytewise(group)
+        different = [g for g in groups if not self._service().verify_bytewise(g)]
         self.app.dialogs.info(
             self.win,
             "Vérification octet par octet",
-            "Contenus identiques octet par octet."
-            if identical
-            else "Contenus DIFFÉRENTS : aucun membre n'est admissible.",
+            f"{len(groups) - len(different)} groupe(s) identique(s) octet par octet."
+            + (
+                f"\n{len(different)} groupe(s) DIFFÉRENT(S) : {', '.join(map(str, different))} "
+                "— leurs fichiers ne sont plus admissibles."
+                if different
+                else ""
+            ),
         )
         self.load_members()

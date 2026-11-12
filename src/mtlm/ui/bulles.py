@@ -155,3 +155,61 @@ WIDGET_TIPS: dict[tuple[str, str], str] = {
     ("organisation", "plans"): "Vos plans de rangement et leur état.",
     ("organisation", "items"): "Fichiers du plan choisi et leur emplacement dans la copie rangée.",
 }
+
+_TOUT = "Sélectionne toutes les lignes de la liste (raccourci : Cmd+A dans la liste). Pour en "
+_TOUT += "choisir plusieurs : Cmd+clic ajoute une ligne, Maj+clic sélectionne une plage."
+_AUCUN = "Désélectionne toutes les lignes de la liste."
+for _name in (
+    "familles.tout_familles",
+    "familles.tout_fichiers",
+    "doublons.tout_groupes",
+    "doublons.tout_fichiers",
+    "sets.tout_sets",
+    "sets.tout_associations",
+    "quarantaine.tout_lots",
+    "quarantaine.tout_corbeille",
+):
+    ACTION_TIPS[_name] = _TOUT
+    ACTION_TIPS[_name.replace(".tout_", ".aucun_")] = _AUCUN
+ACTION_TIPS.update(
+    {
+        "sets.accepter_meilleure": "Pour chaque SET sélectionné, accepte la proposition la "
+        "mieux notée (jamais une proposition que vous avez rejetée). Vous confirmez une seule "
+        "fois ; les propositions qui ne sont pas « forte » sont signalées.",
+        "familles.dossier": "Propose de réunir la ou les familles choisies (robot ou "
+        "indicateur avec ses versions, copies, compilés, SET, modèles, indicateurs utilisés, "
+        "DLL, images…) dans un nouveau dossier au nom du robot. Vous voyez la proposition "
+        "avant de valider ; la copie est vérifiée et vos originaux ne bougent pas.",
+        "familles.corbeille": "Met les fichiers choisis (onglet « Fichiers de la famille » ou "
+        "« Fichiers liés ») à la Corbeille du Mac, après une seule confirmation. Les "
+        "exemplaires uniques et les fichiers utilisés par un autre outil sont signalés.",
+        "doublons.corbeille_groupe": "Met à la Corbeille du Mac les copies en trop de tous les "
+        "groupes choisis ; la référence de chaque groupe reste. Chaque copie est revérifiée.",
+        "doublons.corbeille_fichier": "Met à la Corbeille du Mac les fichiers choisis dans la "
+        "liste du bas, après une seule confirmation. Les références sont protégées.",
+        "doublons.octets": "Compare octet par octet tous les fichiers des groupes choisis.",
+        "sets.accepter": "Confirme que les associations choisies sont justes. Rien n'est "
+        "jamais validé sans vous.",
+        "sets.rejeter": "Indique que les associations choisies sont fausses.",
+        "sets.annuler": "Efface votre décision sur les associations choisies.",
+        "quarantaine.corbeille": "Étape 4 : vous validez la suppression des originaux en trop "
+        "des lots choisis. Ils vont dans la Corbeille du Mac ; une copie identique est "
+        "conservée.",
+        "quarantaine.remettre": "Remet les fichiers choisis à leur emplacement d'origine "
+        "(s'ils sont encore dans la Corbeille), sans rien écraser.",
+    }
+)
+WIDGET_TIPS.update(
+    {
+        ("familles", "tool_type"): "N'affiche que les familles d'un type : robots, "
+        "indicateurs, scripts, bibliothèques…",
+        ("familles", "deps"): "Ce dont les outils de la famille ont besoin (indicateurs appelés "
+        "par iCustom, bibliothèques importées) et qui les utilise.",
+        ("familles", "families"): "Chaque ligne est un robot, un indicateur ou un script avec "
+        "tout ce qui va avec. Cmd+clic ou Maj+clic pour en choisir plusieurs.",
+        ("doublons", "groups"): "Groupes de fichiers identiques octet pour octet. Cmd+clic ou "
+        "Maj+clic pour en choisir plusieurs.",
+        ("sets", "sets"): "Tous vos SET. Cliquez pour voir ses paramètres et les outils "
+        "proposés ; Cmd+clic ou Maj+clic pour en choisir plusieurs.",
+    }
+)

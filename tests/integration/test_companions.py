@@ -61,9 +61,10 @@ def test_indices_et_placement(tmp_path: Path, ctx: AppContext) -> None:
     CompanionService(ctx.conn, ctx.clock, ctx.journal).rebuild()
     found = links(ctx)
     # Cités dans le code : certain, même rangés ailleurs.
-    assert found["MQL4/Images/logo.bmp"] == ("Scalper.mq4", "certain", "en_vrac")
+    # Rangés dans les dossiers prévus par MetaTrader (Images, Include) : pas « en vrac ».
+    assert found["MQL4/Images/logo.bmp"] == ("Scalper.mq4", "certain", "dossier_standard")
     assert found["Telechargements/alerte.wav"] == ("Scalper.mq4", "certain", "en_vrac")
-    assert found["MQL4/Include/ScalperLib.mqh"] == ("Scalper.mq4", "certain", "en_vrac")
+    assert found["MQL4/Include/ScalperLib.mqh"] == ("Scalper.mq4", "certain", "dossier_standard")
     # Même dossier et nom proche : probable, rangé avec son outil.
     assert found["MQL4/Experts/Scalper/Scalper manuel.pdf"] == (
         "Scalper.mq4",
@@ -76,7 +77,8 @@ def test_indices_et_placement(tmp_path: Path, ctx: AppContext) -> None:
     # Aucun indice : jamais relié au hasard.
     assert "Bazar/vacances.jpg" not in found
     counts = CompanionService(ctx.conn, ctx.clock, ctx.journal).placement_counts()
-    assert counts["sans_outil"] == 1 and counts["en_vrac"] == 3
+    assert counts["sans_outil"] == 1 and counts["en_vrac"] == 1
+    assert counts["dossier_standard"] == 2
 
 
 def test_crees_ensemble_relie_un_fichier_range_ailleurs(tmp_path: Path, ctx: AppContext) -> None:

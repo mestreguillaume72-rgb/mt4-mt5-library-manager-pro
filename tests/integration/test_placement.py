@@ -64,6 +64,7 @@ def test_trois_placements_et_orphelin(tmp_path: Path, ctx: AppContext) -> None:
         "avec_son_robot": 1,
         "en_vrac": 1,
         "avec_autre_robot": 1,
+        "dossier_standard": 0,
         "orphelins": 1,
     }
     # Les trois SET reliés le sont au même robot, quel que soit leur emplacement.
