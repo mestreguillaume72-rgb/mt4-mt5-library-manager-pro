@@ -215,37 +215,9 @@ jobs:
             installateur.log
             gatekeeper.txt
 
-  local:
-    # Le script de construction locale, tel que le propriétaire le lancera sur son iMac Intel :
-    # depuis le dossier des sources (sans git), uv téléchargé par le script lui-même.
-    name: Construction locale (script, Mac Intel)
-    if: github.event_name != 'push' || startsWith(github.ref, 'refs/tags/v') || contains(github.event.head_commit.message, '[publier]')
-    runs-on: macos-15-intel
-    steps:
-      - uses: actions/checkout@v5
-      - name: Dossier des sources comme chez le propriétaire, puis construction
-        shell: bash
-        env:
-          MTLM_NO_PAUSE: "1"
-          MTLM_UV_DOWNLOAD: "1"
-        run: |
-          git archive --format=zip -o "$RUNNER_TEMP/sources.zip" HEAD
-          mkdir "$RUNNER_TEMP/sources" && cd "$RUNNER_TEMP/sources"
-          unzip -q "$RUNNER_TEMP/sources.zip"
-          test -x Construire-sur-ce-Mac.command
-          ./Construire-sur-ce-Mac.command
-          test -d "dist/MT4 MT5 Library Manager PRO.app"
-          ls -la dist/*.dmg
-          grep -q "Auto-diagnostic : RÉUSSI" construction-locale.log
-      - uses: actions/upload-artifact@v5
-        if: always()
-        with:
-          name: construction-locale-log
-          path: ${{ runner.temp }}/sources/construction-locale.log
-
   release:
     name: Pré-version GitHub
-    needs: [test, local]
+    needs: test
     # Publication : étiquette v*, envoi dont le message contient « [publier] », ou lancement
     # manuel (Actions → Application macOS → Run workflow).
     if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || contains(github.event.head_commit.message, '[publier]')
@@ -270,11 +242,6 @@ jobs:
           ZIP="MT4-MT5-Library-Manager-PRO-${VERSION}-Installation-macOS.zip"
           (cd kit && zip -r -X "../dmg/$ZIP" "$NAME")
           (cd dmg && sha256sum "$ZIP" > "$ZIP.sha256")
-          # Sources complètes, avec le script « Construire-sur-ce-Mac.command » (sans GitHub).
-          SRC="MT4-MT5-Library-Manager-PRO-${VERSION}-sources.zip"
-          git archive --format=zip --prefix="MT4-MT5-Library-Manager-PRO-${VERSION}-sources/" \
-            -o "dmg/$SRC" HEAD
-          (cd dmg && sha256sum "$SRC" > "$SRC.sha256")
           unzip -l "dmg/$ZIP"
       - name: Publier la pré-version
         env:

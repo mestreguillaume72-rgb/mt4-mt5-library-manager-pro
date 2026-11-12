@@ -7,10 +7,7 @@
 | Versions publiées (DMG, dossier d'installation `…-Installation-macOS.zip`) | onglet **Releases** | conservées, téléchargeables par vous |
 | Copie chez vous | le dossier d'installation et la **sauvegarde complète** `…-sauvegarde.bundle` qui vous ont été envoyés | indépendants de GitHub |
 
-Le **zip des sources** (`…-sources.zip`) permet aussi de reconstruire l'application
-directement sur votre Mac, sans GitHub : voir `construire-sur-mac.md`.
-
-Gardez le dossier d'installation, le zip des sources et la sauvegarde complète (par exemple sur un disque externe
+Gardez le dossier d'installation et la sauvegarde complète (par exemple sur un disque externe
 et dans un service de stockage) : avec eux, rien ne dépend de GitHub.
 
 ## Restaurer le projet depuis la sauvegarde complète
