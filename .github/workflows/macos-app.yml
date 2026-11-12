@@ -1,6 +1,10 @@
-# Livraison macOS (F13) : construit l'application .app et l'image DMG sur de vrais Mac
-# (Apple Silicon et Intel), les vérifie (signature, auto-diagnostic, DMG monté) et les met à
-# disposition. Sur une étiquette v*, une pré-version GitHub est publiée avec les DMG.
+# Livraison macOS (F13) : construit UNE application universelle (Intel + Apple Silicon) et son
+# image DMG, puis la teste sur de vrais Mac des deux architectures (auto-diagnostic, DMG monté,
+# installateur). Publication d'une pré-version sur étiquette v* ou message « [publier] ».
+#
+# Pourquoi universelle : avec deux DMG séparés, choisir le mauvais fichier donnait « n'est pas
+# prise en charge sur ce Mac » (application Apple Silicon ouverte sur un iMac Intel). Une seule
+# application fonctionne désormais sur tous les Mac compatibles.
 name: Application macOS (.app + DMG)
 
 on:
@@ -12,38 +16,48 @@ on:
 permissions:
   contents: read
 
+env:
+  # Python officiel python.org « universal2 » (Intel + Apple Silicon, macOS 10.13+). Le Python
+  # géré par uv n'existe qu'en une architecture et ne permet pas d'application universelle.
+  PYORG_VERSION: "3.12.10"
+  PYORG_PYTHON: /Library/Frameworks/Python.framework/Versions/3.12/bin/python3.12
+
 jobs:
   build:
-    name: Construction (${{ matrix.label }})
-    runs-on: ${{ matrix.runner }}
+    name: Construction (universelle)
+    runs-on: macos-15
     env:
       QT_QPA_PLATFORM: offscreen
       APP: "dist/MT4 MT5 Library Manager PRO.app"
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: macos-15
-            label: Apple-Silicon
-          - runner: macos-15-intel
-            label: Intel
+      MTLM_TARGET_ARCH: universal2
     steps:
       - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v6
-        with:
-          python-version: "3.12"
       - name: Environnement
         run: |
           sw_vers
           uname -m
+      - name: Python officiel universel (python.org)
+        shell: bash
+        run: |
+          PKG="python-${PYORG_VERSION}-macos11.pkg"
+          curl -sSfL -o "$PKG" "https://www.python.org/ftp/python/${PYORG_VERSION}/${PKG}"
+          shasum -a 256 "$PKG" | tee python-pkg.sha256
+          pkgutil --check-signature "$PKG" | tee python-pkg-signature.txt
+          grep -q "Python Software Foundation" python-pkg-signature.txt
+          sudo installer -pkg "$PKG" -target /
+          lipo -archs "$PYORG_PYTHON" | tee python-archs.txt
+          grep -q x86_64 python-archs.txt && grep -q arm64 python-archs.txt
+          echo "UV_PYTHON=$PYORG_PYTHON" >> "$GITHUB_ENV"
       - name: Dépendances (verrou uv.lock)
-        run: uv sync --frozen --group build
+        run: |
+          uv sync --frozen --group build
+          uv run python -c "import sys, platform; print(sys.version, platform.machine())"
       - name: Icône de l'application (.icns)
         run: |
           uv run python tools/icone.py packaging/macos/AppIcon.iconset
           iconutil -c icns packaging/macos/AppIcon.iconset -o packaging/macos/AppIcon.icns
-          ls -la packaging/macos/AppIcon.icns
-      - name: Construire l'application
+      - name: Construire l'application universelle
         run: uv run --group build pyinstaller --noconfirm packaging/macos/mtlm.spec
       - name: Vérifier l'application
         shell: bash
@@ -53,8 +67,10 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "$APP" 2>&1 | tee signature.txt
           plutil -p "$APP/Contents/Info.plist" | tee info-plist.txt
           du -sh "$APP" | tee taille.txt
-      - name: Version minimale de macOS réellement exigée (tous les binaires)
+      - name: Architectures et version minimale de macOS (tous les binaires)
         shell: bash
+        env:
+          REQUIRED_ARCHS: "x86_64 arm64"
         run: tools/verifier_minos.sh "$APP" | tee minos.txt
       - name: Auto-diagnostic (lecture seule du contenu de l'application)
         shell: bash
@@ -68,7 +84,7 @@ jobs:
         shell: bash
         run: |
           VERSION=$(uv run python -c "import mtlm; print(mtlm.__version__)")
-          DMG="MT4-MT5-Library-Manager-PRO-${VERSION}-macOS-${{ matrix.label }}.dmg"
+          DMG="MT4-MT5-Library-Manager-PRO-${VERSION}-macOS.dmg"
           mkdir dmg-root
           cp -R "$APP" dmg-root/
           ln -s /Applications dmg-root/Applications
@@ -76,15 +92,65 @@ jobs:
             -format UDZO "$DMG"
           hdiutil verify "$DMG"
           shasum -a 256 "$DMG" | tee "$DMG.sha256"
+      - uses: actions/upload-artifact@v5
+        with:
+          name: DMG
+          path: |
+            *.dmg
+            *.dmg.sha256
+          retention-days: 90
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: rapports-construction
+          path: |
+            python-pkg.sha256
+            python-pkg-signature.txt
+            python-archs.txt
+            architectures.txt
+            signature.txt
+            info-plist.txt
+            taille.txt
+            minos.txt
+            autotest.log
+
+  test:
+    name: Test sur Mac ${{ matrix.label }}
+    needs: build
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            label: Apple-Silicon
+            arch: arm64
+          - runner: macos-15-intel
+            label: Intel
+            arch: x86_64
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: DMG
+      - name: Mac de test
+        shell: bash
+        run: |
+          sw_vers
+          test "$(uname -m)" = "${{ matrix.arch }}"
+          DMG=$(ls *.dmg)
           echo "DMG=$DMG" >> "$GITHUB_ENV"
-      - name: Tester l'application depuis le DMG monté
+          shasum -a 256 -c "$DMG.sha256"
+      - name: Lancer l'application depuis le DMG monté (exécution native ${{ matrix.arch }})
         shell: bash
         run: |
           MNT=$(hdiutil attach -nobrowse -readonly "$DMG" | tail -1 | awk -F'\t' '{print $NF}')
-          echo "Monté sur : $MNT"
-          ls -la "$MNT"
-          "$MNT/MT4 MT5 Library Manager PRO.app/Contents/MacOS/mtlm-gui" --autotest \
-            "$MNT/MT4 MT5 Library Manager PRO.app/Contents" | tee autotest-dmg.log
+          EXE="$MNT/MT4 MT5 Library Manager PRO.app/Contents/MacOS/mtlm-gui"
+          file "$EXE"
+          arch -${{ matrix.arch }} "$EXE" --autotest "$MNT/MT4 MT5 Library Manager PRO.app/Contents" \
+            | tee autotest-dmg.log
           hdiutil detach "$MNT"
       - name: Tester l'installateur (Installer.command)
         shell: bash
@@ -105,7 +171,8 @@ jobs:
           "$KIT/Installer.command" | tee installateur.log
           test -d "$INSTALLED"
           if xattr "$INSTALLED" | grep -q com.apple.quarantine; then exit 1; fi
-          "$INSTALLED/Contents/MacOS/mtlm-gui" --autotest "$INSTALLED/Contents" | tee -a installateur.log
+          arch -${{ matrix.arch }} "$INSTALLED/Contents/MacOS/mtlm-gui" --autotest \
+            "$INSTALLED/Contents" | tee -a installateur.log
           # 2) mise à jour : l'ancienne version de l'application est remplacée
           "$KIT/Installer.command" | tee -a installateur.log
           grep -q "Ancienne version remplacée" installateur.log
@@ -125,35 +192,30 @@ jobs:
           if MTLM_FAKE_OS_VERSION=11.7 "$KIT/Installer.command" >> installateur.log; then exit 1; fi
           grep -q "demande macOS 12.0 ou plus récent" installateur.log
           test ! -e "$INSTALLED"
-          echo "Installateur : 5 scénarios vérifiés."
+          # 6) image sans le code de ce processeur : refus clair avant toute copie
+          if MTLM_FAKE_CPU=ppc "$KIT/Installer.command" >> installateur.log; then exit 1; fi
+          grep -q "ne contient pas l'application pour ce Mac" installateur.log
+          test ! -e "$INSTALLED"
+          echo "Installateur : 6 scénarios vérifiés sur ${{ matrix.label }}."
       - name: Gatekeeper (information — application non notarisée)
         shell: bash
-        run: spctl --assess --type execute -vv "$APP" 2>&1 | tee gatekeeper.txt || true
-      - uses: actions/upload-artifact@v5
-        with:
-          name: DMG-${{ matrix.label }}
-          path: |
-            *.dmg
-            *.dmg.sha256
-          retention-days: 90
+        run: |
+          MNT=$(hdiutil attach -nobrowse -readonly "$DMG" | tail -1 | awk -F'\t' '{print $NF}')
+          spctl --assess --type execute -vv "$MNT/MT4 MT5 Library Manager PRO.app" 2>&1 \
+            | tee gatekeeper.txt || true
+          hdiutil detach "$MNT"
       - uses: actions/upload-artifact@v5
         if: always()
         with:
-          name: rapports-application-${{ matrix.label }}
+          name: rapports-test-${{ matrix.label }}
           path: |
-            architectures.txt
-            signature.txt
-            info-plist.txt
-            taille.txt
-            autotest.log
             autotest-dmg.log
-            gatekeeper.txt
             installateur.log
-            minos.txt
+            gatekeeper.txt
 
   release:
     name: Pré-version GitHub
-    needs: build
+    needs: test
     # Publication : étiquette v*, ou envoi dont le message contient « [publier] ».
     if: startsWith(github.ref, 'refs/tags/v') || contains(github.event.head_commit.message, '[publier]')
     runs-on: ubuntu-latest
@@ -163,8 +225,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v5
         with:
-          pattern: DMG-*
-          merge-multiple: true
+          name: DMG
           path: dmg
       - name: Dossier d'installation (installateur + guide + DMG)
         run: |
@@ -185,7 +246,7 @@ jobs:
         run: |
           VERSION=$(grep -m1 '__version__' src/mtlm/__init__.py | cut -d'"' -f2)
           TAG="v${VERSION}"
-          NOTES="Application macOS (Apple Silicon et Intel), construite et testée sur Mac (auto-diagnostic depuis le DMG monté). Le plus simple : téléchargez le fichier « Installation-macOS.zip », ouvrez-le puis double-cliquez sur « Installer.command » (voir le « Guide d'installation.pdf » inclus). Application non notarisée. Voir docs/utilisateur/installation.md et docs/rapports/phase-12.md."
+          NOTES="Application macOS UNIVERSELLE (Intel et Apple Silicon, macOS 12 ou plus récent), construite puis testée sur de vrais Mac des deux architectures. Le plus simple : téléchargez « Installation-macOS.zip », ouvrez-le puis faites clic droit → Ouvrir sur « Installer.command » (voir le « Guide d'installation.pdf » inclus). Application non notarisée."
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber dmg/*.dmg dmg/*.dmg.sha256 dmg/*.zip dmg/*.zip.sha256
           else

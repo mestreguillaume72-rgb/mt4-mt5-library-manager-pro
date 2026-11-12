@@ -1,6 +1,7 @@
 # Spécification PyInstaller — application macOS « MT4 MT5 Library Manager PRO ».
 # Construction : uv run --group build pyinstaller --noconfirm packaging/macos/mtlm.spec
 # Seuls le paquet « mtlm » et ses dépendances sont embarqués (aucun test, aucune donnée).
+import os
 import re
 import sys
 from pathlib import Path
@@ -11,6 +12,8 @@ ROOT = Path(SPECPATH).parents[1]  # noqa: F821 — variable fournie par PyInstal
 VERSION = re.search(r'__version__ = "([^"]+)"', (ROOT / "src/mtlm/__init__.py").read_text()).group(1)
 NAME = "MT4 MT5 Library Manager PRO"
 ICON = ROOT / "packaging/macos/AppIcon.icns"
+# « universal2 » en CI (Python python.org universel) : une seule application Intel + Apple Silicon.
+TARGET_ARCH = os.environ.get("MTLM_TARGET_ARCH") or None
 
 analysis = Analysis(  # noqa: F821
     [str(ROOT / "packaging/macos/launcher.py")],
@@ -23,7 +26,7 @@ analysis = Analysis(  # noqa: F821
 pyz = PYZ(analysis.pure)  # noqa: F821
 exe = EXE(  # noqa: F821
     pyz, analysis.scripts, [], exclude_binaries=True, name="mtlm-gui", console=False,
-    debug=False, strip=False, upx=False, argv_emulation=False,
+    debug=False, strip=False, upx=False, argv_emulation=False, target_arch=TARGET_ARCH,
 )
 collected = COLLECT(  # noqa: F821
     exe, analysis.binaries, analysis.datas, strip=False, upx=False, name="mtlm-gui",

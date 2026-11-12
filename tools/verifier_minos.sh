@@ -2,6 +2,8 @@
 # Vérifie qu'AUCUN binaire de l'application n'exige une version de macOS plus récente que la
 # version minimale déclarée (LSMinimumSystemVersion). Sans cette preuve, une bibliothèque
 # compilée pour un macOS récent empêcherait l'ouverture sur un Mac plus ancien.
+# Avec REQUIRED_ARCHS="x86_64 arm64", vérifie aussi que chaque binaire contient ces architectures
+# (application universelle : une seule application pour les Mac Intel et Apple Silicon).
 # Usage (sur macOS) : tools/verifier_minos.sh "dist/MT4 MT5 Library Manager PRO.app"
 set -euo pipefail
 APP="$1"
@@ -25,6 +27,12 @@ while IFS= read -r -d '' file; do
         mode == 1 && $1 == "minos" { print $2; mode = 0 }
         mode == 2 && $1 == "version" { print $2; mode = 0 }')"
     checked=$((checked + 1))
+    for wanted in ${REQUIRED_ARCHS:-}; do
+        if ! lipo -archs "$file" 2>/dev/null | tr ' ' '\n' | grep -qx "$wanted"; then
+            echo "ARCHITECTURE MANQUANTE : ${file#"$APP"/} n'a pas $wanted ($(lipo -archs "$file"))"
+            bad=$((bad + 1))
+        fi
+    done
     for v in $versions; do
         if greater "$v" "$highest"; then highest="$v"; fi
         if greater "$v" "$DECLARED"; then
@@ -40,7 +48,7 @@ if [ "$checked" -eq 0 ]; then
     exit 1
 fi
 if [ "$bad" -gt 0 ]; then
-    echo "ÉCHEC : $bad binaire(s) incompatible(s) avec macOS $DECLARED."
+    echo "ÉCHEC : $bad problème(s) de compatibilité (macOS $DECLARED${REQUIRED_ARCHS:+, architectures $REQUIRED_ARCHS})."
     exit 1
 fi
-echo "OK : tous les binaires fonctionnent à partir de macOS $DECLARED."
+echo "OK : tous les binaires fonctionnent à partir de macOS $DECLARED${REQUIRED_ARCHS:+ (architectures : $REQUIRED_ARCHS)}."

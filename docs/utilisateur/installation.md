@@ -2,8 +2,9 @@
 
 ## Le plus simple : le dossier d'installation
 Dans **Releases**, téléchargez `MT4-MT5-Library-Manager-PRO-<version>-Installation-macOS.zip`,
-ouvrez-le, puis double-cliquez sur **`Installer.command`**. Il choisit tout seul la version
-adaptée à votre Mac (Apple Silicon ou Intel), vérifie l'empreinte du fichier, installe
+ouvrez-le, puis faites **clic droit → Ouvrir** sur **`Installer.command`**. L'application est
+**universelle** (la même pour les Mac Intel et Apple Silicon, macOS 12 ou plus récent).
+L'installateur vérifie l'empreinte du fichier, le processeur et la version de macOS, installe
 l'application dans **Applications** (une ancienne version de cette application est remplacée,
 vos données et réglages sont conservés), l'autorise et l'ouvre. Il ne touche à rien d'autre.
 
@@ -13,15 +14,15 @@ ancien). Le **Guide d'installation.pdf** inclus explique tout avec une capture.
 
 Ce script est testé à chaque construction sur de vrais Mac (Apple Silicon et Intel) :
 première installation, mise à jour, refus de toucher un élément étranger du même nom, refus
-d'un fichier abîmé.
+d'un fichier abîmé, d'un macOS trop ancien et d'une image sans le code du processeur.
 
 La méthode manuelle ci-dessous reste possible.
 
 ## 1. Télécharger
-Sur GitHub (dépôt privé), onglet **Releases** : téléchargez le fichier `.dmg` correspondant à
-votre Mac :
-- **Apple-Silicon** pour les Mac M1, M2, M3, M4… (menu  → « À propos de ce Mac » : « Puce Apple ») ;
-- **Intel** pour les Mac à processeur Intel.
+Sur GitHub (dépôt privé), onglet **Releases** : téléchargez le fichier
+`MT4-MT5-Library-Manager-PRO-<version>-macOS.dmg` (universel : Intel et Apple Silicon).
+Les versions 1.2.1 et antérieures avaient deux DMG ; un DMG « Apple-Silicon » ouvert sur un Mac
+Intel donne « n'est pas prise en charge sur ce Mac ».
 
 Le fichier `.sha256` à côté permet de vérifier l'intégrité (facultatif) :
 `shasum -a 256 NomDuFichier.dmg` doit afficher la même valeur.

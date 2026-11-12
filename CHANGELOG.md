@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.2.2] — Application universelle (Intel + Apple Silicon)
+
+### Corrigé
+- Sur l'iMac Intel du propriétaire (macOS 12.7.6), l'application ouverte affichait « n'est pas
+  prise en charge sur ce Mac » : c'était l'application Apple Silicon (le dossier contenait deux
+  DMG, le premier de la liste étant celui des puces M). Le DMG Intel 1.2.1 a été vérifié :
+  90 binaires, tous x86_64 et compatibles macOS 12.0.
+- Désormais **une seule application universelle** (Intel + Apple Silicon), construite avec le
+  Python officiel python.org universel, puis testée sur de vrais Mac des deux architectures :
+  plus rien à choisir.
+- `tools/verifier_minos.sh` exige aussi les deux architectures dans chaque binaire.
+- Installateur : vérifie avant toute copie que l'application contient le code du processeur de
+  ce Mac (6ᵉ scénario testé en CI) ; guide mis à jour (clic droit → Ouvrir, une seule image).
+
 ## [1.2.1] — Compatibilité macOS 12 Monterey (Mac Intel 2015-2016)
 
 ### Corrigé

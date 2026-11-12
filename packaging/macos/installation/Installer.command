@@ -2,7 +2,8 @@
 # Installation de MT4 MT5 Library Manager PRO — double-cliquez sur ce fichier.
 #
 # Ce que fait ce script, et rien d'autre :
-#   1. choisit l'image d'installation adaptée à ce Mac (Apple Silicon ou Intel) ;
+#   1. prend l'image d'installation (application universelle : Intel et Apple Silicon) et
+#      vérifie qu'elle convient au processeur et à la version de macOS de ce Mac ;
 #   2. vérifie son empreinte SHA-256 (fichier intact) ;
 #   3. copie l'application dans le dossier Applications (une ancienne version de CETTE
 #      application est remplacée ; vos données et réglages, rangés ailleurs, sont conservés) ;
@@ -12,7 +13,7 @@
 #
 # Variables pour les tests automatiques : MTLM_INSTALL_DIR (dossier de destination),
 # MTLM_NO_LAUNCH=1 (ne pas ouvrir l'application), MTLM_NO_PAUSE=1 (ne pas attendre Entrée).
-# MTLM_FAKE_OS_VERSION (simuler une version de macOS pour tester le refus).
+# MTLM_FAKE_OS_VERSION / MTLM_FAKE_CPU (simuler un autre Mac pour tester les refus).
 set -euo pipefail
 
 APP_NAME="MT4 MT5 Library Manager PRO"
@@ -48,15 +49,19 @@ echo
 # 1. Type de Mac (hw.optional.arm64 reste juste même si le Terminal tourne sous Rosetta).
 if [ "$(sysctl -n hw.optional.arm64 2>/dev/null || echo 0)" = "1" ]; then
     KIND="Apple-Silicon"
+    CPU="arm64"
     echo "• Mac détecté : Apple Silicon (puce M1, M2, M3, M4…)"
 else
     KIND="Intel"
+    CPU="x86_64"
     echo "• Mac détecté : processeur Intel"
 fi
+CPU="${MTLM_FAKE_CPU:-$CPU}"
 
+# Image universelle (…-macOS.dmg) ; à défaut, ancienne image propre à ce type de Mac.
 DMG=""
-for candidate in "$FILES"/*-macOS-"${KIND}".dmg; do
-    [ -f "$candidate" ] && DMG="$candidate"
+for candidate in "$FILES"/*-macOS.dmg "$FILES"/*-macOS-"${KIND}".dmg; do
+    if [ -z "$DMG" ] && [ -f "$candidate" ]; then DMG="$candidate"; fi
 done
 if [ -z "$DMG" ]; then
     echo "Image d'installation introuvable pour ce Mac dans « Fichiers d'installation »."
@@ -105,6 +110,19 @@ if ! version_ge "$OS_VERSION" "$MIN_VERSION"; then
     exit 1
 fi
 echo "• macOS ${OS_VERSION} : compatible (minimum ${MIN_VERSION})"
+
+# Processeur : l'application doit contenir le code de CE Mac (sinon macOS dirait « n'est pas
+# prise en charge sur ce Mac »). « file » est présent sur tous les Mac, sans outils Xcode.
+APP_CPUS="$(file -b "$MNT/$APP/Contents/MacOS/mtlm-gui")"
+case "$APP_CPUS" in
+    *"$CPU"*) ;;
+    *)
+        echo "Cette image ne contient pas l'application pour ce Mac (${KIND}) : ${APP_CPUS}."
+        echo "Rien n'a été installé. Retéléchargez le dossier d'installation le plus récent."
+        exit 1
+        ;;
+esac
+echo "• Processeur : compatible (${CPU})"
 
 if [ -e "$DEST/$APP" ]; then
     existing_id="$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" \
