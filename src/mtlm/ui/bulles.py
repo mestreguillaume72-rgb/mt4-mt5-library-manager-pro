@@ -102,9 +102,6 @@ ACTION_TIPS: dict[str, str] = {
     "organisation.previsualiser": "Étape 2 : montre le rangement prévu, sans rien copier.",
     "organisation.executer": "Étape 3 : crée la copie rangée et vérifie chaque fichier.",
     "organisation.actualiser": "Recharge la liste des plans de rangement.",
-    "organisation.isoler": "Copie TOUTES vos sources MQ4/MQ5 dans un nouveau dossier, "
-    "chacune avec ses SET et ses fichiers liés. Différent du dossier d'une famille. Vous "
-    "voyez la proposition avant de valider.",
     # Rapports
     "rapports.exporter": "Enregistre le rapport choisi dans un fichier CSV (tableur) ou JSON.",
     "rapports.audit_exporter": "Enregistre le journal de toutes les actions sensibles.",
@@ -168,6 +165,7 @@ for _name in (
     "sets.tout_associations",
     "quarantaine.tout_lots",
     "quarantaine.tout_corbeille",
+    "sources_mq.tout_sources",
 ):
     ACTION_TIPS[_name] = _TOUT
     ACTION_TIPS[_name.replace(".tout_", ".aucun_")] = _AUCUN
@@ -188,6 +186,8 @@ ACTION_TIPS.update(
         "doublons.corbeille_fichier": "Met à la Corbeille du Mac les fichiers choisis dans la "
         "liste du bas, après une seule confirmation. Les références sont protégées.",
         "doublons.octets": "Compare octet par octet tous les fichiers des groupes choisis.",
+        "doublons.reference": "Garde le fichier choisi comme exemplaire de référence de son "
+        "groupe : c'est lui qui reste en place.",
         "sets.accepter": "Confirme que les associations choisies sont justes. Rien n'est "
         "jamais validé sans vous.",
         "sets.rejeter": "Indique que les associations choisies sont fausses.",
@@ -211,5 +211,40 @@ WIDGET_TIPS.update(
         "Maj+clic pour en choisir plusieurs.",
         ("sets", "sets"): "Tous vos SET. Cliquez pour voir ses paramètres et les outils "
         "proposés ; Cmd+clic ou Maj+clic pour en choisir plusieurs.",
+    }
+)
+
+ACTION_TIPS.update(
+    {
+        "sources_mq.isoler": "Copie seulement les sources que vous avez cliquées dans la liste "
+        "(une, deux, trois ou plus) dans un nouveau dossier, chacune avec ses SET, ses fichiers "
+        "liés et les indicateurs ou bibliothèques qu'elle utilise. Vous voyez la proposition "
+        "avant de valider.",
+        "sources_mq.isoler_tout": "Copie toutes les sources MQ4/MQ5 de la liste, chacune avec ce "
+        "qui va avec. Vous voyez la proposition avant de valider.",
+        "sources_mq.actualiser": "Recharge la liste des sources MQ4/MQ5.",
+    }
+)
+_CLIC = (
+    "Un clic sur une ligne l'ajoute à la sélection, un second clic la retire : choisissez-en "
+    "une, deux, trois ou plus. "
+)
+ACTION_TIPS["sources_mq.tout_sources"] = _TOUT
+for _key in [k for k in ACTION_TIPS if ".tout_" in k]:
+    ACTION_TIPS[_key] = _CLIC + "Ce bouton les sélectionne toutes."
+WIDGET_TIPS.update(
+    {
+        ("sources_mq", "search"): "Tapez une partie du nom ou du dossier, puis Entrée.",
+        ("sources_mq", "platform"): "N'afficher que les sources MQ4 ou MQ5.",
+        ("sources_mq", "tool_type"): "N'afficher qu'un type : robots, indicateurs, scripts…",
+        ("sources_mq", "sources"): _CLIC + "Colonnes : SET associés, fichiers liés (images, "
+        "sons, modèles, DLL…) et indicateurs ou bibliothèques que la source utilise.",
+        ("familles", "families"): _CLIC + "Chaque ligne est un robot, un indicateur ou un "
+        "script avec tout ce qui va avec.",
+        ("doublons", "groups"): _CLIC + "Groupes de fichiers identiques octet pour octet.",
+        ("sets", "sets"): _CLIC + "Le détail (paramètres, outils proposés) montre le premier SET "
+        "choisi.",
+        ("sets", "assoc"): _CLIC + "Puis Accepter ou Rejeter : la décision s'applique à toutes "
+        "les associations choisies.",
     }
 )

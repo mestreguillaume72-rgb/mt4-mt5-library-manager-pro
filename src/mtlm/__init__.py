@@ -4,7 +4,7 @@ Le moteur est indépendant de l'interface graphique : il se teste sans GUI
 (spécification § 5).
 """
 
-__version__ = "1.4.0"
+__version__ = "1.4.1"
 
 #: Version du moteur d'analyse, enregistrée avec chaque résultat calculé
 #: (voir ARCHITECTURE § 6.3). Incrémentée à chaque changement d'algorithme.

@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QPlainTextEdit,
     QSpinBox,
     QTabWidget,
@@ -370,25 +371,6 @@ class OrganizePage(Page):
         self.plans.itemSelectionChanged.connect(self.load_items)
         self.items = make_table(["Fichier", "Cible", "État", "Collision avec"], badge_columns=(2,))
         self.layout_.addWidget(two_columns(self.plans, self.items), 1)
-        self.banner(
-            "<b>Isoler les sources MQ4/MQ5</b> — à ne pas confondre avec le dossier d'une "
-            "famille : ici, <b>toutes</b> vos sources MQ4/MQ5 sont copiées, chacune dans "
-            "« MQ4 » ou « MQ5 / nom du robot », avec ses SET associés et ses fichiers liés "
-            "(images, sons, includes). Vous voyez d'abord la proposition, puis vous validez.",
-            "banner",
-        )
-        self.button_row(
-            self.btn("isoler", "Isoler les MQ4/MQ5 avec leurs SET…", self.propose_sources),
-        )
-
-    def propose_sources(self) -> None:
-        self.propose_folder(
-            "Isoler les MQ4/MQ5",
-            "Chaque source MQ4/MQ5 dans « MQ4 » ou « MQ5 / <nom du robot> », avec les SET qui "
-            "lui sont associés (acceptés par vous, ou de niveau « forte » non rejetés) et ses "
-            "fichiers liés (images, sons, includes cités dans son code ou rangés avec lui).",
-            lambda service, destination: service.preview_sources(destination),
-        )
 
     def _service(self) -> OrganizeService:
         ctx = self.app.ctx
@@ -458,6 +440,123 @@ class OrganizePage(Page):
             self.refresh()
 
         self.app.run_task("Organisation", work, done)
+
+
+class SourcesMqPage(Page):
+    key, title, icon = "sources_mq", "Sources MQ4/MQ5", "📜"
+    subtitle = (
+        "Isolez vos codes sources MQ4/MQ5 (robots, indicateurs, scripts) dans un nouveau "
+        "dossier, chacun avec ses SET, ses fichiers liés et les indicateurs qu'il utilise."
+    )
+
+    def __init__(self, app: UiApp) -> None:
+        super().__init__(app)
+        self.banner(
+            "Choisissez les sources à isoler : <b>cliquez sur chaque ligne voulue</b> (un clic "
+            "ajoute, un autre clic retire), ou « Tout sélectionner ». Chaque source est copiée "
+            "dans « MQ4 » ou « MQ5 / nom de l'outil », avec ses SET associés, ses fichiers liés "
+            "(images, sons, modèles, DLL, includes) et les indicateurs ou bibliothèques qu'elle "
+            "utilise. Vous voyez la proposition avant de valider ; vos originaux ne bougent pas.",
+            "banner",
+        )
+        filters = QHBoxLayout()
+        self.search = QLineEdit()
+        self.search.setPlaceholderText("Rechercher une source par son nom ou son dossier…")
+        self.search.returnPressed.connect(self.refresh)
+        self.platform = QComboBox()
+        self.platform.setAccessibleName("Plateforme")
+        for label, value in (
+            ("MQ4 et MQ5", None),
+            ("MQ4 seulement", "mq4"),
+            ("MQ5 seulement", "mq5"),
+        ):
+            self.platform.addItem(label, value)
+        self.platform.currentIndexChanged.connect(lambda _i: self.refresh())
+        self.tool_type = QComboBox()
+        self.tool_type.setAccessibleName("Type d'outil")
+        for label, value in (
+            ("Tous les types", None),
+            ("Robots", "ea"),
+            ("Indicateurs", "indicator"),
+            ("Scripts", "script"),
+            ("Bibliothèques", "library"),
+        ):
+            self.tool_type.addItem(label, value)
+        self.tool_type.currentIndexChanged.connect(lambda _i: self.refresh())
+        filters.addWidget(self.search, 1)
+        filters.addWidget(self.platform)
+        filters.addWidget(self.tool_type)
+        self.layout_.addLayout(filters)
+        self.sources = make_table(
+            ["N°", "Source", "Type", "Plateforme", "SET liés", "Fichiers liés", "Utilise"],
+            multi=True,
+        )
+        self.layout_.addWidget(self.sources, 1)
+        self.button_row(*self.select_buttons("sources", self.sources))
+        self.button_row(
+            self.btn("isoler", "Isoler les sources choisies…", self.isolate_selected),
+            self.btn("isoler_tout", "Isoler toutes les sources…", self.isolate_all),
+            self.btn("actualiser", "Actualiser", self.refresh),
+        )
+
+    def _service(self) -> OrganizeService:
+        ctx = self.app.ctx
+        return OrganizeService(ctx.conn, ctx.clock, ctx.journal, ctx.paths)
+
+    def refresh(self) -> None:
+        types = {
+            "ea": "Robot",
+            "indicator": "Indicateur",
+            "script": "Script",
+            "library": "Bibliothèque",
+        }
+        fill_table(
+            self.sources,
+            [
+                (
+                    r.file_id,
+                    r.rel_path,
+                    types.get(r.detected_type, r.detected_type or "?"),
+                    r.ext.upper(),
+                    r.sets,
+                    r.linked,
+                    r.dependencies,
+                )
+                for r in self._service().mq_sources(
+                    text=self.search.text().strip() or None,
+                    ext=self.platform.currentData(),
+                    tool_type=self.tool_type.currentData(),
+                )
+            ],
+        )
+
+    def isolate_selected(self) -> None:
+        chosen = [int(v) for v in selected_values(self.sources)]
+        if not chosen:
+            self.app.dialogs.info(
+                self.win,
+                "Isoler les MQ4/MQ5",
+                "Cliquez sur les sources à isoler (une, deux, trois ou plus), puis recommencez.",
+            )
+            return
+        self._propose(chosen)
+
+    def isolate_all(self) -> None:
+        self._propose(None)
+
+    def _propose(self, chosen: list[int] | None) -> None:
+        what = (
+            "Toutes vos sources MQ4/MQ5"
+            if chosen is None
+            else f"{len(chosen)} source(s) choisie(s)"
+        )
+        self.propose_folder(
+            "Isoler les MQ4/MQ5",
+            f"{what} : chacune dans « MQ4 » ou « MQ5 / <nom de l'outil> », avec les SET qui lui "
+            "sont associés (acceptés par vous, ou de niveau « forte » non rejetés), ses fichiers "
+            "liés et les indicateurs ou bibliothèques qu'elle utilise.",
+            lambda service, destination: service.preview_sources(destination, chosen),
+        )
 
 
 class ReportsPage(Page):

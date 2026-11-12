@@ -107,7 +107,8 @@ DEFAULT_ROLES = {
     "doublons.corbeille_fichier": "danger",
     "familles.corbeille": "danger",
     "familles.dossier": "primary",
-    "organisation.isoler": "primary",
+    "sources_mq.isoler": "primary",
+    "sources_mq.isoler_tout": "primary",
 }
 
 
@@ -352,13 +353,14 @@ class BadgeDelegate(QStyledItemDelegate):
 def make_table(
     headers: Sequence[str], badge_columns: Sequence[int] = (), *, multi: bool = False
 ) -> QTableWidget:
-    """``multi`` : sélection de plusieurs lignes (Cmd+clic, Maj+clic, Cmd+A)."""
+    """``multi`` : sélection de plusieurs lignes **au simple clic** (chaque clic ajoute ou
+    retire la ligne, sans clavier) ; Cmd+A sélectionne tout."""
     table = QTableWidget(0, len(headers))
     table.setHorizontalHeaderLabels([h.upper() for h in headers])
     table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
     table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
     table.setSelectionMode(
-        QAbstractItemView.SelectionMode.ExtendedSelection
+        QAbstractItemView.SelectionMode.MultiSelection
         if multi
         else QAbstractItemView.SelectionMode.SingleSelection
     )

@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.4.1] — Écran « Sources MQ4/MQ5 », sélection au simple clic
+
+### Ajouté
+- Nouvel écran **Sources MQ4/MQ5** (menu Actions) : toutes les sources avec leur type,
+  plateforme, SET liés, fichiers liés et dépendances ; filtres ; « Isoler les sources
+  choisies… » (une, deux, trois ou plus) ou « Isoler toutes les sources… ». L'isolement quitte
+  l'écran « Bibliothèque rangée ».
+
+### Modifié
+- Sélection multiple **au simple clic** (un clic ajoute la ligne, un second la retire, sans
+  clavier) avec un compteur « N sélectionné(s) » ; « Tout sélectionner » reste disponible.
+
 ## [1.4.0] — Tout ce qui va avec un outil, indicateurs, sélection multiple
 
 ### Ajouté

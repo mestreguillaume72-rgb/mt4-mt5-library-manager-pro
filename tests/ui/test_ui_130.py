@@ -139,8 +139,8 @@ def test_propositions_de_dossiers_validees(
     assert (dest / name).is_dir()
     assert "copié(s) et vérifié(s)" in dialogs.infos[-1][1]
     dialogs.directories.append(dest)
-    window.navigate("organisation")
-    click(window, qtbot, "organisation.isoler")
+    window.navigate("sources_mq")
+    click(window, qtbot, "sources_mq.isoler_tout")
     wait_idle(window, qtbot)
     isolated = [p for p in dest.iterdir() if p.name.startswith("Sources MQ4-MQ5")]
     assert len(isolated) == 1

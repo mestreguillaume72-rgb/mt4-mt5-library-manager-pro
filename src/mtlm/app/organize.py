@@ -69,6 +69,17 @@ COMPANION_DIRS = {
 }
 
 
+@dataclass(frozen=True)
+class MqSourceRow:
+    file_id: int
+    rel_path: str
+    detected_type: str
+    ext: str
+    sets: int
+    linked: int
+    dependencies: int
+
+
 class OrganizeError(MtlmError):
     """Prévisualisation ou copie organisée refusée ou arrêtée."""
 
@@ -535,10 +546,45 @@ class OrganizeService:
             raise OrganizeError(f"Famille {family_id} inconnue : relancez l'étape « Familles »")
         return str(row[0])
 
-    def preview_sources(self, destination: Path) -> Preview:
-        """Proposition : isoler les sources MQ4/MQ5 avec leurs SET. Chaque source va dans
-        ``MQ4|MQ5/<nom du robot>/`` avec les SET qui lui sont associés (acceptés par vous, ou
-        de niveau « forte » non rejetés). Copie vérifiée après validation."""
+    def mq_sources(
+        self, *, text: str | None = None, ext: str | None = None, tool_type: str | None = None
+    ) -> list[MqSourceRow]:
+        """Sources MQ4/MQ5 présentes, avec ce qui les accompagne (écran « Sources MQ4/MQ5 »)."""
+        clauses = ["f.presence = 'present'", "f.ext IN ('mq4', 'mq5')", "f.in_quarantine = 0"]
+        params: list[object] = []
+        if text:
+            clauses.append("f.rel_path LIKE ?")
+            params.append(f"%{text}%")
+        if ext:
+            clauses.append("f.ext = ?")
+            params.append(ext)
+        if tool_type:
+            clauses.append("a.detected_type = ?")
+            params.append(tool_type)
+        return [
+            MqSourceRow(int(r[0]), r[1], r[2] or "", r[3], int(r[4]), int(r[5]), int(r[6]))
+            for r in self._conn.execute(
+                "SELECT f.id, f.rel_path, a.detected_type, f.ext,"
+                " (SELECT count(DISTINCT x.set_file_id) FROM association x"
+                "  WHERE x.robot_file_id = f.id AND (x.user_decision = 'accepted'"
+                "  OR (x.level = 'forte' AND x.user_decision = 'none'))),"
+                " (SELECT count(*) FROM companion_link l WHERE l.tool_file_id = f.id"
+                "  AND l.confidence IN ('certain', 'probable')),"
+                " (SELECT count(*) FROM tool_dependency d WHERE d.user_file_id = f.id)"
+                " FROM file_record f LEFT JOIN file_analysis a ON a.file_id = f.id"
+                f" WHERE {' AND '.join(clauses)} ORDER BY f.rel_path LIMIT 20000",
+                params,
+            )
+        ]
+
+    def preview_sources(self, destination: Path, file_ids: list[int] | None = None) -> Preview:
+        """Proposition : isoler les sources MQ4/MQ5 (toutes, ou ``file_ids`` choisies) avec
+        leurs SET. Chaque source va dans ``MQ4|MQ5/<nom du robot>/`` avec les SET qui lui sont
+        associés (acceptés par vous, ou de niveau « forte » non rejetés), ses fichiers liés et
+        les indicateurs ou bibliothèques qu'elle utilise. Copie vérifiée après validation."""
+        chosen = set(file_ids) if file_ids is not None else None
+        if chosen is not None and not chosen:
+            raise OrganizeError("Choisissez au moins une source MQ4/MQ5.")
         target_root = self._destination(destination)
         plan_root = self._unique_folder(
             target_root, f"Sources MQ4-MQ5 avec SET {self._clock.now():%Y-%m-%d}"
@@ -551,6 +597,7 @@ class OrganizeService:
                     " ON dm.file_id = f.id WHERE f.ext IN ('mq4', 'mq5')"
                     " ORDER BY coalesce(dm.is_reference, 0) DESC, f.rel_path"
                 )
+                if chosen is None or int(r[0]) in chosen
             ]
         )
         folder_of: dict[int, str] = {}

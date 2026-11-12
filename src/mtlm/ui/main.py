@@ -20,13 +20,14 @@ from mtlm.ui.pages_actions import (
     QuarantinePage,
     ReportsPage,
     SettingsPage,
+    SourcesMqPage,
 )
 from mtlm.ui.pages_analysis import DuplicatesPage, FamiliesPage, SetsPage
 from mtlm.ui.pages_main import AnalysisPage, DashboardPage, DetailPage, ExplorerPage, SourcesPage
 from mtlm.ui.theme import apply_theme
 from mtlm.ui.window import MainWindow, UiApp
 
-#: Les 13 écrans exigés par la spécification (F11), dans l'ordre de la barre latérale.
+#: Les 13 écrans exigés par la spécification (F11) + « Sources MQ4/MQ5 » (1.4.0).
 PAGES = [
     DashboardPage,
     SourcesPage,
@@ -38,6 +39,7 @@ PAGES = [
     DuplicatesPage,
     QuarantinePage,
     OrganizePage,
+    SourcesMqPage,
     ReportsPage,
     SettingsPage,
     HelpPage,
@@ -76,7 +78,7 @@ class AutoDialogs:
 
 
 def autotest(source: Path) -> int:
-    """Auto-diagnostic de l'application installée (sans écran possible) : ouvre les 13 écrans,
+    """Auto-diagnostic de l'application installée (sans écran possible) : ouvre les 14 écrans,
     ajoute ``source`` (lecture seule), lance toute l'analyse et vérifie les résultats. Les
     données de l'application sont placées dans un dossier temporaire supprimé à la fin."""
     import tempfile
@@ -99,7 +101,7 @@ def autotest(source: Path) -> int:
         files = int(window.pages["tableau"].values["files"].text())
         log = window.pages["analyse"].log.toPlainText()
         window.app.ctx.close()
-    ok = len(pages) == 13 and files > 0 and not dialogs.errors and log.count("✔") == 8
+    ok = len(pages) == len(PAGES) and files > 0 and not dialogs.errors and log.count("✔") == 8
     print(
         f"Auto-diagnostic : {'RÉUSSI' if ok else 'ÉCHEC'} — {len(pages)} écran(s), "
         f"{files} fichier(s) analysé(s) dans {source}"

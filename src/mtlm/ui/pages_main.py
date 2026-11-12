@@ -77,7 +77,7 @@ class Page(QWidget):
             raise RuntimeError("fenêtre principale non initialisée")
         return self.app.window
 
-    def button_row(self, *buttons: QPushButton) -> QHBoxLayout:
+    def button_row(self, *buttons: QWidget) -> QHBoxLayout:
         row = QHBoxLayout()
         for button in buttons:
             row.addWidget(button)
@@ -90,11 +90,24 @@ class Page(QWidget):
     ) -> QPushButton:
         return self.app.registry.button(f"{self.key}.{action_id}", label, handler, tooltip, role)
 
-    def select_buttons(self, name: str, table: Any) -> tuple[Any, Any]:
-        """Boutons « Tout sélectionner » / « Tout désélectionner » pour une liste."""
+    def select_buttons(self, name: str, table: Any) -> tuple[Any, Any, Any]:
+        """« Tout sélectionner », « Tout désélectionner » et le compteur de la sélection."""
+        counter = QLabel("0 sélectionné(s)")
+        counter.setObjectName("cardHint")
+        counter.setToolTip(
+            "Nombre de lignes choisies. Un clic sur une ligne l'ajoute ou la retire."
+        )
+
+        def update() -> None:
+            count = len(table.selectionModel().selectedRows())
+            counter.setText(f"{count} sélectionné(s)")
+
+        table.itemSelectionChanged.connect(update)
+        setattr(self, f"counter_{name}", counter)
         return (
             self.btn(f"tout_{name}", "Tout sélectionner", table.selectAll),
             self.btn(f"aucun_{name}", "Tout désélectionner", table.clearSelection),
+            counter,
         )
 
     def banner(self, text: str, kind: str = "banner") -> QFrame:

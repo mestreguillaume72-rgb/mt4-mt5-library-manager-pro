@@ -107,3 +107,49 @@ def test_familles_type_dependances_et_avertissement(
     click(window, qtbot, "familles.corbeille")
     assert "ATTENTION" in dialogs.confirms[-1] and "Gold Robot.mq4" in dialogs.confirms[-1]
     assert (lib / "MQL4" / "Indicators" / "SuperTrend.ex4").exists()
+
+
+def _click_row(qtbot: object, table: Any, row: int) -> None:
+    from PySide6.QtCore import Qt
+
+    rect = table.visualItemRect(table.item(row, 1))
+    qtbot.mouseClick(  # type: ignore[attr-defined]
+        table.viewport(), Qt.MouseButton.LeftButton, pos=rect.center()
+    )
+
+
+def test_sources_mq_choisir_deux_sources_au_clic(
+    window: MainWindow, qtbot: object, dialogs: FakeDialogs, tmp_path: Path
+) -> None:
+    lib = tmp_path / "lib"
+    build_dependencies(lib)
+    (lib / "MQL4" / "Experts" / "Autre.mq4").write_text(
+        "extern int X = 1;\nint start(){return 0;}\n", encoding="utf-8"
+    )
+    analysed(window, qtbot, dialogs, lib)
+    window.navigate("sources_mq")
+    page: Any = window.pages["sources_mq"]
+    page.refresh()
+    assert page.sources.rowCount() == 3
+    rows = {page.sources.item(r, 1).text(): r for r in range(page.sources.rowCount())}
+    # Un clic ajoute, sans clavier ; un second clic retire.
+    _click_row(qtbot, page.sources, rows["MQL4/Experts/Gold/Gold Robot.mq4"])
+    _click_row(qtbot, page.sources, rows["MQL4/Experts/Autre.mq4"])
+    assert page.counter_sources.text() == "2 sélectionné(s)"
+    _click_row(qtbot, page.sources, rows["MQL4/Experts/Autre.mq4"])
+    assert page.counter_sources.text() == "1 sélectionné(s)"
+    _click_row(qtbot, page.sources, rows["MQL4/Experts/Autre.mq4"])
+    dest = tmp_path / "Dest"
+    dest.mkdir()
+    dialogs.directories.append(dest)
+    dialogs.confirm_answer = True
+    click(window, qtbot, "sources_mq.isoler")
+    assert "2 source(s) choisie(s)" in dialogs.confirms[-1]
+    wait_idle(window, qtbot)
+    folder = next(dest.iterdir())
+    copied = {p.relative_to(folder).as_posix() for p in folder.rglob("*") if p.is_file()}
+    assert "MQ4/Autre/Autre.mq4" in copied and "MQ4/Gold Robot/Gold Robot.mq4" in copied
+    # L'indicateur utilisé par le robot suit le robot ; la source SuperTrend non choisie, oui
+    # par dépendance, mais jamais dans son propre dossier.
+    assert "MQ4/Gold Robot/SuperTrend.mq4" in copied
+    assert not any(c.startswith("MQ4/SuperTrend/") for c in copied)
