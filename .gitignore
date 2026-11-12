@@ -37,3 +37,8 @@ build/
 .DS_Store
 packaging/macos/AppIcon.iconset/
 packaging/macos/AppIcon.icns
+
+# Construction locale sur Mac (Construire-sur-ce-Mac.command)
+construction-locale.log
+packaging/macos/AppIcon.iconset/
+packaging/macos/AppIcon.icns

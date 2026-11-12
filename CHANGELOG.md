@@ -24,6 +24,9 @@
   ensemble = probable ; seul outil du dossier = possible. Placement : rangé avec son outil /
   en vrac / rangé avec un autre outil. Onglet dans « Familles et versions », résumé sur
   l'Accueil ; ils suivent leur robot dans les dossiers proposés (Images, Sons, Documents…).
+- **Construire sur votre Mac sans GitHub** : `Construire-sur-ce-Mac.command` (installe uv
+  sans droits administrateur, construit, teste, crée le .dmg, installe sur demande) ; zip des
+  sources joint à chaque version ; testé en CI sur un Mac Intel neuf.
 - **Bulles d'aide en français** sur chaque bouton, chaque écran du menu et les listes
   (test : aucun bouton sans bulle).
 
