@@ -218,8 +218,9 @@ jobs:
   release:
     name: Pré-version GitHub
     needs: test
-    # Publication : étiquette v*, ou envoi dont le message contient « [publier] ».
-    if: startsWith(github.ref, 'refs/tags/v') || contains(github.event.head_commit.message, '[publier]')
+    # Publication : étiquette v*, envoi dont le message contient « [publier] », ou lancement
+    # manuel (Actions → Application macOS → Run workflow).
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || contains(github.event.head_commit.message, '[publier]')
     runs-on: ubuntu-latest
     permissions:
       contents: write
