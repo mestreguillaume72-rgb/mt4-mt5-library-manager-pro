@@ -169,6 +169,7 @@ class FamilyService:
             " count(CASE WHEN fm.relation IN ('version_variant', 'homonym_different',"
             " 'source_of') THEN 1 END)"
             " FROM file_family ff JOIN family_member fm ON fm.family_id = ff.id"
+            " JOIN file_record pf ON pf.id = fm.file_id AND pf.presence = 'present'"
             f" WHERE {' AND '.join(clauses)} GROUP BY ff.id HAVING count(fm.file_id) >= ?"
             " ORDER BY count(fm.file_id) DESC, ff.display_name LIMIT ?",
             (*params, min_members, limit),
@@ -189,6 +190,7 @@ class FamilyService:
                 "SELECT fm.file_id, f.rel_path, fm.relation, fm.estimated_version,"
                 " fm.version_basis, fm.confidence FROM family_member fm"
                 " JOIN file_record f ON f.id = fm.file_id WHERE fm.family_id = ?"
+                " AND f.presence = 'present'"
                 " ORDER BY fm.relation, f.rel_path",
                 (family_id,),
             )

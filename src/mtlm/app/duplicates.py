@@ -397,7 +397,7 @@ class DuplicateService:
         if not rows:
             raise DuplicateError(f"Groupe {group_id} inconnu")
         paths = [os.path.join(os.fsencode(r[1]), bytes(r[2])) for r in rows]  # noqa: PTH118
-        identical = all(_same_bytes(paths[0], other) for other in paths[1:])
+        identical = all(same_bytes(paths[0], other) for other in paths[1:])
         with transaction(self._conn):
             if identical:
                 self._conn.execute(
@@ -422,7 +422,8 @@ class DuplicateService:
         return identical
 
 
-def _same_bytes(a: bytes, b: bytes) -> bool:
+def same_bytes(a: bytes, b: bytes) -> bool:
+    """Vrai si les deux fichiers sont identiques octet par octet (lecture seule)."""
     try:
         with ReadOnlyFile(a) as fa, ReadOnlyFile(b) as fb:
             if fa.opened_identity.size != fb.opened_identity.size:

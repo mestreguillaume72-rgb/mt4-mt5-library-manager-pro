@@ -20,6 +20,7 @@ from tests.conftest import ConnectDb
 
 EXPECTED_TABLES = {
     "source_root",
+    "deletion_record",
     "job",
     "job_checkpoint",
     "content",

@@ -1,6 +1,6 @@
 [project]
 name = "mtlm"
-version = "1.2.2"
+version = "1.3.0"
 description = "MT4 MT5 Library Manager PRO — gestion et analyse sécurisée de bibliothèques MetaTrader (macOS)"
 readme = "README.md"
 requires-python = ">=3.12"

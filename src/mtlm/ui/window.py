@@ -168,7 +168,7 @@ class MainWindow(QMainWindow):
         brand_row.addWidget(logo)
         brand_row.addWidget(brand, 1)
         left.addLayout(brand_row)
-        safe = QLabel("🔒 Vos originaux restent intacts")
+        safe = QLabel("🔒 Rien n'est supprimé sans votre accord")
         safe.setObjectName("brandSub")
         left.addWidget(safe)
         left.addSpacing(6)
@@ -192,7 +192,9 @@ class MainWindow(QMainWindow):
         self._menu()
         self.navigate(next(iter(self.pages)))
         app.on_task_finished(self.refresh_current)
-        self.statusBar().showMessage("Prêt. Vos fichiers d'origine ne sont jamais modifiés.")
+        self.statusBar().showMessage(
+            "Prêt. Rien n'est modifié dans vos dossiers sans votre confirmation."
+        )
 
     def _add_nav(self, key: str) -> None:
         page = self.pages[key]

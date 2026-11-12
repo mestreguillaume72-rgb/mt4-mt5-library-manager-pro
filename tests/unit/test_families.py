@@ -158,3 +158,31 @@ def test_compiles_seuls_regroupes_par_nom() -> None:
     )
     assert family.confidence == "possible"
     assert relations(family) == {1: "compiled_variant", 2: "exact_copy"}
+
+
+def test_robot_identique_sous_un_tout_autre_nom_meme_famille() -> None:
+    """1.3.0 : un même robot (même contenu) sous un autre nom rejoint la famille."""
+    family = only(
+        build_families(
+            [
+                item(1, "MQL4/Experts/Scalper.mq4", content=10),
+                item(2, "MQL4/Experts/Scalper_v2.mq4", content=11),
+                item(3, "Telechargements/GoldMaster Pro.mq4", content=10),
+                item(4, "Telechargements/GoldMaster Pro.ex4", content=12, detected="unknown"),
+            ]
+        )
+    )
+    assert relations(family)[3] == "renamed_copy"
+    assert relations(family)[4] == "compiled_variant"  # le compilé suit sa source renommée
+    assert any("plusieurs noms" in b and "goldmaster" in b.casefold() for b in family.basis)
+
+
+def test_noms_differents_contenus_differents_restent_separes() -> None:
+    families = build_families(
+        [
+            item(1, "MQL4/Experts/Scalper.mq4", content=10),
+            item(2, "MQL4/Experts/GoldMaster.mq4", content=20),
+        ]
+    )
+    assert len(families) == 2
+    assert not any("plusieurs noms" in b for f in families for b in f.basis)

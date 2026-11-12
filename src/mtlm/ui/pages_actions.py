@@ -11,13 +11,18 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
     QFormLayout,
+    QHBoxLayout,
     QLabel,
     QPlainTextEdit,
     QSpinBox,
+    QTabWidget,
     QTextBrowser,
+    QVBoxLayout,
+    QWidget,
 )
 
 from mtlm import APP_NAME, ENGINE_VERSION, __version__
+from mtlm.app.deletion import DeletionService
 from mtlm.app.organize import OrganizeService, Preview
 from mtlm.app.presenters import human_size
 from mtlm.app.quarantine import QuarantineService, Simulation
@@ -31,16 +36,18 @@ from mtlm.ui.window import UiApp
 class QuarantinePage(Page):
     key, title, icon = "quarantaine", "Quarantaine", "🛡"
     subtitle = (
-        "Mettez de côté les copies en trop, par copie vérifiée vers un dossier séparé. Vos "
-        "originaux ne sont jamais modifiés ni déplacés."
+        "Mettez de côté les copies en trop par copie vérifiée, puis validez leur mise à la "
+        "Corbeille du Mac."
     )
 
     def __init__(self, app: UiApp) -> None:
         super().__init__(app)
         self.banner(
             "La quarantaine est une <b>copie vérifiée</b> des doublons exacts vers un "
-            "dossier séparé. <b>Vos originaux ne sont jamais modifiés, déplacés ni "
-            "supprimés.</b> Une simulation est obligatoire avant toute copie.",
+            "dossier séparé ; une simulation est obligatoire avant toute copie. Ensuite, "
+            "<b>vous validez</b> la mise à la <b>Corbeille du Mac</b> des originaux en trop : "
+            "une copie identique est toujours conservée et vérifiée octet par octet, et un "
+            "fichier mis à la Corbeille peut être remis en place.",
             "bannerSafe",
         )
         self.destination: Path | None = None
@@ -50,7 +57,7 @@ class QuarantinePage(Page):
         self.summary = QPlainTextEdit()
         self.summary.setReadOnly(True)
         self.summary.setObjectName("quarantaine.resume")
-        self.summary.setMaximumHeight(120)
+        self.summary.setMaximumHeight(80)
         self.summary.setPlaceholderText(
             "Comment faire : 1) choisissez un dossier de quarantaine sur un autre disque ou en "
             "dehors de vos bibliothèques ; 2) cliquez sur « Simuler » pour voir ce qui serait "
@@ -68,17 +75,103 @@ class QuarantinePage(Page):
         )
         self.batches.itemSelectionChanged.connect(self.load_entries)
         self.entries = make_table(["Fichier", "État", "Original", "Erreur"], badge_columns=(1,))
-        self.layout_.addWidget(two_columns(self.batches, self.entries), 1)
-        self.button_row(
-            self.btn("restaurer", "Restaurer le lot", lambda: self.restore(False)),
-            self.btn(
-                "recopier",
-                "Restaurer et recopier les originaux absents",
-                lambda: self.restore(True),
-            ),
-            self.btn("annuler", "Annuler le lot", self.cancel_batch),
-            self.btn("actualiser", "Actualiser", self.refresh),
+        tabs = QTabWidget()
+        lots = QWidget()
+        lots_layout = QVBoxLayout(lots)
+        lots_layout.setContentsMargins(0, 10, 0, 0)
+        lots_layout.addWidget(two_columns(self.batches, self.entries), 1)
+        lots_layout.addLayout(
+            self._row(
+                self.btn("restaurer", "Restaurer le lot", lambda: self.restore(False)),
+                self.btn(
+                    "recopier",
+                    "Restaurer et recopier les originaux absents",
+                    lambda: self.restore(True),
+                ),
+                self.btn("annuler", "Annuler le lot", self.cancel_batch),
+            )
         )
+        lots_layout.addLayout(
+            self._row(
+                self.btn(
+                    "corbeille",
+                    "4. Valider : originaux du lot à la Corbeille",
+                    self.trash_batch,
+                )
+            )
+        )
+        tabs.addTab(lots, "Lots de quarantaine")
+        bin_tab = QWidget()
+        bin_layout = QVBoxLayout(bin_tab)
+        bin_layout.setContentsMargins(0, 10, 0, 0)
+        hint = QLabel(
+            "Fichiers mis à la Corbeille du Mac, depuis la quarantaine, les doublons ou les "
+            "familles : récupérables tant que la Corbeille n'est pas vidée."
+        )
+        hint.setObjectName("pageSubtitle")
+        hint.setWordWrap(True)
+        bin_layout.addWidget(hint)
+        self.trashed = make_table(
+            ["N°", "Fichier", "Origine", "Copie conservée", "État", "Chemin d'origine", "Le"],
+            badge_columns=(4,),
+        )
+        bin_layout.addWidget(self.trashed, 1)
+        bin_layout.addLayout(
+            self._row(self.btn("remettre", "Remettre en place le fichier choisi", self.put_back))
+        )
+        tabs.addTab(bin_tab, "Corbeille")
+        self.layout_.addWidget(tabs, 1)
+        self.button_row(self.btn("actualiser", "Actualiser", self.refresh))
+
+    @staticmethod
+    def _row(*buttons: QWidget) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.setSpacing(10)
+        for button in buttons:
+            row.addWidget(button)
+        row.addStretch(1)
+        return row
+
+    def _deletion(self) -> DeletionService:
+        ctx = self.app.ctx
+        return DeletionService(ctx.conn, ctx.clock, ctx.journal, ctx.trash)
+
+    def trash_batch(self) -> None:
+        batch = self._batch()
+        if batch is None:
+            self.app.dialogs.info(self.win, "Corbeille", "Sélectionnez un lot de quarantaine.")
+            return
+        originals = self._deletion().originals_of_batch(batch)
+        if not originals:
+            self.app.dialogs.info(
+                self.win,
+                "Corbeille",
+                "Ce lot n'a aucune copie vérifiée : lancez d'abord « Confirmer et copier ».",
+            )
+            return
+        self.trash_with_confirmation(
+            originals,
+            "quarantaine",
+            f"Lot {batch} : les {len(originals)} original(aux) en trop, déjà copiés et vérifiés "
+            "en quarantaine, partent à la Corbeille. La référence de chaque groupe et la copie "
+            "de quarantaine sont conservées.",
+        )
+
+    def put_back(self) -> None:
+        value = selected_value(self.trashed)
+        if value is None:
+            self.app.dialogs.info(
+                self.win, "Remettre en place", "Sélectionnez un fichier mis à la Corbeille."
+            )
+            return
+        self._deletion().put_back(int(value))
+        self.app.dialogs.info(
+            self.win,
+            "Remettre en place",
+            "Fichier remis à son emplacement d'origine. Relancez l'analyse pour mettre à jour "
+            "les doublons.",
+        )
+        self.refresh()
 
     def _service(self) -> QuarantineService:
         ctx = self.app.ctx
@@ -98,6 +191,22 @@ class QuarantinePage(Page):
                     b.created_at,
                 )
                 for b in self._service().batches()
+            ],
+        )
+        states = {"trashed": "à la Corbeille", "restored": "remis en place"}
+        fill_table(
+            self.trashed,
+            [
+                (
+                    r.id,
+                    r.file_id,
+                    r.origin,
+                    r.keeper,
+                    states[r.state],
+                    r.original_path,
+                    r.created_at,
+                )
+                for r in self._deletion().records()
             ],
         )
         self.load_entries()
@@ -471,7 +580,10 @@ Rien n'y sera écrit.</li>
 </ol>
 <h4>Garanties</h4>
 <ul>
-<li>Vos fichiers d'origine ne sont <b>jamais</b> modifiés, déplacés ni supprimés.</li>
+<li>Vos fichiers d'origine ne sont <b>jamais</b> modifiés ni déplacés par l'analyse.</li>
+<li>Un fichier n'est retiré de vos dossiers que si <b>vous</b> le demandez et le confirmez :
+il part dans la <b>Corbeille du Mac</b> (récupérable), et seulement si une copie identique est
+conservée, sauf accord explicite pour un exemplaire unique.</li>
 <li>Aucun robot, indicateur, script ou DLL n'est jamais exécuté.</li>
 <li>Aucune donnée n'est envoyée sur Internet.</li>
 <li>Chaque action sensible est inscrite dans un journal d'audit infalsifiable.</li>

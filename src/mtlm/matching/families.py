@@ -1,6 +1,8 @@
 """Familles et versions (F6) : identité logique séparée de l'empreinte binaire.
 
 * Regroupement initial par nom logique (sans version ni « copie ») et plateforme.
+* Un même robot enregistré sous **d'autres noms** (contenu identique octet pour octet, même
+  SHA-256) rejoint la même famille : les groupes de noms qui partagent un contenu sont réunis.
 * Les sources d'un même nom mais aux **paramètres trop différents** sont séparées en familles
   distinctes (homonymes) — jamais fusionnées.
 * Dans une famille : copies exactes (même contenu, même nom), copies renommées (même contenu,
@@ -16,7 +18,7 @@ from dataclasses import dataclass, field
 
 from mtlm.matching.names import logical_key, parse_version, stem, version_in_name
 
-METHOD_VERSION = "familles-v1"
+METHOD_VERSION = "familles-v2"
 HOMONYM_THRESHOLD = 0.5  # similarité minimale des noms de paramètres pour rester ensemble
 
 
@@ -109,6 +111,36 @@ def _version(item: FamilyInput, paired: FamilyInput | None) -> tuple[str | None,
     return None, None
 
 
+def _merge_identical(
+    groups: dict[tuple[str, str], list[FamilyInput]],
+) -> dict[tuple[str, str], tuple[list[FamilyInput], list[str]]]:
+    """Réunit les groupes de noms qui contiennent un même contenu (copie renommée).
+
+    Retourne, par groupe retenu (le plus grand, puis le premier par ordre), ses fichiers et,
+    s'il y a eu réunion, tous les noms logiques réunis."""
+    keys = sorted(groups)
+    index = {k: i for i, k in enumerate(keys)}
+    uf = _UnionFind(list(range(len(keys))))
+    owner: dict[int, int] = {}
+    for key in keys:
+        for item in groups[key]:
+            if item.content_id is None:
+                continue
+            first = owner.setdefault(item.content_id, index[key])
+            if first != index[key]:
+                uf.union(first, index[key])
+    clusters: dict[int, list[tuple[str, str]]] = defaultdict(list)
+    for key in keys:
+        clusters[uf.find(index[key])].append(key)
+    merged: dict[tuple[str, str], tuple[list[FamilyInput], list[str]]] = {}
+    for members in clusters.values():
+        main = max(members, key=lambda k: (len(groups[k]), -index[k]))
+        items = [item for k in members for item in groups[k]]
+        aliases = sorted(k[0] for k in members) if len(members) > 1 else []
+        merged[main] = (items, aliases)
+    return merged
+
+
 def build_families(items: list[FamilyInput]) -> list[Family]:
     groups: dict[tuple[str, str], list[FamilyInput]] = defaultdict(list)
     for item in items:
@@ -116,7 +148,7 @@ def build_families(items: list[FamilyInput]) -> list[Family]:
         if key:
             groups[(key, item.platform)].append(item)
     families: list[Family] = []
-    for (key, platform), group in sorted(groups.items()):
+    for (key, platform), (group, aliases) in sorted(_merge_identical(groups).items()):
         sources = [g for g in group if g.ext in ("mq4", "mq5", "mqh")]
         others = [g for g in group if g.ext not in ("mq4", "mq5", "mqh")]
         clusters = _split_homonyms(sources) if sources else [[]]
@@ -152,6 +184,7 @@ def build_families(items: list[FamilyInput]) -> list[Family]:
                 paired_of,
                 homonym=len([c for c in clusters if c]) > 1,
                 index=index,
+                aliases=aliases,
             )
             families.append(family)
     return families
@@ -165,12 +198,18 @@ def _make_family(
     *,
     homonym: bool,
     index: int,
+    aliases: list[str] | None = None,
 ) -> Family:
     items = sorted(items, key=lambda i: i.file_id)
     names = sorted({stem(i.rel_path) for i in items}, key=len)
     display = names[0] if names else key
     sources = [i for i in items if i.ext in ("mq4", "mq5", "mqh")]
     basis = [f"nom logique « {key} »", f"plateforme {platform}"]
+    if aliases:
+        basis.append(
+            "même robot sous plusieurs noms (contenu identique octet pour octet) : "
+            + ", ".join(f"« {a} »" for a in aliases)
+        )
     if len(sources) > 1:
         basis.append(
             "paramètres des sources comparables (≥ 50 % de noms communs) ou contenu "

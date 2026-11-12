@@ -102,6 +102,12 @@ DEFAULT_ROLES = {
     "parametres.enregistrer": "primary",
     "aide.demarrer": "primary",
     "sources.retirer": "danger",
+    "quarantaine.corbeille": "danger",
+    "doublons.corbeille_groupe": "danger",
+    "doublons.corbeille_fichier": "danger",
+    "familles.corbeille": "danger",
+    "familles.dossier": "primary",
+    "familles.isoler": "primary",
 }
 
 
@@ -233,6 +239,8 @@ BADGE_RULES: list[tuple[str, tuple[str, ...]]] = [
             "admissible",
             "partial",
             "stale",
+            "avec un autre robot",
+            "corbeille",
         ),
     ),
     (
@@ -251,11 +259,23 @@ BADGE_RULES: list[tuple[str, tuple[str, ...]]] = [
             "restaurée",
             "certain",
             "oui",
+            "avec son robot",
+            "remis en place",
         ),
     ),
     (
         "info",
-        ("en cours", "running", "copying", "simulated", "preview", "planned", "probable", "copie"),
+        (
+            "en cours",
+            "running",
+            "copying",
+            "simulated",
+            "preview",
+            "planned",
+            "probable",
+            "copie",
+            "en vrac",
+        ),
     ),
 ]
 

@@ -62,6 +62,14 @@ FORBIDDEN_CALLS = {
     "compile",
     "__import__",
 }
+# Seule exception à l'interdiction de ctypes (DECISIONS D-016) : la mise à la Corbeille, qui
+# appelle l'API officielle d'Apple et ne charge que deux bibliothèques système fixes.
+CTYPES_ALLOWED_FILE = "transfer/trash.py"
+APPLE_LIBRARIES = {
+    "/usr/lib/libobjc.A.dylib",
+    "/System/Library/Frameworks/Foundation.framework/Foundation",
+}
+
 # Modules qui lisent les sources de l'utilisateur : aucune écriture possible.
 ANALYSIS_MODULES = ("fs", "hashing", "formats", "metatrader", "setfiles", "matching")
 WRITE_CALLS = {
@@ -203,7 +211,12 @@ def check_source(
             )
             for name in names:
                 root = name.split(".")[0]
-                if name in FORBIDDEN_IMPORTS or root in FORBIDDEN_IMPORTS:
+                ctypes_exception = root == "ctypes" and filename.replace("\\", "/").endswith(
+                    CTYPES_ALLOWED_FILE
+                )
+                if (name in FORBIDDEN_IMPORTS or root in FORBIDDEN_IMPORTS) and not (
+                    ctypes_exception
+                ):
                     flag(node, f"import interdit : {name}")
                 if root == "PySide6" and package not in (None, "ui"):
                     flag(node, f"le moteur ne doit pas dépendre de l'interface : {name}")
@@ -365,3 +378,44 @@ def test_app_n_ecrit_pas_directement(snippet: str) -> None:
 )
 def test_detecte_dependance_interdite(package: str, snippet: str) -> None:
     assert check_source(snippet, "x.py", analysis=False, package=package)
+
+
+def test_ctypes_uniquement_pour_la_corbeille_et_bibliotheques_apple() -> None:
+    """La seule utilisation de ctypes charge exclusivement libobjc et Foundation d'Apple."""
+
+    def imported_roots(path: Path) -> set[str]:
+        roots: set[str] = set()
+        for n in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(n, ast.Import):
+                roots |= {a.name.split(".")[0] for a in n.names}
+            elif isinstance(n, ast.ImportFrom):
+                roots.add((n.module or "").split(".")[0])
+        return roots
+
+    users = [p.relative_to(SRC).as_posix() for p in iter_sources() if "ctypes" in imported_roots(p)]
+    assert users == [CTYPES_ALLOWED_FILE]
+    tree = ast.parse((SRC / CTYPES_ALLOWED_FILE).read_text(encoding="utf-8"))
+    constants = {
+        t.id: n.value.value
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Assign) and isinstance(n.value, ast.Constant)
+        for t in n.targets
+        if isinstance(t, ast.Name)
+    }
+    loads = [
+        n
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Call)
+        and (_dotted(n.func) or "").startswith("ctypes.")
+        and (_dotted(n.func) or "").split(".")[-1] in ("CDLL", "LoadLibrary", "PyDLL", "WinDLL")
+    ]
+    assert len(loads) == 2
+    for call in loads:
+        assert len(call.args) == 1 and isinstance(call.args[0], ast.Name)
+        assert constants[call.args[0].id] in APPLE_LIBRARIES
+    assert "LoadLibrary" not in (SRC / CTYPES_ALLOWED_FILE).read_text(encoding="utf-8")
+
+
+def test_ctypes_reste_interdit_ailleurs() -> None:
+    found = check_source("import ctypes", "src/mtlm/app/x.py", analysis=False, package="app")
+    assert found and "ctypes" in found[0].message

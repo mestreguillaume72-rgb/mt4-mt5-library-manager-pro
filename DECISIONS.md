@@ -143,3 +143,33 @@ Proposition : **macOS 12 Monterey ou plus récent** (PySide6 épinglé sur la br
 ## D-015 — Nom du plan de tests
 
 Le document « PLAN DE TESTS.md » est nommé `PLAN_DE_TESTS.md` (sans espaces) pour la robustesse des scripts et des liens. Renommage trivial si l'orthographe exacte est exigée.
+
+## D-016 — Suppression validée par l'utilisateur : Corbeille du Mac uniquement (1.3.0)
+
+**Contexte** : le propriétaire veut que les doublons passent en quarantaine, puis qu'il
+**valide leur suppression**, et pouvoir supprimer directement depuis « Doublons » ou
+« Familles et versions ». Cela modifie D-007 (« les originaux ne sont jamais supprimés »).
+
+**Décision du propriétaire (12/11/2026)** : la quarantaine reste une **copie** ; la suppression
+envoie le fichier dans la **Corbeille du Mac** (récupérable), jamais d'effacement définitif.
+Les dossiers de famille et l'isolement des sources MQ4/MQ5 sont des **propositions à valider**,
+exécutées par copie vérifiée.
+
+**Garde-fous** (`mtlm.app.deletion`) : fichier inchangé depuis l'analyse (identité + SHA-256
+relu) ; copie identique conservée vérifiée **octet par octet** juste avant (référence, autre
+copie ou copie de quarantaine) — une copie retirée dans la même opération ne compte jamais ;
+exemplaire unique refusé sauf accord explicite (écran Familles, avertissement) ; confirmation à
+chaque action ; registre `deletion_record` + journal d'audit ; « Remettre en place » sans jamais
+écraser. La référence d'un groupe ne peut pas être supprimée depuis « Doublons ».
+
+**Exception technique** : `ctypes` reste interdit partout, sauf dans `transfer/trash.py` qui
+charge **uniquement** `libobjc` et `Foundation` d'Apple pour appeler l'API officielle
+`NSFileManager.trashItemAtURL` (Corbeille du bon disque, « Remettre » du Finder). Un test
+statique vérifie ce périmètre. Aucun fichier de l'utilisateur n'est chargé ni exécuté.
+
+## D-017 — Placement des SET et familles par contenu identique (1.3.0)
+
+Le **placement** d'un SET (rangé avec son robot / en vrac, robot retrouvé / rangé avec un autre
+robot) est affiché et filtrable ; c'est une information qui ne modifie pas le score
+d'association (tous les SET sont analysés de la même façon). Un robot identique octet pour
+octet enregistré sous un autre nom rejoint la même famille (`familles-v2`).

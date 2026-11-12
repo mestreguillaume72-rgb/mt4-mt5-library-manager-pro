@@ -15,10 +15,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from mtlm.app.deletion import DeletionService
 from mtlm.app.duplicates import DuplicateService
 from mtlm.app.families import FamilyService
 from mtlm.app.presenters import RELATION_LABELS, human_size
-from mtlm.app.sets import LEVEL_LABELS, AssociationService, SetService
+from mtlm.app.sets import LEVEL_LABELS, PLACEMENT_LABELS, AssociationService, SetService
 from mtlm.ui.base import fill_table, make_table, selected_value
 from mtlm.ui.pages_main import Page, two_columns
 from mtlm.ui.window import UiApp
@@ -42,17 +43,30 @@ class SetsPage(Page):
         self.search = QLineEdit()
         self.search.setPlaceholderText("Filtrer par nom de SET…")
         self.search.returnPressed.connect(self.refresh)
+        self.placement = QComboBox()
+        self.placement.setAccessibleName("Placement des SET")
+        for label, value in (
+            ("Tous les SET", None),
+            (PLACEMENT_LABELS["avec_son_robot"], "avec_son_robot"),
+            (PLACEMENT_LABELS["en_vrac"], "en_vrac"),
+            (PLACEMENT_LABELS["avec_autre_robot"], "avec_autre_robot"),
+        ):
+            self.placement.addItem(label, value)
+        self.placement.currentIndexChanged.connect(lambda _i: self.refresh())
         filters.addWidget(self.search)
+        filters.addWidget(self.placement)
         filters.addWidget(self.only_orphans)
         self.layout_.addLayout(filters)
-        self.sets = make_table(["N°", "SET", "Format", "Paramètres", "Associations"])
+        self.sets = make_table(
+            ["N°", "SET", "Format", "Paramètres", "Associations", "Placement"], badge_columns=(5,)
+        )
         self.sets.itemSelectionChanged.connect(self.load_selected)
         self.params = make_table(
             ["Paramètre", "Valeur brute", "Normalisée", "Type", "Optimisation"]
         )
         self.layout_.addWidget(two_columns(self.sets, self.params), 2)
         self.assoc = make_table(
-            ["N°", "Score", "Niveau", "Décision", "Robot"], badge_columns=(2, 3)
+            ["N°", "Score", "Niveau", "Décision", "Placement", "Robot"], badge_columns=(2, 3, 4)
         )
         self.assoc.itemSelectionChanged.connect(self.load_evidence)
         self.evidence = QPlainTextEdit()
@@ -114,7 +128,16 @@ class SetsPage(Page):
             sql += " AND f.id IN (SELECT set_file_id FROM association WHERE robot_file_id = ?)"
             params.append(self._robot_filter)
         rows = self.conn.execute(sql + " ORDER BY f.rel_path LIMIT 5000", params).fetchall()
-        fill_table(self.sets, rows)
+        placements = self._assoc().placements()
+        wanted = self.placement.currentData()
+        fill_table(
+            self.sets,
+            [
+                (*r, PLACEMENT_LABELS.get(placements.get(int(r[0]), ""), "sans robot"))
+                for r in rows
+                if wanted is None or placements.get(int(r[0])) == wanted
+            ],
+        )
         self.load_selected()
 
     def _set_id(self) -> int | None:
@@ -150,7 +173,14 @@ class SetsPage(Page):
         fill_table(
             self.assoc,
             [
-                (a.id, a.score, LEVEL_LABELS[a.level], DECISIONS[a.user_decision], a.robot_path)
+                (
+                    a.id,
+                    a.score,
+                    LEVEL_LABELS[a.level],
+                    DECISIONS[a.user_decision],
+                    PLACEMENT_LABELS[a.placement],
+                    a.robot_path,
+                )
                 for a in rows
             ],
         )
@@ -231,6 +261,13 @@ class FamiliesPage(Page):
             self.btn("rechercher", "Rechercher", self.refresh),
             self.btn("actualiser", "Actualiser", self.refresh),
         )
+        self.banner(
+            "Un même robot enregistré sous <b>d'autres noms</b> (contenu identique) est réuni "
+            "dans sa famille. Vous pouvez <b>proposer un dossier au nom du robot</b> qui réunit "
+            "toute la famille, ou <b>isoler toutes les sources MQ4/MQ5 avec leurs SET</b> : "
+            "vous voyez d'abord la proposition, puis vous validez (copie vérifiée).",
+            "banner",
+        )
         self.families = make_table(
             ["N°", "Famille", "Plateforme", "Membres", "Versions", "Confiance"], badge_columns=(5,)
         )
@@ -243,6 +280,65 @@ class FamiliesPage(Page):
         self.layout_.addWidget(self.families, 2)
         self.layout_.addWidget(self.reasons, 1)
         self.layout_.addWidget(self.members, 2)
+        self.button_row(
+            self.btn("dossier", "Proposer un dossier pour cette famille…", self.propose_family),
+            self.btn("isoler", "Isoler les MQ4/MQ5 avec leurs SET…", self.propose_sources),
+            self.btn("corbeille", "Mettre le fichier choisi à la Corbeille", self.trash_member),
+        )
+
+    def _family(self) -> int | None:
+        value = selected_value(self.families)
+        return int(value) if value else None
+
+    def propose_family(self) -> None:
+        family = self._family()
+        if family is None:
+            self.app.dialogs.info(self.win, "Dossier de famille", "Sélectionnez une famille.")
+            return
+        name = selected_value(self.families, 1) or ""
+        self.propose_folder(
+            "Dossier de famille",
+            f"Toute la famille « {name} » (versions, copies renommées, compilés et SET "
+            "associés) réunie dans un dossier au nom du robot ; chaque fichier est rangé "
+            "sous le nom de son dossier d'origine.",
+            lambda service, destination: service.preview_family(destination, family),
+        )
+
+    def propose_sources(self) -> None:
+        self.propose_folder(
+            "Isoler les MQ4/MQ5",
+            "Chaque source MQ4/MQ5 dans « MQ4 » ou « MQ5 / <nom du robot> », avec les SET qui "
+            "lui sont associés (acceptés par vous, ou de niveau « forte » non rejetés).",
+            lambda service, destination: service.preview_sources(destination),
+        )
+
+    def trash_member(self) -> None:
+        member = selected_value(self.members)
+        if member is None:
+            self.app.dialogs.info(
+                self.win, "Corbeille", "Sélectionnez le fichier de la famille à supprimer."
+            )
+            return
+        file_id = int(member)
+        copies = int(
+            self.conn.execute(
+                "SELECT count(*) FROM file_record o JOIN file_record f ON f.id = ?"
+                " WHERE o.content_id = f.content_id AND o.id <> f.id AND o.presence = 'present'",
+                (file_id,),
+            ).fetchone()[0]
+        )
+        path = selected_value(self.members, 4) or ""
+        self.trash_with_confirmation(
+            [file_id],
+            "familles",
+            f"Fichier : {path}"
+            + (
+                f"\n{copies} copie(s) identique(s) existe(nt) ailleurs et sera conservée."
+                if copies
+                else "\nCe fichier est le SEUL exemplaire de ce contenu (version unique)."
+            ),
+            allow_unique=copies == 0,
+        )
 
     def _service(self) -> FamilyService:
         ctx = self.app.ctx
@@ -347,6 +443,58 @@ class DuplicatesPage(Page):
             self.btn("reference", "Conserver ce fichier comme référence", self.set_reference),
             self.btn("octets", "Vérifier octet par octet", self.verify_bytes),
             self.btn("actualiser", "Actualiser", self.refresh),
+        )
+        self.button_row(
+            self.btn(
+                "corbeille_groupe",
+                "Mettre à la Corbeille les copies en trop du groupe",
+                self.trash_group,
+            ),
+            self.btn(
+                "corbeille_fichier", "Mettre le fichier choisi à la Corbeille", self.trash_one
+            ),
+        )
+
+    def _deletion(self) -> DeletionService:
+        ctx = self.app.ctx
+        return DeletionService(ctx.conn, ctx.clock, ctx.journal, ctx.trash)
+
+    def trash_group(self) -> None:
+        group = self._group()
+        if group is None:
+            self.app.dialogs.info(self.win, "Corbeille", "Sélectionnez un groupe de doublons.")
+            return
+        surplus = self._deletion().surplus_of_group(group)
+        self.trash_with_confirmation(
+            surplus,
+            "doublons",
+            f"Groupe {group} : la référence est conservée, ses {len(surplus)} copie(s) "
+            "identique(s) partent à la Corbeille.",
+        )
+
+    def trash_one(self) -> None:
+        group = self._group()
+        member = selected_value(self.members)
+        if group is None or member is None:
+            self.app.dialogs.info(
+                self.win, "Corbeille", "Sélectionnez un groupe puis le fichier à supprimer."
+            )
+            return
+        reference = self.conn.execute(
+            "SELECT reference_file_id FROM duplicate_group WHERE id = ?", (group,)
+        ).fetchone()
+        if reference is not None and reference[0] == int(member):
+            self.app.dialogs.info(
+                self.win,
+                "Corbeille",
+                "Ce fichier est la RÉFÉRENCE conservée du groupe. Choisissez d'abord une autre "
+                "référence (« Conserver ce fichier comme référence »).",
+            )
+            return
+        self.trash_with_confirmation(
+            [int(member)],
+            "doublons",
+            f"Fichier : {selected_value(self.members, 2) or ''}",
         )
 
     def _service(self) -> DuplicateService:

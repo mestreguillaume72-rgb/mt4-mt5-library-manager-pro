@@ -9,6 +9,9 @@
   vérifiés sont sautés. Au premier doute, elle s'arrête.
 * Les originaux ne sont jamais modifiés. Les fichiers en quarantaine sont exclus ; par défaut,
   chaque contenu n'est copié qu'une fois (la référence de son groupe de doublons).
+* Propositions ciblées (1.3.0), validées par l'utilisateur dans « Familles et versions » :
+  dossier d'une famille au nom du robot (:meth:`OrganizeService.preview_family`) et sources
+  MQ4/MQ5 isolées avec leurs SET (:meth:`OrganizeService.preview_sources`).
 
 Règles par défaut (modèle ``standard``) :
 
@@ -268,8 +271,30 @@ class OrganizeService:
             )
         if not planned:
             raise OrganizeError("Rien à organiser : lancez d'abord inventaire et empreintes.")
+        return self._record_plan(
+            plan_root,
+            planned,
+            collisions,
+            TEMPLATE,
+            {"doublons_inclus": include_duplicates},
+            excluded_q,
+            excluded_d,
+        )
+
+    def _record_plan(
+        self,
+        plan_root: Path,
+        planned: list[PlannedItem],
+        collisions: int,
+        template: str,
+        rules: dict[str, Any],
+        excluded_q: int,
+        excluded_d: int,
+    ) -> Preview:
         total = sum(p.size for p in planned)
-        digest = hashlib.sha256(f"{plan_root}|{TEMPLATE}|{include_duplicates}".encode())
+        digest = hashlib.sha256(
+            f"{plan_root}|{template}|{json.dumps(rules, sort_keys=True)}".encode()
+        )
         for p in planned:
             digest.update(f"{p.file_id}|{p.sha256.hex()}|{p.target}|{p.identity}".encode())
         token = digest.hexdigest()
@@ -285,10 +310,10 @@ class OrganizeService:
                 (
                     iso_utc(self._clock.now()),
                     str(plan_root),
-                    json.dumps({"doublons_inclus": include_duplicates}),
+                    json.dumps(rules, ensure_ascii=False),
                     collisions,
                     token,
-                    TEMPLATE,
+                    template,
                     total,
                 ),
             )
@@ -304,6 +329,7 @@ class OrganizeService:
             str(plan_root),
             details={
                 "plan": plan_id,
+                "modele": template,
                 "fichiers": len(planned),
                 "collisions": collisions,
                 "octets": total,
@@ -319,6 +345,174 @@ class OrganizeService:
             excluded_q,
             excluded_d,
             dict(sorted(tree.items())),
+        )
+
+    # ---- propositions ciblées (1.3.0) : à valider par l'utilisateur ----------------------------
+    def _destination(self, destination: Path) -> Path:
+        return check_destination(
+            destination,
+            self._source_roots(),
+            [self._paths.data_dir, self._paths.logs_dir],
+            require_existing=True,
+        )
+
+    def _files(self, file_ids: list[int]) -> dict[int, tuple[Any, ...]]:
+        """Fichiers présents, analysés et lisibles (dans l'ordre demandé)."""
+        found: dict[int, tuple[Any, ...]] = {}
+        for start in range(0, len(file_ids), 500):
+            chunk = file_ids[start : start + 500]
+            for r in self._conn.execute(
+                "SELECT f.id, s.path, f.rel_path_bytes, f.size, c.sha256, f.mtime_ns, f.inode,"
+                " f.device, f.content_id, f.name, f.rel_path, f.in_quarantine FROM file_record f"
+                " JOIN source_root s ON s.id = f.root_id JOIN content c ON c.id = f.content_id"
+                " WHERE f.presence = 'present' AND f.hash_state = 'validated'"
+                " AND f.file_type = 'file' AND s.status = 'ok'"
+                f" AND f.id IN ({','.join('?' * len(chunk))})",
+                chunk,
+            ):
+                found[int(r[0])] = tuple(r)
+        return {i: found[i] for i in file_ids if i in found}
+
+    @staticmethod
+    def _unique_folder(parent: Path, name: str) -> Path:
+        candidate = parent / name
+        n = 2
+        while candidate.exists():
+            candidate = parent / f"{name} ({n})"
+            n += 1
+        return candidate
+
+    def _place(
+        self, selection: list[tuple[tuple[Any, ...], str]]
+    ) -> tuple[list[PlannedItem], int, int, int]:
+        """Cibles → éléments du plan : quarantaine exclue, un seul exemplaire par contenu,
+        collisions de noms résolues par suffixe « (2) »."""
+        planned: list[PlannedItem] = []
+        taken: dict[str, int] = {}
+        seen: set[int] = set()
+        collisions = excluded_q = excluded_d = 0
+        for r, target in selection:
+            if int(r[11]):
+                excluded_q += 1
+                continue
+            if int(r[8]) in seen:
+                excluded_d += 1
+                continue
+            seen.add(int(r[8]))
+            key = unicodedata.normalize("NFC", target).casefold()
+            collision_of = None
+            if key in taken:
+                collisions += 1
+                collision_of = taken[key]
+                n = 2
+                while unicodedata.normalize("NFC", _with_suffix(target, n)).casefold() in taken:
+                    n += 1
+                target = _with_suffix(target, n)
+                key = unicodedata.normalize("NFC", target).casefold()
+            taken[key] = int(r[0])
+            planned.append(
+                PlannedItem(
+                    int(r[0]),
+                    os.path.join(os.fsencode(r[1]), bytes(r[2])),  # noqa: PTH118
+                    target,
+                    int(r[3]),
+                    bytes(r[4]),
+                    FileIdentity(int(r[3]), int(r[5]), int(r[6]), int(r[7])),
+                    collision_of,
+                )
+            )
+        return planned, collisions, excluded_q, excluded_d
+
+    def preview_family(self, destination: Path, family_id: int) -> Preview:
+        """Proposition : toute la famille (versions, copies renommées, compilés, SET associés)
+        réunie dans **un dossier au nom du robot**, chaque fichier sous le nom de son dossier
+        d'origine (« tous les dossiers ensemble »). Copie vérifiée après validation."""
+        head = self._conn.execute(
+            "SELECT display_name FROM file_family WHERE id = ?", (family_id,)
+        ).fetchone()
+        if head is None:
+            raise OrganizeError(f"Famille {family_id} inconnue : relancez l'étape « Familles »")
+        target_root = self._destination(destination)
+        plan_root = self._unique_folder(target_root, _component(str(head[0])))
+        members = [
+            int(r[0])
+            for r in self._conn.execute(
+                "SELECT fm.file_id FROM family_member fm"
+                " LEFT JOIN duplicate_member dm ON dm.file_id = fm.file_id"
+                " WHERE fm.family_id = ? ORDER BY coalesce(dm.is_reference, 0) DESC, fm.file_id",
+                (family_id,),
+            )
+        ]
+        files = self._files(members)
+        selection = []
+        for r in files.values():
+            folder = str(r[10]).rpartition("/")[0].rpartition("/")[2] or "Racine"
+            selection.append((r, f"{_component(folder)}/{_component(str(r[9]))}"))
+        planned, collisions, excluded_q, excluded_d = self._place(selection)
+        if not planned:
+            raise OrganizeError("Aucun fichier présent dans cette famille.")
+        return self._record_plan(
+            plan_root,
+            planned,
+            collisions,
+            "famille-v1",
+            {"famille": family_id, "nom": str(head[0])},
+            excluded_q,
+            excluded_d,
+        )
+
+    def preview_sources(self, destination: Path) -> Preview:
+        """Proposition : isoler les sources MQ4/MQ5 avec leurs SET. Chaque source va dans
+        ``MQ4|MQ5/<nom du robot>/`` avec les SET qui lui sont associés (acceptés par vous, ou
+        de niveau « forte » non rejetés). Copie vérifiée après validation."""
+        target_root = self._destination(destination)
+        plan_root = self._unique_folder(
+            target_root, f"Sources MQ4-MQ5 avec SET {self._clock.now():%Y-%m-%d}"
+        )
+        sources = self._files(
+            [
+                int(r[0])
+                for r in self._conn.execute(
+                    "SELECT f.id FROM file_record f LEFT JOIN duplicate_member dm"
+                    " ON dm.file_id = f.id WHERE f.ext IN ('mq4', 'mq5')"
+                    " ORDER BY coalesce(dm.is_reference, 0) DESC, f.rel_path"
+                )
+            ]
+        )
+        folder_of: dict[int, str] = {}
+        kept_by_content: dict[int, str] = {}
+        selection: list[tuple[tuple[Any, ...], str]] = []
+        for r in sources.values():
+            platform = "MQ4" if str(r[9]).casefold().endswith(".mq4") else "MQ5"
+            folder = f"{platform}/{_component(Path(str(r[9])).stem)}"
+            if int(r[8]) in kept_by_content:  # copie identique : ses SET suivent l'exemplaire gardé
+                folder_of[int(r[0])] = kept_by_content[int(r[8])]
+            else:
+                kept_by_content[int(r[8])] = folder
+                folder_of[int(r[0])] = folder
+            selection.append((r, f"{folder}/{_component(str(r[9]))}"))
+        best: dict[int, int] = {}
+        for set_id, robot_id in self._conn.execute(
+            "SELECT set_file_id, robot_file_id FROM association"
+            " WHERE user_decision = 'accepted' OR (level = 'forte' AND user_decision = 'none')"
+            " ORDER BY set_file_id, user_decision = 'accepted' DESC, score DESC, id"
+        ):
+            if int(robot_id) in folder_of:
+                best.setdefault(int(set_id), int(robot_id))
+        sets = self._files(sorted(best))
+        for set_id, r in sets.items():
+            selection.append((r, f"{folder_of[best[set_id]]}/{_component(str(r[9]))}"))
+        planned, collisions, excluded_q, excluded_d = self._place(selection)
+        if not planned:
+            raise OrganizeError("Aucune source MQ4/MQ5 analysée.")
+        return self._record_plan(
+            plan_root,
+            planned,
+            collisions,
+            "mq-avec-set-v1",
+            {"sources": len(sources), "set_associes": len(sets)},
+            excluded_q,
+            excluded_d,
         )
 
     def items(self, plan_id: int, limit: int = 1000) -> list[tuple[int, str, str, int | None]]:

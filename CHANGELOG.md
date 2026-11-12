@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.3.0] — Corbeille, placement des SET, familles réunies, dossiers proposés
+
+### Ajouté
+- **Placement des SET** (écran Robots et SET : colonne et filtre ; résumé sur l'Accueil) :
+  « Rangé avec son robot », « En vrac — correspondance trouvée », « Rangé avec un autre robot ».
+  Information seulement : tous les SET sont analysés de la même façon.
+- **Suppression validée → Corbeille du Mac** : depuis la Quarantaine (« 4. Valider »), les
+  Doublons (copies en trop d'un groupe, ou un fichier) et les Familles (un fichier). Copie
+  identique conservée vérifiée octet par octet juste avant ; exemplaire unique signalé ;
+  historique et « Remettre en place » (onglet Corbeille). Décision D-016.
+- **Familles** : un même robot (contenu identique) enregistré sous d'autres noms rejoint sa
+  famille.
+- **Propositions à valider** (Familles et versions) : dossier de toute une famille au nom du
+  robot ; isoler toutes les sources MQ4/MQ5 avec leurs SET associés. Aperçu, puis copie
+  vérifiée seulement après validation.
+
+### Modifié
+- Textes de sécurité : l'analyse ne modifie jamais rien ; seuls les fichiers que vous choisissez
+  de supprimer partent dans la Corbeille du Mac, après confirmation.
+- Écran Quarantaine en deux onglets : « Lots de quarantaine » et « Corbeille ».
+
 ## [1.2.2] — Application universelle (Intel + Apple Silicon)
 
 ### Corrigé

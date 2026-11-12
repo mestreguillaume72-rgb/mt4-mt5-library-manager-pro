@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import Qt, QTimer
@@ -23,8 +25,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from mtlm.app.deletion import DeletionService
 from mtlm.app.inventory import FileFilter, InventoryService
 from mtlm.app.jobs import JobStore
+from mtlm.app.organize import OrganizeService, Preview
 from mtlm.app.pipeline import STEPS, run_steps
 from mtlm.app.presenters import (
     JOB_KIND_LABELS,
@@ -100,6 +104,105 @@ class Page(QWidget):
 
     def refresh(self) -> None:
         """Recharge l'écran depuis la base (aucune donnée fictive)."""
+
+    # ---- actions partagées (1.3.0) ------------------------------------------------------------
+    def trash_with_confirmation(
+        self, file_ids: list[int], origin: str, intro: str, *, allow_unique: bool = False
+    ) -> None:
+        """Corbeille du Mac après confirmation ; chaque fichier est revérifié avant."""
+        backend = self.app.ctx.trash
+        if backend is None:
+            self.app.dialogs.info(
+                self.win, "Corbeille", "La mise à la Corbeille n'est disponible que sur Mac."
+            )
+            return
+        if not file_ids:
+            self.app.dialogs.info(self.win, "Corbeille", "Aucun fichier à mettre à la Corbeille.")
+            return
+        safety = (
+            "ATTENTION : exemplaire unique, aucune copie identique n'est conservée ailleurs."
+            if allow_unique
+            else "Avant chaque fichier, l'application vérifie qu'il n'a pas changé depuis "
+            "l'analyse et qu'une copie identique est conservée (comparaison octet par octet) ; "
+            "sinon il n'est pas touché."
+        )
+        if not self.app.dialogs.confirm(
+            self,
+            "Mettre à la Corbeille",
+            f"{intro}\n\n{len(file_ids)} fichier(s) iront dans la Corbeille du Mac : "
+            "récupérables tant qu'elle n'est pas vidée (bouton « Remettre en place » dans "
+            f"l'écran Quarantaine).\n\n{safety}\n\nContinuer ?",
+        ):
+            self.app.status("Rien n'a été mis à la Corbeille.")
+            return
+        ids = list(file_ids)
+
+        def work(ctx: Any, _control: Any, _report: Any) -> Any:
+            return DeletionService(ctx.conn, ctx.clock, ctx.journal, backend).trash(
+                ids, origin, allow_unique=allow_unique
+            )
+
+        def done(result: Any) -> None:
+            lines = [
+                f"{result.trashed} fichier(s) mis à la Corbeille "
+                f"({human_size(result.trashed_bytes)})."
+            ]
+            if result.refused:
+                lines.append(f"{len(result.refused)} fichier(s) laissé(s) en place :")
+                lines += [f"• fichier n°{f} : {why}" for f, why in result.refused[:10]]
+            self.app.dialogs.info(self.win, "Corbeille", "\n".join(lines))
+            self.refresh()
+
+        self.app.run_task("Corbeille", work, done)
+
+    def propose_folder(
+        self,
+        title: str,
+        explanation: str,
+        make_preview: Callable[[OrganizeService, Path], Preview],
+    ) -> None:
+        """Proposition de dossier : aperçu, puis copie vérifiée seulement si vous validez."""
+        chosen = self.app.dialogs.choose_directory(
+            self, f"{title} : où créer le dossier ? (en dehors de vos bibliothèques)"
+        )
+        if chosen is None:
+            return
+        ctx = self.app.ctx
+        service = OrganizeService(ctx.conn, ctx.clock, ctx.journal, ctx.paths)
+        preview = make_preview(service, chosen)
+        shown = service.items(preview.plan_id, limit=15)
+        skipped = (
+            f"\n{preview.excluded_duplicates} copie(s) identique(s) non recopiée(s)."
+            if preview.excluded_duplicates
+            else ""
+        )
+        listing = "\n".join(f"   {target}" for _f, target, _s, _c in shown)
+        more = "\n   …" if preview.items > len(shown) else ""
+        if not self.app.dialogs.confirm(
+            self,
+            title,
+            f"PROPOSITION — rien n'est encore copié.\n\n{explanation}\n\n"
+            f"Nouveau dossier : {preview.destination}\n{preview.items} fichier(s), "
+            f"{human_size(preview.total_bytes)}.{skipped}\n\nAperçu :\n{listing}{more}\n\n"
+            "Valider et copier ? (copie vérifiée ; vos originaux ne bougent pas)",
+        ):
+            self.app.status("Proposition non validée : rien n'a été copié.")
+            return
+        plan_id, token, destination = preview.plan_id, preview.token, preview.destination
+
+        def work(ctx: Any, control: Any, _report: Any) -> Any:
+            return OrganizeService(ctx.conn, ctx.clock, ctx.journal, ctx.paths).execute(
+                plan_id, token, control=control
+            )
+
+        def done(result: Any) -> None:
+            text = f"{result.verified} fichier(s) copié(s) et vérifié(s) dans\n{destination}"
+            if result.stopped_reason:
+                text += f"\n\nArrêt : {result.stopped_reason}"
+            self.app.dialogs.info(self.win, title, text)
+            self.refresh()
+
+        self.app.run_task(title, work, done)
 
 
 class ClickCard(QFrame):
@@ -445,26 +548,42 @@ class DashboardPage(Page):
                     f"indicateurs ou scripts et <b>{fmt(int(values['sets']))}</b> SET. "
                     f"<b>{fmt(int(values['assoc_check']))}</b> association(s) attendent votre "
                     f"vérification ; <b>{fmt(int(values['reclaim']))}</b> copie(s) en trop "
-                    "peuvent être mises en quarantaine."
+                    "peuvent être mises en quarantaine." + self._placement_sentence()
                 )
             else:
                 self.summary.setText("Étape suivante : cliquez sur <b>« Tout analyser »</b>.")
         self._tick()
+
+    def _placement_sentence(self) -> str:
+        from mtlm.app.sets import AssociationService
+
+        ctx = self.app.ctx
+        counts = AssociationService(ctx.conn, ctx.clock, ctx.journal).placement_counts()
+        if not sum(counts.values()):
+            return ""
+        return (
+            f"<br><b>SET</b> : <b>{fmt(counts['avec_son_robot'])}</b> rangé(s) avec leur robot, "
+            f"<b>{fmt(counts['en_vrac'])}</b> en vrac dont le robot a été retrouvé, "
+            f"<b>{fmt(counts['avec_autre_robot'])}</b> rangé(s) avec un autre robot "
+            f"(peut-être mal rangés), <b>{fmt(counts['orphelins'])}</b> sans robot trouvé."
+        )
 
 
 # ---------------------------------------------------------------------------------------------
 class SourcesPage(Page):
     key, title, icon = "sources", "Mes dossiers", "📁"
     subtitle = (
-        "Les dossiers de votre bibliothèque MetaTrader. Ils sont seulement lus : "
-        "l'application n'y écrit, ne renomme et ne supprime jamais rien."
+        "Les dossiers de votre bibliothèque MetaTrader. L'analyse les lit seulement : "
+        "rien n'y est écrit, renommé ni déplacé."
     )
 
     def __init__(self, app: UiApp) -> None:
         super().__init__(app)
         self.banner(
             "Les dossiers sources sont lus en <b>lecture seule</b> : l'application n'y "
-            "écrit, ne renomme et ne supprime jamais rien.",
+            "écrit, ne renomme et ne déplace rien. Seule exception, à votre demande et après "
+            "confirmation : les fichiers que <b>vous</b> choisissez de mettre à la "
+            "<b>Corbeille du Mac</b> (récupérables).",
             "bannerSafe",
         )
         self.table = make_table(

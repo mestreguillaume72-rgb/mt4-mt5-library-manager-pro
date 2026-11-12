@@ -88,6 +88,31 @@ class AssociationRow:
     score: float
     level: str
     user_decision: str
+    placement: str = ""
+
+
+#: Où se trouve un SET par rapport au robot proposé (information : ne change pas le score).
+PLACEMENT_LABELS = {
+    "avec_son_robot": "Rangé avec son robot",
+    "en_vrac": "En vrac — correspondance trouvée",
+    "avec_autre_robot": "Rangé avec un autre robot",
+}
+
+
+def placement_of(
+    set_root: int, set_dir: str, robot_root: int, robot_dir: str, robot_dirs: set[tuple[int, str]]
+) -> str:
+    """« avec_son_robot » : même dossier que le robot proposé ; « avec_autre_robot » : dans le
+    dossier d'un autre robot (peut-être mal rangé) ; sinon « en_vrac »."""
+    if (set_root, set_dir) == (robot_root, robot_dir):
+        return "avec_son_robot"
+    if (set_root, set_dir) in robot_dirs:
+        return "avec_autre_robot"
+    return "en_vrac"
+
+
+def _dir(rel_path: str) -> str:
+    return rel_path.rpartition("/")[0]
 
 
 def _abs(root: str, rel: bytes) -> bytes:
@@ -456,16 +481,73 @@ class AssociationService:
             params.append(level)
         rows = self._conn.execute(
             "SELECT a.id, a.robot_file_id, r.rel_path, a.set_file_id, s.rel_path, a.score,"
-            " a.level, a.user_decision FROM association a"
+            " a.level, a.user_decision, r.root_id, s.root_id FROM association a"
             " JOIN file_record r ON r.id = a.robot_file_id"
             " JOIN file_record s ON s.id = a.set_file_id"
             f" WHERE {' AND '.join(clauses)} ORDER BY a.score DESC, a.id LIMIT ?",
             (*params, limit),
         ).fetchall()
+        dirs = self.robot_dirs() if rows else set()
         return [
-            AssociationRow(int(r[0]), int(r[1]), r[2], int(r[3]), r[4], float(r[5]), r[6], r[7])
+            AssociationRow(
+                int(r[0]),
+                int(r[1]),
+                r[2],
+                int(r[3]),
+                r[4],
+                float(r[5]),
+                r[6],
+                r[7],
+                placement_of(int(r[9]), _dir(r[4]), int(r[8]), _dir(r[2]), dirs),
+            )
             for r in rows
         ]
+
+    def robot_dirs(self) -> set[tuple[int, str]]:
+        """Dossiers qui contiennent au moins un robot (source ou compilé) présent."""
+        return {
+            (int(root_id), _dir(rel_path))
+            for root_id, rel_path in self._conn.execute(
+                "SELECT f.root_id, f.rel_path FROM file_record f"
+                " JOIN file_analysis a ON a.file_id = f.id WHERE f.presence = 'present' AND"
+                " (a.detected_type IN ('ea', 'indicator', 'script') OR f.ext IN ('ex4', 'ex5'))"
+            )
+        }
+
+    def placements(self) -> dict[int, str]:
+        """Placement de chaque SET par rapport à son meilleur robot : association acceptée,
+        sinon la mieux notée non rejetée. Les SET sans robot proposé n'y figurent pas."""
+        dirs = self.robot_dirs()
+        result: dict[int, str] = {}
+        for set_id, set_root, set_path, robot_root, robot_path in self._conn.execute(
+            "SELECT a.set_file_id, s.root_id, s.rel_path, r.root_id, r.rel_path"
+            " FROM association a JOIN file_record s ON s.id = a.set_file_id"
+            " JOIN file_record r ON r.id = a.robot_file_id"
+            " WHERE a.user_decision <> 'rejected' AND s.presence = 'present'"
+            " AND r.presence = 'present'"
+            " ORDER BY a.set_file_id, a.user_decision = 'accepted' DESC, a.score DESC, a.id"
+        ):
+            if int(set_id) in result:
+                continue
+            result[int(set_id)] = placement_of(
+                int(set_root), _dir(set_path), int(robot_root), _dir(robot_path), dirs
+            )
+        return result
+
+    def placement_counts(self) -> dict[str, int]:
+        """Nombre de SET par placement, plus « orphelins » (aucun robot proposé)."""
+        placed = self.placements()
+        counts = {key: 0 for key in PLACEMENT_LABELS}
+        for value in placed.values():
+            counts[value] += 1
+        total = int(
+            self._conn.execute(
+                "SELECT count(*) FROM set_file sf JOIN file_record f ON f.id = sf.file_id"
+                " WHERE f.presence = 'present'"
+            ).fetchone()[0]
+        )
+        counts["orphelins"] = total - len(placed)
+        return counts
 
     def evidence(
         self, association_id: int

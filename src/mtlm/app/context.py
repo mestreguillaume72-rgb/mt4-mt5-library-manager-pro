@@ -21,6 +21,7 @@ from mtlm.core.paths import AppPaths
 from mtlm.store.backup import backup_database
 from mtlm.store.database import connect, transaction
 from mtlm.store.migrations_engine import Migrator
+from mtlm.transfer.trash import TrashBackend, default_backend
 
 log = logging.getLogger("mtlm.app")
 
@@ -34,6 +35,8 @@ class AppContext:
     migrator: Migrator
     log_file: Path
     applied_migrations: list[int] = field(default_factory=list)
+    #: Corbeille du Mac (``None`` hors macOS : la suppression est alors indisponible).
+    trash: TrashBackend | None = field(default_factory=default_backend)
 
     def backup(self, label: str) -> Path:
         return backup_database(self.conn, self.paths.backups_dir, self.clock, label)
