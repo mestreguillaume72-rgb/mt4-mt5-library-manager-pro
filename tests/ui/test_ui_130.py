@@ -139,8 +139,34 @@ def test_propositions_de_dossiers_validees(
     assert (dest / name).is_dir()
     assert "copié(s) et vérifié(s)" in dialogs.infos[-1][1]
     dialogs.directories.append(dest)
-    click(window, qtbot, "familles.isoler")
+    window.navigate("organisation")
+    click(window, qtbot, "organisation.isoler")
     wait_idle(window, qtbot)
     isolated = [p for p in dest.iterdir() if p.name.startswith("Sources MQ4-MQ5")]
     assert len(isolated) == 1
     assert list(isolated[0].rglob("*.set")) and list(isolated[0].rglob("*.mq4"))
+
+
+def test_bulles_d_aide_partout(window: MainWindow) -> None:
+    """1.3.0 : chaque bouton a une vraie bulle d'aide en français (pas seulement son libellé),
+    chaque bulle de zone désigne un élément existant, chaque écran du menu a la sienne."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QPushButton
+
+    from mtlm.ui.bulles import ACTION_TIPS, WIDGET_TIPS
+
+    registry = window.app.registry
+    missing = [k for k in registry.specs if k not in ACTION_TIPS]
+    assert missing == []
+    assert set(ACTION_TIPS) <= set(registry.specs), set(ACTION_TIPS) - set(registry.specs)
+    for action_id, spec in registry.specs.items():
+        button = window.findChild(QPushButton, action_id)
+        assert button is not None
+        assert button.toolTip() == ACTION_TIPS[action_id] != spec.label
+    for (key, attribute), text in WIDGET_TIPS.items():
+        widget = getattr(window.pages[key], attribute)
+        assert widget.toolTip() == text, (key, attribute)
+    for row in range(window.sidebar.count()):
+        item = window.sidebar.item(row)
+        if item.data(Qt.ItemDataRole.UserRole) is not None:
+            assert item.toolTip()

@@ -21,6 +21,8 @@ from tests.conftest import ConnectDb
 EXPECTED_TABLES = {
     "source_root",
     "deletion_record",
+    "mql_reference",
+    "companion_link",
     "job",
     "job_checkpoint",
     "content",

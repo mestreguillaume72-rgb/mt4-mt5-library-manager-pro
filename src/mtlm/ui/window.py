@@ -138,6 +138,7 @@ class MainWindow(QMainWindow):
             page = factory(app)
             self.pages[page.key] = page
             self.stack.addWidget(page)
+        self._apply_tips()
         self.sidebar = QListWidget()
         self.sidebar.setObjectName("navigation")
         self.sidebar.setAccessibleName("Navigation entre les écrans")
@@ -196,10 +197,21 @@ class MainWindow(QMainWindow):
             "Prêt. Rien n'est modifié dans vos dossiers sans votre confirmation."
         )
 
+    def _apply_tips(self) -> None:
+        """Bulles d'aide des zones (listes, filtres) ; celles des boutons sont posées par le
+        registre d'actions."""
+        from mtlm.ui.bulles import WIDGET_TIPS
+
+        for (key, attribute), text in WIDGET_TIPS.items():
+            widget = getattr(self.pages.get(key), attribute, None)
+            if widget is not None:
+                widget.setToolTip(text)
+
     def _add_nav(self, key: str) -> None:
         page = self.pages[key]
         item = QListWidgetItem(f"{page.icon}   {page.title}")
         item.setData(Qt.ItemDataRole.UserRole, key)
+        item.setToolTip(page.subtitle or page.title)
         self.sidebar.addItem(item)
 
     def _row_of(self, key: str) -> int:

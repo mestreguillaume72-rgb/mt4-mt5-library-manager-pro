@@ -47,7 +47,8 @@ jobs:
           uv run python tools/check_wheel.py dist/*.whl
       - name: Installation du paquet dans un environnement vierge
         run: |
-          python -m venv /tmp/venv-propre
+          # Python du projet (3.12/3.13) : celui du système peut être plus récent que Qt.
+          "$(uv python find)" -m venv /tmp/venv-propre
           /tmp/venv-propre/bin/pip install dist/*.whl
           export MTLM_HOME="$RUNNER_TEMP/mtlm-home"
           /tmp/venv-propre/bin/mtlm version

@@ -171,7 +171,7 @@ def test_parcours_complet(
     sets.sets.selectRow(0)
     assert sets.assoc.rowCount() >= 1
     sets.assoc.selectRow(0)
-    assert "couverture_parametres" in sets.evidence.toPlainText()
+    assert "Paramètres en commun" in sets.evidence.toPlainText()
     click(window, qtbot, "sets.accepter")
     assert (
         conn.execute(

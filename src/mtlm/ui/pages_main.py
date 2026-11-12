@@ -559,14 +559,26 @@ class DashboardPage(Page):
 
         ctx = self.app.ctx
         counts = AssociationService(ctx.conn, ctx.clock, ctx.journal).placement_counts()
-        if not sum(counts.values()):
-            return ""
-        return (
-            f"<br><b>SET</b> : <b>{fmt(counts['avec_son_robot'])}</b> rangé(s) avec leur robot, "
-            f"<b>{fmt(counts['en_vrac'])}</b> en vrac dont le robot a été retrouvé, "
-            f"<b>{fmt(counts['avec_autre_robot'])}</b> rangé(s) avec un autre robot "
-            f"(peut-être mal rangés), <b>{fmt(counts['orphelins'])}</b> sans robot trouvé."
-        )
+        text = ""
+        if sum(counts.values()):
+            text += (
+                f"<br><b>SET</b> : <b>{fmt(counts['avec_son_robot'])}</b> rangé(s) avec leur "
+                f"robot, <b>{fmt(counts['en_vrac'])}</b> en vrac dont le robot a été retrouvé, "
+                f"<b>{fmt(counts['avec_autre_robot'])}</b> rangé(s) avec un autre robot "
+                f"(peut-être mal rangés), <b>{fmt(counts['orphelins'])}</b> sans robot trouvé."
+            )
+        from mtlm.app.companions import CompanionService
+
+        linked = CompanionService(ctx.conn, ctx.clock, ctx.journal).placement_counts()
+        if sum(linked.values()):
+            text += (
+                "<br><b>Images, sons, documents</b> : "
+                f"<b>{fmt(linked['avec_son_robot'])}</b> rangé(s) avec leur outil, "
+                f"<b>{fmt(linked['en_vrac'])}</b> en vrac dont l'outil a été retrouvé, "
+                f"<b>{fmt(linked['avec_autre_robot'])}</b> rangé(s) avec un autre outil, "
+                f"<b>{fmt(linked['sans_outil'])}</b> sans outil trouvé."
+            )
+        return text
 
 
 # ---------------------------------------------------------------------------------------------

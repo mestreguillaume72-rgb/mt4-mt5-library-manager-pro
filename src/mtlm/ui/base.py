@@ -107,7 +107,7 @@ DEFAULT_ROLES = {
     "doublons.corbeille_fichier": "danger",
     "familles.corbeille": "danger",
     "familles.dossier": "primary",
-    "familles.isoler": "primary",
+    "organisation.isoler": "primary",
 }
 
 
@@ -118,6 +118,7 @@ class ActionSpec:
     handler: Callable[[], None] | None
     reason_unavailable: str | None = None
     calls: int = 0
+    tooltip: str = ""
 
 
 class ActionRegistry:
@@ -138,12 +139,17 @@ class ActionRegistry:
     ) -> QPushButton:
         if action_id in self.specs:
             raise ValueError(f"Action en double : {action_id}")
-        spec = ActionSpec(action_id, label, handler)
+        from mtlm.ui.bulles import ACTION_TIPS
+
+        tip = ACTION_TIPS.get(action_id) or tooltip
+        spec = ActionSpec(action_id, label, handler, tooltip=tip)
         self.specs[action_id] = spec
         button = QPushButton(label)
         button.setObjectName(action_id)
         button.setAccessibleName(label)
-        button.setToolTip(tooltip or label)
+        button.setToolTip(tip or label)
+        if tip:
+            button.setAccessibleDescription(tip)
         button.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         button.setCursor(Qt.CursorShape.PointingHandCursor)
         role = role or DEFAULT_ROLES.get(action_id, "")
@@ -240,6 +246,7 @@ BADGE_RULES: list[tuple[str, tuple[str, ...]]] = [
             "partial",
             "stale",
             "avec un autre robot",
+            "avec un autre outil",
             "corbeille",
         ),
     ),
@@ -260,6 +267,7 @@ BADGE_RULES: list[tuple[str, tuple[str, ...]]] = [
             "certain",
             "oui",
             "avec son robot",
+            "avec son outil",
             "remis en place",
         ),
     ),

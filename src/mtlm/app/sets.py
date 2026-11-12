@@ -34,8 +34,9 @@ from mtlm.matching.associations import (
     rank_candidates,
 )
 from mtlm.matching.names import logical_key
+from mtlm.matching.together import creation_batches
 from mtlm.metatrader.encoding import decode_text
-from mtlm.setfiles.parser import ParamDiff, SetDocument, compare_sets, parse_set
+from mtlm.setfiles.parser import ParamDiff, SetDocument, compare_sets, parse_set, robot_named
 from mtlm.store.database import transaction
 
 log = logging.getLogger("mtlm.sets")
@@ -195,14 +196,15 @@ class SetService:
         self._conn.execute(
             "INSERT INTO set_file(file_id, format, encoding, line_count, param_count,"
             " duplicate_keys_json, warnings_json, normalized_sha256, content_id, engine_version,"
-            " format_basis) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            " format_basis, robot_named) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             " ON CONFLICT(file_id) DO UPDATE SET format = excluded.format,"
             " encoding = excluded.encoding, line_count = excluded.line_count,"
             " param_count = excluded.param_count,"
             " duplicate_keys_json = excluded.duplicate_keys_json,"
             " warnings_json = excluded.warnings_json,"
             " normalized_sha256 = excluded.normalized_sha256, content_id = excluded.content_id,"
-            " engine_version = excluded.engine_version, format_basis = excluded.format_basis",
+            " engine_version = excluded.engine_version, format_basis = excluded.format_basis,"
+            " robot_named = excluded.robot_named",
             (
                 file_id,
                 doc.format,
@@ -215,6 +217,7 @@ class SetService:
                 content_id,
                 ENGINE_VERSION,
                 doc.format_basis,
+                robot_named(doc.comments),
             ),
         )
         self._conn.executemany(
@@ -300,7 +303,20 @@ class AssociationService:
         self._journal = journal
         self._jobs = JobStore(conn, clock)
 
-    def _robots(self) -> list[RobotInfo]:
+    def _batches(self) -> dict[int, tuple[int, int]]:
+        """Petits lots de fichiers datés du même instant (indice « créés ensemble »)."""
+        return creation_batches(
+            [
+                (int(f), int(m or 0))
+                for f, m in self._conn.execute(
+                    "SELECT id, mtime_ns FROM file_record WHERE presence = 'present'"
+                    " AND file_type = 'file'"
+                )
+            ]
+        )
+
+    def _robots(self, batches: dict[int, tuple[int, int]] | None = None) -> list[RobotInfo]:
+        batches = batches or {}
         rows = self._conn.execute(
             "SELECT f.id, f.rel_path, f.root_id, a.platform, f.content_id, f.ext"
             " FROM file_record f JOIN file_analysis a ON a.file_id = f.id"
@@ -330,11 +346,13 @@ class AssociationService:
                     inputs.get(int(content_id), {})
                     if has_source and content_id is not None
                     else {},
+                    batches.get(int(file_id)),
                 )
             )
         return robots
 
-    def _sets(self) -> list[SetInfo]:
+    def _sets(self, batches: dict[int, tuple[int, int]] | None = None) -> list[SetInfo]:
+        batches = batches or {}
         params: dict[int, dict[str, tuple[str, str | None, str]]] = defaultdict(dict)
         for file_id, name, raw, normalized, estimated in self._conn.execute(
             "SELECT file_id, name, raw_value, normalized_value, estimated_type FROM set_parameter"
@@ -342,15 +360,22 @@ class AssociationService:
         ):
             params[int(file_id)][name] = (raw, normalized, estimated)
         result = []
-        for file_id, rel_path, root_id, fmt in self._conn.execute(
-            "SELECT f.id, f.rel_path, f.root_id, sf.format FROM set_file sf"
+        for file_id, rel_path, root_id, fmt, named in self._conn.execute(
+            "SELECT f.id, f.rel_path, f.root_id, sf.format, sf.robot_named FROM set_file sf"
             " JOIN file_record f ON f.id = sf.file_id JOIN source_root s ON s.id = f.root_id"
             " WHERE s.status = 'ok' AND f.presence = 'present' AND f.in_quarantine = 0"
         ):
             directory, _, name = str(rel_path).rpartition("/")
             result.append(
                 SetInfo(
-                    int(file_id), name, directory, int(root_id), fmt, params.get(int(file_id), {})
+                    int(file_id),
+                    name,
+                    directory,
+                    int(root_id),
+                    fmt,
+                    params.get(int(file_id), {}),
+                    named,
+                    batches.get(int(file_id)),
                 )
             )
         return result
@@ -358,19 +383,23 @@ class AssociationService:
     def compute(self, *, control: TaskControl | None = None) -> AssociationSummary:
         ctl = control or TaskControl()
         job_id = self._jobs.create("match", {"method": METHOD_VERSION})
-        robots = self._robots()
-        sets = self._sets()
+        batches = self._batches()
+        robots = self._robots(batches)
+        sets = self._sets(batches)
         summary = AssociationSummary(
             job_id=job_id, state="running", sets=len(sets), robots=len(robots)
         )
         by_param: dict[str, list[RobotInfo]] = defaultdict(list)
         by_key: dict[str, list[RobotInfo]] = defaultdict(list)
         by_dir: dict[tuple[int, str], list[RobotInfo]] = defaultdict(list)
+        by_batch: dict[int, list[RobotInfo]] = defaultdict(list)
         for robot in robots:
             for name in robot.inputs:
                 by_param[name].append(robot)
             by_key[logical_key(robot.name)].append(robot)
             by_dir[(robot.root_id, robot.directory)].append(robot)
+            if robot.batch is not None:
+                by_batch[robot.batch[0]].append(robot)
         levels: dict[str, int] = defaultdict(int)
         for start in range(0, len(sets), 200):
             ctl.checkpoint()
@@ -386,6 +415,12 @@ class AssociationService:
                             candidates[robot.file_id] = robot
                     for robot in by_dir.get((set_info.root_id, set_info.directory), ()):
                         candidates[robot.file_id] = robot
+                    if set_info.named_robot:
+                        for robot in by_key.get(logical_key(set_info.named_robot), ()):
+                            candidates[robot.file_id] = robot
+                    if set_info.batch is not None:
+                        for robot in by_batch.get(set_info.batch[0], ()):
+                            candidates[robot.file_id] = robot
                     ranked = rank_candidates(set_info, list(candidates.values()))
                     summary.decisions_kept += self._save(set_info, ranked)
                     if not ranked:

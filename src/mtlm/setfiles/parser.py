@@ -194,3 +194,23 @@ def compare_sets(left: SetDocument, right: SetDocument) -> list[ParamDiff]:
             ParamDiff(name, pa.raw_value if pa else None, pb.raw_value if pb else None, status)
         )
     return result
+
+
+_NAMED_RE = re.compile(
+    r"(?:testing|optimi[sz]ing|test|optimisation)(?:\s*/\s*(?:testing|optimi[sz]ing))?"
+    r"\s+(?:of\s+|de\s+|du\s+)?(.+?)\s+"
+    r"(?:expert advisor|expert|indicator|indicateur|script|ea)\b",
+    re.IGNORECASE,
+)
+
+
+def robot_named(comments: list[str]) -> str | None:
+    """Nom du robot écrit par MetaTrader dans l'en-tête d'un SET, par exemple
+    « ; this file contains input parameters for testing/optimizing Scalper expert advisor »."""
+    for comment in comments[:10]:
+        match = _NAMED_RE.search(comment)
+        if match:
+            name = match.group(1).strip().strip("\"'«» ")
+            if 0 < len(name) <= 120:
+                return name
+    return None

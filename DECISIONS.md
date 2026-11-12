@@ -173,3 +173,14 @@ Le **placement** d'un SET (rangé avec son robot / en vrac, robot retrouvé / ra
 robot) est affiché et filtrable ; c'est une information qui ne modifie pas le score
 d'association (tous les SET sont analysés de la même façon). Un robot identique octet pour
 octet enregistré sous un autre nom rejoint la même famille (`familles-v2`).
+
+## D-018 — Indices « faits pour aller ensemble » et fichiers liés (1.3.0)
+
+Demande du propriétaire : trouver d'autres moyens de savoir que des fichiers ont été créés
+ensemble, et relier aussi les images. Retenu, du plus sûr au moins sûr : fichier **cité dans le
+code** de l'outil (`#resource`, chaînes se terminant par .bmp/.png/.wav/.set…) ; **nom du robot
+écrit par MetaTrader** dans l'en-tête d'un SET ; même dossier et nom proche ; **petit lot de
+fichiers datés du même instant** (≤ 20 fichiers à 2 s près ; les grands lots — copie de toute
+une bibliothèque — sont ignorés car ils ne prouvent rien). Ce sont des indices expliqués, jamais
+une validation automatique. Écarté : date de création (non fiable après copie) et contenu des
+images (aucune analyse d'image).

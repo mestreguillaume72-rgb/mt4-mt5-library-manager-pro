@@ -15,6 +15,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from mtlm.app.companions import KIND_LABELS, CompanionService
+from mtlm.app.companions import PLACEMENT_LABELS as LINK_PLACEMENTS
 from mtlm.app.deletion import DeletionService
 from mtlm.app.duplicates import DuplicateService
 from mtlm.app.families import FamilyService
@@ -26,6 +28,18 @@ from mtlm.ui.window import UiApp
 
 DECISIONS = {"none": "non décidée", "accepted": "ACCEPTÉE", "rejected": "rejetée"}
 POLARITY = {"pour": "+ pour", "contre": "− contre", "incertitude": "? incertitude"}
+EVIDENCE_LABELS = {
+    "couverture_parametres": "Paramètres en commun",
+    "compatibilite_types": "Types de valeurs compatibles",
+    "valeurs_par_defaut": "Valeurs par défaut identiques",
+    "parametres_inconnus_du_robot": "Paramètres inconnus du robot",
+    "parametres_inaccessibles": "Paramètres du robot illisibles (EX4/EX5 seul)",
+    "similarite_noms": "Ressemblance des noms de fichiers",
+    "nom_du_robot_dans_le_set": "Nom du robot écrit dans le SET par MetaTrader",
+    "crees_ensemble": "Créés ensemble (même date, petit lot de fichiers)",
+    "emplacement": "Emplacement",
+    "plateforme": "Plateforme MT4 / MT5",
+}
 
 
 class SetsPage(Page):
@@ -199,7 +213,8 @@ class SetsPage(Page):
         if assoc_id is None:
             return
         lines = [
-            f"{POLARITY[polarity]} — {kind} (poids {weight:g}, valeur {value:.2f}) : {detail}"
+            f"{POLARITY[polarity]} — {EVIDENCE_LABELS.get(kind, kind)} "
+            f"(poids {weight:g}, valeur {value:.2f}) : {detail}"
             for kind, weight, value, polarity, detail in self._assoc().evidence(assoc_id)
         ]
         self.evidence.setPlainText("\n".join(lines))
@@ -245,8 +260,8 @@ class SetsPage(Page):
 class FamiliesPage(Page):
     key, title, icon = "familles", "Familles et versions", "🧬"
     subtitle = (
-        "Les fichiers d'un même robot regroupés : copies, versions, fichiers compilés et SET "
-        "associés."
+        "Les fichiers d'un même robot regroupés : versions, copies, compilés, SET associés et "
+        "fichiers liés (images, sons, documents)."
     )
 
     def __init__(self, app: UiApp) -> None:
@@ -262,10 +277,11 @@ class FamiliesPage(Page):
             self.btn("actualiser", "Actualiser", self.refresh),
         )
         self.banner(
-            "Un même robot enregistré sous <b>d'autres noms</b> (contenu identique) est réuni "
-            "dans sa famille. Vous pouvez <b>proposer un dossier au nom du robot</b> qui réunit "
-            "toute la famille, ou <b>isoler toutes les sources MQ4/MQ5 avec leurs SET</b> : "
-            "vous voyez d'abord la proposition, puis vous validez (copie vérifiée).",
+            "<b>Une famille = un robot ou outil et tout ce qui va avec</b> : ses versions, ses "
+            "copies (même sous un autre nom), ses fichiers compilés, ses SET et ses fichiers "
+            "liés (images, sons, documents). « Proposer un dossier pour cette famille » réunit "
+            "<b>cette famille seulement</b> dans un dossier au nom du robot : vous voyez "
+            "d'abord la proposition, puis vous validez (copie vérifiée).",
             "banner",
         )
         self.families = make_table(
@@ -277,12 +293,18 @@ class FamiliesPage(Page):
         self.members = make_table(
             ["Fichier", "Relation", "Version estimée", "Base", "Chemin"], badge_columns=(1,)
         )
+        self.linked = make_table(
+            ["Fichier", "Type", "Lien", "Placement", "Outil", "Indices"], badge_columns=(2, 3)
+        )
         self.layout_.addWidget(self.families, 2)
         self.layout_.addWidget(self.reasons, 1)
-        self.layout_.addWidget(self.members, 2)
+        tabs = QTabWidget()
+        tabs.addTab(self.members, "Fichiers de la famille")
+        tabs.addTab(self.linked, "Fichiers liés (images, sons, documents…)")
+        self.tabs = tabs
+        self.layout_.addWidget(tabs, 2)
         self.button_row(
             self.btn("dossier", "Proposer un dossier pour cette famille…", self.propose_family),
-            self.btn("isoler", "Isoler les MQ4/MQ5 avec leurs SET…", self.propose_sources),
             self.btn("corbeille", "Mettre le fichier choisi à la Corbeille", self.trash_member),
         )
 
@@ -302,14 +324,6 @@ class FamiliesPage(Page):
             "associés) réunie dans un dossier au nom du robot ; chaque fichier est rangé "
             "sous le nom de son dossier d'origine.",
             lambda service, destination: service.preview_family(destination, family),
-        )
-
-    def propose_sources(self) -> None:
-        self.propose_folder(
-            "Isoler les MQ4/MQ5",
-            "Chaque source MQ4/MQ5 dans « MQ4 » ou « MQ5 / <nom du robot> », avec les SET qui "
-            "lui sont associés (acceptés par vous, ou de niveau « forte » non rejetés).",
-            lambda service, destination: service.preview_sources(destination),
         )
 
     def trash_member(self) -> None:
@@ -379,6 +393,29 @@ class FamiliesPage(Page):
             return
         _row, basis, members = found
         self.reasons.setPlainText("\n".join(f"Raison : {b}" for b in basis))
+        ctx = self.app.ctx
+        linked = CompanionService(ctx.conn, ctx.clock, ctx.journal).for_tools(
+            [m.file_id for m in members]
+        )
+        seen: set[int] = set()
+        rows = []
+        for link in linked:
+            if link.companion_id in seen:
+                continue
+            seen.add(link.companion_id)
+            rows.append(
+                (
+                    link.companion_id,
+                    KIND_LABELS.get(link.kind, link.kind),
+                    link.confidence,
+                    LINK_PLACEMENTS[link.placement],
+                    link.tool_path.rpartition("/")[2],
+                    " ; ".join(link.evidence),
+                    link.companion_path,
+                )
+            )
+        fill_table(self.linked, [r[:6] for r in rows])
+        self.tabs.setTabText(1, f"Fichiers liés (images, sons, documents…) : {len(rows)}")
         fill_table(
             self.members,
             [

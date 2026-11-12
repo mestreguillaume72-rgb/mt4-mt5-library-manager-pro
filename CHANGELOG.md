@@ -16,10 +16,25 @@
   robot ; isoler toutes les sources MQ4/MQ5 avec leurs SET associés. Aperçu, puis copie
   vérifiée seulement après validation.
 
+- **Indices « faits pour aller ensemble »** pour relier les SET : nom du robot écrit par
+  MetaTrader dans l'en-tête du SET ; petit lot de fichiers datés du même instant (« créés
+  ensemble »). Preuves affichées en français.
+- **Fichiers liés** (images, sons, documents, modèles, includes) reliés à leur outil : cités
+  dans le code (`#resource`, « logo.bmp »…) = certain ; même dossier et nom proche ou créés
+  ensemble = probable ; seul outil du dossier = possible. Placement : rangé avec son outil /
+  en vrac / rangé avec un autre outil. Onglet dans « Familles et versions », résumé sur
+  l'Accueil ; ils suivent leur robot dans les dossiers proposés (Images, Sons, Documents…).
+- **Bulles d'aide en français** sur chaque bouton, chaque écran du menu et les listes
+  (test : aucun bouton sans bulle).
+
 ### Modifié
+- « Isoler les MQ4/MQ5 » est séparé du dossier de famille : il se trouve dans « Bibliothèque
+  rangée », avec sa propre explication.
 - Textes de sécurité : l'analyse ne modifie jamais rien ; seuls les fichiers que vous choisissez
   de supprimer partent dans la Corbeille du Mac, après confirmation.
 - Écran Quarantaine en deux onglets : « Lots de quarantaine » et « Corbeille ».
+- CI : l'installation « environnement vierge » utilise le Python du projet (le Python système
+  d'Ubuntu, plus récent, n'est pas pris en charge par Qt 6.9).
 
 ## [1.2.2] — Application universelle (Intel + Apple Silicon)
 

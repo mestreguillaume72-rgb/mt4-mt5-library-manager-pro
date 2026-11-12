@@ -10,9 +10,16 @@ son poids. Le score (0–100) est la somme pondérée ; le niveau en découle av
 * deux robots distincts presque aussi plausibles ⇒ ambiguïté : niveau plafonné à « moyenne » ;
 * aucune association n'est jamais validée sans action de l'utilisateur.
 
-Pondérations (version 1) : couverture des noms de paramètres 40, compatibilité des types 15,
+Pondérations : couverture des noms de paramètres 40, compatibilité des types 15,
 valeurs par défaut 5, similarité des noms de fichiers 20, emplacement 10, plateforme 10,
 pénalité paramètres inconnus du robot jusqu'à −20.
+
+Version 2 (1.3.0), indices « faits pour aller ensemble » :
+
+* le **nom du robot écrit par MetaTrader dans l'en-tête du SET** compte comme un nom identique
+  (et un nom différent y est signalé « contre ») ;
+* robot et SET d'un **petit lot de fichiers datés du même instant** (voir
+  :mod:`mtlm.matching.together`) : l'emplacement vaut au moins « créés ensemble » (0,7).
 """
 
 from __future__ import annotations
@@ -23,7 +30,7 @@ from dataclasses import dataclass, field
 
 from mtlm.matching.names import logical_key
 
-METHOD_VERSION = "associations-v1"
+METHOD_VERSION = "associations-v2"
 WEIGHTS = {
     "coverage": 40.0,
     "types": 15.0,
@@ -50,6 +57,7 @@ class RobotInfo:
     content_id: int | None
     has_source: bool
     inputs: dict[str, tuple[str, str | None]]  # nom → (type MQL, défaut brut)
+    batch: tuple[int, int] | None = None  # petit lot « créés ensemble » : (numéro, taille)
 
 
 @dataclass(frozen=True)
@@ -60,6 +68,8 @@ class SetInfo:
     root_id: int
     format: str
     params: dict[str, tuple[str, str | None, str]]  # nom → (brut, normalisé, type estimé)
+    named_robot: str | None = None  # nom du robot écrit dans l'en-tête du SET
+    batch: tuple[int, int] | None = None
 
 
 @dataclass(frozen=True)
@@ -228,6 +238,18 @@ def score_pair(robot: RobotInfo, set_info: SetInfo) -> Candidate:
             )
         )
     similarity = name_similarity(robot.name, set_info.name)
+    if set_info.named_robot:
+        named = name_similarity(robot.name, set_info.named_robot) >= 1.0
+        evidence.append(
+            Evidence(
+                "nom_du_robot_dans_le_set",
+                0.0,
+                1.0 if named else 0.0,
+                "pour" if named else "contre",
+                {"ecrit_dans_le_set": set_info.named_robot, "robot": robot.name},
+            )
+        )
+        similarity = 1.0 if named else similarity * 0.5
     total += WEIGHTS["name"] * similarity
     evidence.append(
         Evidence(
@@ -239,6 +261,21 @@ def score_pair(robot: RobotInfo, set_info: SetInfo) -> Candidate:
         )
     )
     location, label = location_score(robot, set_info)
+    if robot.batch is not None and robot.batch == set_info.batch:
+        evidence.append(
+            Evidence(
+                "crees_ensemble",
+                0.0,
+                1.0,
+                "pour",
+                {
+                    "constat": "même date de modification (à 2 s près) dans un petit lot",
+                    "fichiers_du_lot": robot.batch[1],
+                },
+            )
+        )
+        if location < 0.7:
+            location, label = 0.7, f"{label} ; créés ensemble"
     total += WEIGHTS["location"] * location
     evidence.append(
         Evidence(

@@ -34,6 +34,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from mtlm.app.companions import CompanionService
 from mtlm.audit.journal import ACTOR_SYSTEM, ACTOR_USER, AuditJournal
 from mtlm.core.clock import Clock, iso_utc
 from mtlm.core.control import TaskControl
@@ -56,6 +57,15 @@ TYPE_DIRS = {
     "service": "Services",
 }
 SET_STATUS_DIRS = {"associated": "associés", "to_check": "à vérifier", "orphan": "orphelins"}
+#: Dossiers des fichiers liés dans un dossier de famille (1.3.0).
+COMPANION_DIRS = {
+    "image": "Images",
+    "son": "Sons",
+    "document": "Documents",
+    "modele": "Modèles",
+    "include": "Include",
+    "autre": "Autres",
+}
 
 
 class OrganizeError(MtlmError):
@@ -423,10 +433,20 @@ class OrganizeService:
             )
         return planned, collisions, excluded_q, excluded_d
 
+    def _linked(self, tool_ids: list[int]) -> dict[int, str]:
+        """Fichiers liés (certain ou probable) aux outils donnés : fichier → type."""
+        linked: dict[int, str] = {}
+        for row in CompanionService(self._conn, self._clock, self._journal).for_tools(tool_ids):
+            if row.confidence in ("certain", "probable"):
+                linked.setdefault(row.companion_id, row.kind)
+        return linked
+
     def preview_family(self, destination: Path, family_id: int) -> Preview:
         """Proposition : toute la famille (versions, copies renommées, compilés, SET associés)
         réunie dans **un dossier au nom du robot**, chaque fichier sous le nom de son dossier
-        d'origine (« tous les dossiers ensemble »). Copie vérifiée après validation."""
+        d'origine (« tous les dossiers ensemble ») ; les fichiers liés (images, sons,
+        documents…) rangés dans « Images », « Sons », « Documents »… Copie vérifiée après
+        validation."""
         head = self._conn.execute(
             "SELECT display_name FROM file_family WHERE id = ?", (family_id,)
         ).fetchone()
@@ -448,6 +468,14 @@ class OrganizeService:
         for r in files.values():
             folder = str(r[10]).rpartition("/")[0].rpartition("/")[2] or "Racine"
             selection.append((r, f"{_component(folder)}/{_component(str(r[9]))}"))
+        # Fichiers liés (images, sons, documents…) d'indice « certain » ou « probable ».
+        linked = self._linked(members)
+        for companion_id, kind in linked.items():
+            if companion_id not in files:
+                for r in self._files([companion_id]).values():
+                    selection.append(
+                        (r, f"{COMPANION_DIRS.get(kind, 'Autres')}/{_component(str(r[9]))}")
+                    )
         planned, collisions, excluded_q, excluded_d = self._place(selection)
         if not planned:
             raise OrganizeError("Aucun fichier présent dans cette famille.")
@@ -502,6 +530,15 @@ class OrganizeService:
         sets = self._files(sorted(best))
         for set_id, r in sets.items():
             selection.append((r, f"{folder_of[best[set_id]]}/{_component(str(r[9]))}"))
+        # Fichiers liés à chaque source (images, sons, includes…) : avec leur robot.
+        tool_of: dict[int, int] = {}
+        for row in CompanionService(self._conn, self._clock, self._journal).for_tools(
+            list(folder_of)
+        ):
+            if row.confidence in ("certain", "probable"):
+                tool_of.setdefault(row.companion_id, row.tool_id)
+        for companion_id, r in self._files(sorted(tool_of)).items():
+            selection.append((r, f"{folder_of[tool_of[companion_id]]}/{_component(str(r[9]))}"))
         planned, collisions, excluded_q, excluded_d = self._place(selection)
         if not planned:
             raise OrganizeError("Aucune source MQ4/MQ5 analysée.")

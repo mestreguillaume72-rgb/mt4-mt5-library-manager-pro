@@ -25,6 +25,8 @@ env:
 jobs:
   build:
     name: Construction (universelle)
+    # Minutes Mac économisées : seulement pour une publication ou à la demande.
+    if: github.event_name != 'push' || startsWith(github.ref, 'refs/tags/v') || contains(github.event.head_commit.message, '[publier]')
     runs-on: macos-15
     env:
       QT_QPA_PLATFORM: offscreen

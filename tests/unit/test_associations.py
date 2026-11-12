@@ -144,3 +144,33 @@ def test_similarite_noms() -> None:
     assert name_similarity("Scalper.mq4", "Scalper_EURUSD_M15.set") == 1.0
     assert name_similarity("Scalper.mq4", "Mon Scalper agressif.set") == 0.85
     assert name_similarity("Scalper.mq4", "Grid.set") < 0.5
+
+
+def test_nom_du_robot_ecrit_dans_l_en_tete_du_set() -> None:
+    """1.3.0 : un SET mal nommé mais dont l'en-tête MT5 nomme le robot."""
+    from dataclasses import replace
+
+    loose = set_info(GOOD, name="reglage final (2).set", directory="Telechargements")
+    plain = score_pair(robot(), loose)
+    named = score_pair(robot(), replace(loose, named_robot="Scalper"))
+    assert named.score > plain.score
+    assert any(
+        e.kind == "nom_du_robot_dans_le_set" and e.polarity == "pour" for e in named.evidence
+    )
+    other = score_pair(robot(), replace(loose, named_robot="GoldMaster"))
+    assert other.score < plain.score
+    assert any(
+        e.kind == "nom_du_robot_dans_le_set" and e.polarity == "contre" for e in other.evidence
+    )
+
+
+def test_crees_ensemble_petit_lot() -> None:
+    from dataclasses import replace
+
+    loose = set_info(GOOD, name="reglage.set", directory="Telechargements")
+    apart = score_pair(robot(), loose)
+    together = score_pair(replace(robot(), batch=(7, 3)), replace(loose, batch=(7, 3)))
+    assert together.score > apart.score
+    assert any(e.kind == "crees_ensemble" for e in together.evidence)
+    other_batch = score_pair(replace(robot(), batch=(7, 3)), replace(loose, batch=(8, 2)))
+    assert other_batch.score == apart.score

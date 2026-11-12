@@ -351,6 +351,25 @@ class OrganizePage(Page):
         self.plans.itemSelectionChanged.connect(self.load_items)
         self.items = make_table(["Fichier", "Cible", "État", "Collision avec"], badge_columns=(2,))
         self.layout_.addWidget(two_columns(self.plans, self.items), 1)
+        self.banner(
+            "<b>Isoler les sources MQ4/MQ5</b> — à ne pas confondre avec le dossier d'une "
+            "famille : ici, <b>toutes</b> vos sources MQ4/MQ5 sont copiées, chacune dans "
+            "« MQ4 » ou « MQ5 / nom du robot », avec ses SET associés et ses fichiers liés "
+            "(images, sons, includes). Vous voyez d'abord la proposition, puis vous validez.",
+            "banner",
+        )
+        self.button_row(
+            self.btn("isoler", "Isoler les MQ4/MQ5 avec leurs SET…", self.propose_sources),
+        )
+
+    def propose_sources(self) -> None:
+        self.propose_folder(
+            "Isoler les MQ4/MQ5",
+            "Chaque source MQ4/MQ5 dans « MQ4 » ou « MQ5 / <nom du robot> », avec les SET qui "
+            "lui sont associés (acceptés par vous, ou de niveau « forte » non rejetés) et ses "
+            "fichiers liés (images, sons, includes cités dans son code ou rangés avec lui).",
+            lambda service, destination: service.preview_sources(destination),
+        )
 
     def _service(self) -> OrganizeService:
         ctx = self.app.ctx

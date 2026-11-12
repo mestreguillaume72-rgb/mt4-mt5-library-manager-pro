@@ -8,6 +8,6 @@ __version__ = "1.3.0"
 
 #: Version du moteur d'analyse, enregistrée avec chaque résultat calculé
 #: (voir ARCHITECTURE § 6.3). Incrémentée à chaque changement d'algorithme.
-ENGINE_VERSION = "1.0.0"
+ENGINE_VERSION = "1.1.0"
 
 APP_NAME = "MT4 MT5 Library Manager PRO"

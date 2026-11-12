@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from mtlm.app.companions import CompanionService
 from mtlm.app.context import AppContext
 from mtlm.app.duplicates import DuplicateService
 from mtlm.app.families import FamilyService
@@ -106,7 +107,11 @@ def _associate(ctx: AppContext, control: TaskControl, _report: Report) -> str:
 def _families(ctx: AppContext, control: TaskControl, _report: Report) -> str:
     control.checkpoint()
     summary = FamilyService(ctx.conn, ctx.clock, ctx.journal).rebuild()
-    return f"{summary.families} famille(s), {summary.homonym_groups} homonyme(s) séparé(s)"
+    linked = CompanionService(ctx.conn, ctx.clock, ctx.journal).rebuild()
+    return (
+        f"{summary.families} famille(s), {summary.homonym_groups} homonyme(s) séparé(s), "
+        f"{linked.linked} fichier(s) annexe(s) relié(s) à leur outil sur {linked.companions}"
+    )
 
 
 def _duplicates(ctx: AppContext, control: TaskControl, _report: Report) -> str:

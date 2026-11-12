@@ -55,6 +55,9 @@ class MqlSource:
     property_flags: set[str] = field(default_factory=set)
     includes: list[tuple[str, bool, int]] = field(default_factory=list)  # (cible, système, ligne)
     imports: list[tuple[str, int]] = field(default_factory=list)
+    #: Fichiers cités par le code (``#resource`` ou chaîne se terminant par une extension connue)
+    #: : (nom de fichier, « resource » ou « chaine », ligne). Lecture du texte seulement.
+    references: list[tuple[str, str, int]] = field(default_factory=list)
     inputs: list[MqlInput] = field(default_factory=list)
     entry_points: list[str] = field(default_factory=list)
     line_count: int = 0
@@ -102,6 +105,38 @@ def _neutralize(text: str) -> tuple[str, str]:
         else:
             i += 1
     return "".join(no_comments), "".join(code)
+
+
+#: Extensions de fichiers qu'un outil peut utiliser (images, sons, modèles, SET, données…).
+REFERENCE_EXTS = {
+    "bmp",
+    "png",
+    "jpg",
+    "jpeg",
+    "gif",
+    "ico",
+    "wav",
+    "mp3",
+    "set",
+    "tpl",
+    "csv",
+    "txt",
+    "ini",
+    "htm",
+    "html",
+    "pdf",
+    "mqh",
+    "ex4",
+    "ex5",
+    "dll",
+}
+_LITERAL_RE = re.compile(r'"((?:[^"\\\n]|\\.){1,240})"')
+
+
+def _file_name(literal: str) -> str:
+    """Nom de fichier d'un chemin MQL (« \\\\Images\\\\logo.bmp » → « logo.bmp »)."""
+    cleaned = literal.replace("\\\\", "/").replace("\\", "/").rstrip("/")
+    return cleaned.rpartition("/")[2].strip()
 
 
 def _string_literal(value: str) -> str | None:
@@ -194,6 +229,21 @@ def parse_mql(text: str) -> MqlSource:
             literal = _string_literal(value)
             if literal:
                 result.imports.append((literal, line))
+        elif directive == "resource":
+            literal = _string_literal(value)
+            if literal:
+                result.references.append((_file_name(literal), "resource", line))
+
+    # Autres fichiers cités dans des chaînes (images d'objets graphiques, sons, SET…).
+    seen = {name.casefold() for name, _kind, _line in result.references}
+    for match in _LITERAL_RE.finditer(no_comments):
+        literal = match.group(1)
+        name = _file_name(literal)
+        if name.rpartition(".")[2].casefold() in REFERENCE_EXTS and name.casefold() not in seen:
+            seen.add(name.casefold())
+            result.references.append(
+                (name, "chaine", no_comments.count("\n", 0, match.start()) + 1)
+            )
 
     # Paramètres déclarés au niveau global (profondeur d'accolades 0).
     depths = _brace_depths(code)
