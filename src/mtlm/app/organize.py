@@ -41,6 +41,7 @@ from mtlm.core.control import TaskControl
 from mtlm.core.errors import MtlmError
 from mtlm.core.paths import AppPaths
 from mtlm.fs.reader import FileIdentity
+from mtlm.matching.names import logical_key
 from mtlm.store.database import transaction
 from mtlm.transfer.copy import CopyError, copy_verified
 from mtlm.transfer.guards import check_destination, check_space
@@ -78,6 +79,42 @@ class MqSourceRow:
     sets: int
     linked: int
     dependencies: int
+
+
+@dataclass(frozen=True)
+class IsolationCandidate:
+    source_id: int
+    file_id: int
+    rel_path: str
+    reason: str
+
+
+#: Dossiers « conteneurs » : une source qui y est rangée n'a pas de dossier propre.
+STANDARD_CONTAINERS = {
+    "experts",
+    "indicators",
+    "scripts",
+    "libraries",
+    "include",
+    "files",
+    "presets",
+    "images",
+    "sounds",
+    "templates",
+    "services",
+    "mql4",
+    "mql5",
+    "profiles",
+    "tester",
+    "logs",
+    "telechargements",
+    "téléchargements",
+    "downloads",
+    "desktop",
+    "bureau",
+    "documents",
+}
+MAX_FOLDER_FILES = 2000
 
 
 class OrganizeError(MtlmError):
@@ -405,7 +442,7 @@ class OrganizeService:
         return candidate
 
     def _place(
-        self, selection: list[tuple[tuple[Any, ...], str]]
+        self, selection: list[tuple[tuple[Any, ...], str]], *, by_content: bool = True
     ) -> tuple[list[PlannedItem], int, int, int]:
         """Cibles → éléments du plan : quarantaine exclue, un seul exemplaire par contenu,
         collisions de noms résolues par suffixe « (2) »."""
@@ -417,10 +454,11 @@ class OrganizeService:
             if int(r[11]):
                 excluded_q += 1
                 continue
-            if int(r[8]) in seen:
+            identity = int(r[8]) if by_content else -int(r[0])
+            if identity in seen:
                 excluded_d += 1
                 continue
-            seen.add(int(r[8]))
+            seen.add(identity)
             key = unicodedata.normalize("NFC", target).casefold()
             collision_of = None
             if key in taken:
@@ -577,88 +615,200 @@ class OrganizeService:
             )
         ]
 
-    def preview_sources(self, destination: Path, file_ids: list[int] | None = None) -> Preview:
-        """Proposition : isoler les sources MQ4/MQ5 (toutes, ou ``file_ids`` choisies) avec
-        leurs SET. Chaque source va dans ``MQ4|MQ5/<nom du robot>/`` avec les SET qui lui sont
-        associés (acceptés par vous, ou de niveau « forte » non rejetés), ses fichiers liés et
-        les indicateurs ou bibliothèques qu'elle utilise. Copie vérifiée après validation."""
+    def source_layout(self, source_ids: list[int]) -> dict[int, tuple[str, str]]:
+        """Pour chaque source : (« dossier », chemin du dossier propre au robot) si elle est
+        rangée dans un dossier qui ne contient qu'elle (et ses versions, compilés, SET,
+        images…), sinon (« seul », "") : le fichier est copié seul."""
+        rows = (
+            self._conn.execute(
+                "SELECT id, root_id, rel_path, name FROM file_record WHERE presence = 'present'"
+                f" AND id IN ({','.join('?' * len(source_ids))})",
+                source_ids,
+            ).fetchall()
+            if source_ids
+            else []
+        )
+        layout: dict[int, tuple[str, str]] = {}
+        for file_id, root_id, rel_path, name in rows:
+            directory = str(rel_path).rpartition("/")[0]
+            last = directory.rpartition("/")[2].casefold()
+            if not directory or last in STANDARD_CONTAINERS:
+                layout[int(file_id)] = ("seul", "")
+                continue
+            prefix = directory + "/"
+            inside = self._conn.execute(
+                "SELECT count(*) FROM file_record WHERE root_id = ? AND presence = 'present'"
+                " AND substr(rel_path, 1, ?) = ?",
+                (root_id, len(prefix), prefix),
+            ).fetchone()[0]
+            tools = {
+                logical_key(str(n))
+                for (n,) in self._conn.execute(
+                    "SELECT name FROM file_record WHERE root_id = ? AND presence = 'present'"
+                    " AND substr(rel_path, 1, ?) = ? AND ext IN ('mq4', 'mq5', 'ex4', 'ex5')",
+                    (root_id, len(prefix), prefix),
+                )
+            }
+            own = tools == {logical_key(str(name))} and int(inside) <= MAX_FOLDER_FILES
+            layout[int(file_id)] = ("dossier", directory) if own else ("seul", "")
+        return layout
+
+    def isolation_candidates(self, source_ids: list[int]) -> list[IsolationCandidate]:
+        """Fichiers qui peuvent aller avec chaque source (SET associés, fichiers liés,
+        indicateurs utilisés, bibliothèques) et qui ne sont pas déjà dans son dossier : ils
+        ne sont ajoutés que si l'utilisateur valide le lien."""
+        layout = self.source_layout(source_ids)
+        inside_of: dict[int, str] = {}
+        paths = (
+            {
+                int(f): (int(root), str(rel))
+                for f, root, rel in self._conn.execute(
+                    "SELECT id, root_id, rel_path FROM file_record"
+                    f" WHERE id IN ({','.join('?' * len(source_ids))})",
+                    source_ids,
+                )
+            }
+            if source_ids
+            else {}
+        )
+        for source_id, (mode, directory) in layout.items():
+            if mode == "dossier":
+                inside_of[source_id] = f"{paths[source_id][0]}:{directory}/"
+        found: dict[int, IsolationCandidate] = {}
+
+        def add(source_id: int, file_id: int, reason: str) -> None:
+            if file_id in found or file_id in paths:
+                return
+            row = self._conn.execute(
+                "SELECT root_id, rel_path FROM file_record WHERE id = ? AND presence = 'present'",
+                (file_id,),
+            ).fetchone()
+            if row is None:
+                return
+            prefix = inside_of.get(source_id)
+            if prefix and f"{row[0]}:{row[1]}".startswith(prefix):
+                return  # déjà copié avec le dossier du robot
+            found[file_id] = IsolationCandidate(source_id, file_id, str(row[1]), reason)
+
+        marks = ",".join("?" * len(source_ids))
+        for set_id, robot_id, decision in (
+            self._conn.execute(
+                "SELECT set_file_id, robot_file_id, user_decision FROM association"
+                f" WHERE robot_file_id IN ({marks}) AND (user_decision = 'accepted'"
+                " OR (level = 'forte' AND user_decision = 'none'))"
+                " ORDER BY user_decision = 'accepted' DESC, score DESC",
+                source_ids,
+            )
+            if source_ids
+            else []
+        ):
+            add(
+                int(robot_id),
+                int(set_id),
+                "SET relié (validé par vous)" if decision == "accepted" else "SET relié (forte)",
+            )
+        companions = CompanionService(self._conn, self._clock, self._journal)
+        for row in companions.for_tools(source_ids):
+            if row.confidence in ("certain", "probable"):
+                add(row.tool_id, row.companion_id, f"fichier lié ({row.confidence})")
+        for dep in companions.dependencies(source_ids):
+            if dep.user_id in layout:
+                add(dep.user_id, dep.used_id, dep.evidence)
+        return sorted(found.values(), key=lambda c: (c.source_id, c.rel_path))
+
+    def preview_sources(
+        self,
+        destination: Path,
+        file_ids: list[int] | None = None,
+        extras: dict[int, int] | None = None,
+    ) -> Preview:
+        """Proposition : isoler les sources MQ4/MQ5 (toutes, ou ``file_ids`` choisies).
+
+        * source rangée dans **son propre dossier** : le dossier est copié **complet, tel
+          quel** (sous-dossiers compris) dans ``MQ4|MQ5/<nom du dossier>/`` ;
+        * source **seule** au milieu d'autres fichiers : le fichier est copié seul dans
+          ``MQ4|MQ5/<nom de l'outil>/`` ;
+        * ``extras`` (fichier → source) : fichiers qui vont avec, ajoutés **seulement si
+          l'utilisateur a validé le lien** (voir :meth:`isolation_candidates`).
+
+        Copie vérifiée après validation ; rien n'est dédoublonné (copie fidèle)."""
         chosen = set(file_ids) if file_ids is not None else None
         if chosen is not None and not chosen:
             raise OrganizeError("Choisissez au moins une source MQ4/MQ5.")
         target_root = self._destination(destination)
         plan_root = self._unique_folder(
-            target_root, f"Sources MQ4-MQ5 avec SET {self._clock.now():%Y-%m-%d}"
+            target_root, f"Sources MQ4-MQ5 isolées {self._clock.now():%Y-%m-%d}"
         )
-        sources = self._files(
-            [
-                int(r[0])
-                for r in self._conn.execute(
-                    "SELECT f.id FROM file_record f LEFT JOIN duplicate_member dm"
-                    " ON dm.file_id = f.id WHERE f.ext IN ('mq4', 'mq5')"
-                    " ORDER BY coalesce(dm.is_reference, 0) DESC, f.rel_path"
-                )
-                if chosen is None or int(r[0]) in chosen
-            ]
-        )
+        source_ids = [
+            int(r[0])
+            for r in self._conn.execute(
+                "SELECT id FROM file_record WHERE ext IN ('mq4', 'mq5') AND presence = 'present'"
+                " AND in_quarantine = 0 ORDER BY rel_path"
+            )
+            if chosen is None or int(r[0]) in chosen
+        ]
+        sources = self._files(source_ids)
+        layout = self.source_layout(list(sources))
         folder_of: dict[int, str] = {}
-        kept_by_content: dict[int, str] = {}
         selection: list[tuple[tuple[Any, ...], str]] = []
-        for r in sources.values():
+        copied_folders: dict[tuple[int, str], str] = {}
+        for source_id, r in sources.items():
             platform = "MQ4" if str(r[9]).casefold().endswith(".mq4") else "MQ5"
-            folder = f"{platform}/{_component(Path(str(r[9])).stem)}"
-            if int(r[8]) in kept_by_content:  # copie identique : ses SET suivent l'exemplaire gardé
-                folder_of[int(r[0])] = kept_by_content[int(r[8])]
+            mode, directory = layout.get(source_id, ("seul", ""))
+            if mode == "dossier":
+                root_id = int(
+                    self._conn.execute(
+                        "SELECT root_id FROM file_record WHERE id = ?", (source_id,)
+                    ).fetchone()[0]
+                )
+                key = (root_id, directory)
+                if key not in copied_folders:
+                    name = _component(directory.rpartition("/")[2])
+                    copied_folders[key] = f"{platform}/{name}"
+                    prefix = directory + "/"
+                    members = [
+                        int(f)
+                        for (f,) in self._conn.execute(
+                            "SELECT id FROM file_record WHERE root_id = ? AND presence = 'present'"
+                            " AND file_type = 'file' AND substr(rel_path, 1, ?) = ?"
+                            " ORDER BY rel_path",
+                            (root_id, len(prefix), prefix),
+                        )
+                    ]
+                    for member in self._files(members).values():
+                        relative = str(member[10])[len(prefix) :]
+                        selection.append(
+                            (
+                                member,
+                                f"{copied_folders[key]}/"
+                                + "/".join(_component(p) for p in relative.split("/")),
+                            )
+                        )
+                folder_of[source_id] = copied_folders[key]
             else:
-                kept_by_content[int(r[8])] = folder
-                folder_of[int(r[0])] = folder
-            selection.append((r, f"{folder}/{_component(str(r[9]))}"))
-        best: dict[int, int] = {}
-        for set_id, robot_id in self._conn.execute(
-            "SELECT set_file_id, robot_file_id FROM association"
-            " WHERE user_decision = 'accepted' OR (level = 'forte' AND user_decision = 'none')"
-            " ORDER BY set_file_id, user_decision = 'accepted' DESC, score DESC, id"
-        ):
-            if int(robot_id) in folder_of:
-                best.setdefault(int(set_id), int(robot_id))
-        sets = self._files(sorted(best))
-        for set_id, r in sets.items():
-            selection.append((r, f"{folder_of[best[set_id]]}/{_component(str(r[9]))}"))
-        # Fichiers liés à chaque source (images, sons, includes…) : avec leur robot.
-        tool_of: dict[int, int] = {}
-        for row in CompanionService(self._conn, self._clock, self._journal).for_tools(
-            list(folder_of)
-        ):
-            if row.confidence in ("certain", "probable"):
-                tool_of.setdefault(row.companion_id, row.tool_id)
-        for companion_id, r in self._files(sorted(tool_of)).items():
-            selection.append((r, f"{folder_of[tool_of[companion_id]]}/{_component(str(r[9]))}"))
-        # Indicateurs utilisés et bibliothèques importées : avec le robot qui en a besoin.
-        user_of: dict[int, int] = {}
-        for dep in CompanionService(self._conn, self._clock, self._journal).dependencies(
-            list(folder_of)
-        ):
-            if dep.user_id in folder_of:
-                user_of.setdefault(dep.used_id, dep.user_id)
-        # Un indicateur ou une bibliothèque utilisé par un robot va avec ce robot (le premier
-        # qui l'utilise), à la place de son propre dossier : tout ensemble.
-        moved = {
-            int(r[0]): f"{folder_of[user_of[used_id]]}/{_component(str(r[9]))}"
-            for used_id, r in self._files(sorted(user_of)).items()
-        }
-        selection = [(r, moved.get(int(r[0]), target)) for r, target in selection]
-        known = {int(r[0]) for r, _t in selection}
-        for used_id, r in self._files(sorted(user_of)).items():
-            if used_id not in known:
-                selection.append((r, moved[used_id]))
-        planned, collisions, excluded_q, excluded_d = self._place(selection)
+                folder = f"{platform}/{_component(Path(str(r[9])).stem)}"
+                folder_of[source_id] = folder
+                selection.append((r, f"{folder}/{_component(str(r[9]))}"))
+        added = 0
+        for file_id, source_id in (extras or {}).items():
+            if source_id not in folder_of:
+                continue
+            for r in self._files([file_id]).values():
+                selection.append((r, f"{folder_of[source_id]}/{_component(str(r[9]))}"))
+                added += 1
+        planned, collisions, excluded_q, excluded_d = self._place(selection, by_content=False)
         if not planned:
             raise OrganizeError("Aucune source MQ4/MQ5 analysée.")
         return self._record_plan(
             plan_root,
             planned,
             collisions,
-            "mq-avec-set-v1",
-            {"sources": len(sources), "set_associes": len(sets)},
+            "mq-isolees-v2",
+            {
+                "sources": len(sources),
+                "dossiers_complets": len(copied_folders),
+                "fichiers_valides": added,
+            },
             excluded_q,
             excluded_d,
         )

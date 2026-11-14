@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -15,13 +17,22 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from mtlm.app.archives import ArchiveService
 from mtlm.app.companions import DEPENDENCY_LABELS, KIND_LABELS, CompanionService
 from mtlm.app.companions import PLACEMENT_LABELS as LINK_PLACEMENTS
 from mtlm.app.deletion import DeletionService
 from mtlm.app.duplicates import DuplicateService
 from mtlm.app.families import TYPE_LABELS, FamilyService
 from mtlm.app.presenters import RELATION_LABELS, human_size
-from mtlm.app.sets import LEVEL_LABELS, PLACEMENT_LABELS, AssociationService, SetService
+from mtlm.app.risk import LEVEL_LABELS as RISK_LABELS
+from mtlm.app.risk import RiskService
+from mtlm.app.sets import (
+    PLACEMENT_LABELS,
+    TO_PROCESS,
+    AssociationService,
+    SetService,
+    certainty_label,
+)
 from mtlm.ui.base import fill_table, make_table, selected_value, selected_values
 from mtlm.ui.pages_main import Page, two_columns
 from mtlm.ui.window import UiApp
@@ -60,6 +71,7 @@ class SetsPage(Page):
         self.placement = QComboBox()
         self.placement.setAccessibleName("Placement des SET")
         for label, value in (
+            ("À traiter : en vrac, mal rangés, sans robot", "a_traiter"),
             ("Tous les SET", None),
             (PLACEMENT_LABELS["avec_son_robot"], "avec_son_robot"),
             (PLACEMENT_LABELS["en_vrac"], "en_vrac"),
@@ -83,7 +95,7 @@ class SetsPage(Page):
         )
         self.layout_.addWidget(two_columns(self.sets, self.params), 2)
         self.assoc = make_table(
-            ["N°", "Score", "Niveau", "Décision", "Placement", "Outil (robot, indicateur…)"],
+            ["N°", "Score", "Certitude", "Décision", "Placement", "Outil (robot, indicateur…)"],
             badge_columns=(2, 3, 4),
             multi=True,
         )
@@ -161,9 +173,11 @@ class SetsPage(Page):
         fill_table(
             self.sets,
             [
-                (*r, PLACEMENT_LABELS.get(placements.get(int(r[0]), ""), "sans robot"))
+                (*r, PLACEMENT_LABELS.get(placements.get(int(r[0]), ""), "sans robot trouvé"))
                 for r in rows
-                if wanted is None or placements.get(int(r[0])) == wanted
+                if wanted is None
+                or (wanted == "a_traiter" and placements.get(int(r[0]), "en_vrac") in TO_PROCESS)
+                or placements.get(int(r[0])) == wanted
             ],
         )
         self.load_selected()
@@ -204,7 +218,7 @@ class SetsPage(Page):
                 (
                     a.id,
                     a.score,
-                    LEVEL_LABELS[a.level],
+                    certainty_label(a.level, a.score),
                     DECISIONS[a.user_decision],
                     PLACEMENT_LABELS[a.placement],
                     a.robot_path,
@@ -794,3 +808,244 @@ class DuplicatesPage(Page):
             ),
         )
         self.load_members()
+
+
+class ArchivesPage(Page):
+    key, title, icon = "archives", "Archives", "🗜"
+    subtitle = (
+        "Vos fichiers compressés (ZIP, RAR, 7z, TAR, GZ…) : ce qu'ils contiennent, s'ils sont "
+        "déjà décompressés sur le disque, et la décompression à la demande."
+    )
+
+    def __init__(self, app: UiApp) -> None:
+        super().__init__(app)
+        self.banner(
+            "Les archives sont <b>lues sans rien extraire</b> : chaque fichier contenu est "
+            "comparé à vos fichiers. <b>« Déjà décompressée »</b> = tout son contenu existe "
+            "déjà sur le disque : on peut la mettre à la Corbeille sans rien perdre. Pour "
+            "décompresser, cliquez sur les archives voulues puis « Décompresser » : un dossier "
+            "à leur nom est créé à côté d'elles, chaque fichier est vérifié, et l'archive part "
+            "à la Corbeille seulement si tout est vérifié.",
+            "banner",
+        )
+        self.archives = make_table(
+            ["N°", "Archive", "Format", "Fichiers", "Robots / indicateurs", "SET", "État"],
+            badge_columns=(6,),
+            multi=True,
+        )
+        self.archives.itemSelectionChanged.connect(self.load_entries)
+        self.layout_.addWidget(self.archives, 2)
+        self.button_row(*self.select_buttons("archives", self.archives))
+        self.entries = make_table(
+            ["Fichier dans l'archive", "Type", "Taille", "Lecture", "Déjà sur le disque ?"]
+        )
+        self.layout_.addWidget(self.entries, 2)
+        self.button_row(
+            self.btn(
+                "decompresser",
+                "Décompresser les archives choisies (puis Corbeille)",
+                self.extract,
+            ),
+            self.btn(
+                "corbeille",
+                "Mettre à la Corbeille les archives déjà décompressées choisies",
+                self.trash_redundant,
+            ),
+            self.btn("actualiser", "Actualiser", self.refresh),
+        )
+
+    def _service(self) -> ArchiveService:
+        ctx = self.app.ctx
+        return ArchiveService(ctx.conn, ctx.clock, ctx.journal)
+
+    def refresh(self) -> None:
+        formats = {
+            "zip": "ZIP",
+            "rar": "RAR",
+            "7z": "7z",
+            "gzip": "GZ / TAR.GZ",
+            "other": "TAR / BZ2 / XZ",
+        }
+        fill_table(
+            self.archives,
+            [
+                (
+                    r.file_id,
+                    r.rel_path,
+                    formats.get(r.format, r.format),
+                    r.files,
+                    r.tools,
+                    r.sets,
+                    r.verdict,
+                )
+                for r in self._service().rows()
+            ],
+        )
+        self.load_entries()
+
+    def load_entries(self) -> None:
+        value = selected_value(self.archives)
+        fill_table(
+            self.entries,
+            []
+            if value is None
+            else [
+                (inner, kind, human_size(size) if size is not None else "", state, where)
+                for inner, kind, size, state, where in self._service().entries(int(value))
+            ],
+        )
+
+    def extract(self) -> None:
+        chosen = [int(v) for v in selected_values(self.archives)]
+        if not chosen:
+            self.app.dialogs.info(
+                self.win, "Décompresser", "Cliquez sur les archives à décompresser."
+            )
+            return
+        backend = self.app.ctx.trash
+        if not self.app.dialogs.confirm(
+            self,
+            "Décompresser",
+            f"Décompresser {len(chosen)} archive(s), chacune dans un nouveau dossier à son nom, à "
+            "côté d'elle ? Chaque fichier extrait est vérifié par son empreinte."
+            + (
+                " Ensuite, l'archive part à la Corbeille du Mac (récupérable), seulement si tout "
+                "est vérifié."
+                if backend is not None
+                else " (La Corbeille n'est disponible que sur Mac : l'archive restera en place.)"
+            )
+            + "\n\nAprès, relancez « Tout analyser » pour analyser les fichiers extraits.",
+        ):
+            return
+
+        def work(ctx: Any, _control: Any, _report: Any) -> Any:
+            return ArchiveService(ctx.conn, ctx.clock, ctx.journal).extract(
+                chosen, backend, trash_archive=True
+            )
+
+        def done(result: Any) -> None:
+            text = (
+                f"{result.extracted} archive(s) décompressée(s) ({result.files} fichier(s) "
+                f"vérifié(s)), {result.trashed} mise(s) à la Corbeille."
+            )
+            if result.refused:
+                text += f"\n{len(result.refused)} laissée(s) intacte(s) :\n" + "\n".join(
+                    f"• n°{a} : {why}" for a, why in result.refused[:10]
+                )
+            self.app.dialogs.info(self.win, "Décompresser", text)
+            self.refresh()
+
+        self.app.run_task("Décompression", work, done)
+
+    def trash_redundant(self) -> None:
+        chosen = [int(v) for v in selected_values(self.archives)]
+        if not chosen:
+            self.app.dialogs.info(self.win, "Corbeille", "Cliquez sur les archives concernées.")
+            return
+        if self.app.ctx.trash is None:
+            self.app.dialogs.info(
+                self.win, "Corbeille", "La mise à la Corbeille n'est disponible que sur Mac."
+            )
+            return
+        if not self.app.dialogs.confirm(
+            self,
+            "Mettre à la Corbeille",
+            f"{len(chosen)} archive(s) choisie(s). Seules celles dont TOUT le contenu existe déjà "
+            "sur le disque partent à la Corbeille du Mac (récupérables) ; les autres restent.",
+        ):
+            return
+        result = self._service().trash_redundant(chosen, self.app.ctx.trash)
+        text = f"{result.trashed} archive(s) mise(s) à la Corbeille."
+        if result.refused:
+            text += f"\n{len(result.refused)} laissée(s) en place :\n" + "\n".join(
+                f"• n°{a} : {why}" for a, why in result.refused[:10]
+            )
+        self.app.dialogs.info(self.win, "Corbeille", text)
+        self.refresh()
+
+
+class RiskPage(Page):
+    key, title, icon = "risques", "Fichiers à risque", "⚠️"
+    subtitle = (
+        "Ce que certains fichiers pourraient faire de dangereux, repéré en les lisant "
+        "seulement. Ce n'est pas un antivirus."
+    )
+
+    def __init__(self, app: UiApp) -> None:
+        super().__init__(app)
+        self.banner(
+            "<b>Analyse 100 % locale, sur votre Mac</b> : les fichiers sont seulement lus, "
+            "<b>jamais exécutés</b>, et <b>rien n'est envoyé sur Internet</b>. On repère des "
+            "<b>signes</b> : DLL, robots qui peuvent télécharger, lancer un programme, effacer "
+            "des fichiers ou lire le clavier, programmes et scripts (.exe, .bat…), fichiers "
+            "déguisés, archives protégées par mot de passe. <b>Ce n'est pas un antivirus</b> : "
+            "un signe n'est pas une preuve, et un virus inconnu peut passer inaperçu. En cas "
+            "de doute, passez le fichier dans un antivirus pour Mac avant de l'utiliser.",
+            "bannerSafe",
+        )
+        self.findings = make_table(
+            ["N°", "Niveau", "Fichier", "Ce qu'il pourrait faire"],
+            badge_columns=(1,),
+            multi=True,
+        )
+        self.layout_.addWidget(self.findings, 1)
+        self.summary = QLabel("Cliquez sur « Rechercher les fichiers à risque ».")
+        self.summary.setObjectName("cardHint")
+        self.layout_.addWidget(self.summary)
+        self.button_row(
+            self.btn("rechercher", "Rechercher les fichiers à risque", self.scan),
+            *self.select_buttons("fichiers", self.findings),
+            self.btn("corbeille", "Mettre les fichiers choisis à la Corbeille", self.trash),
+        )
+        self._rows: list[Any] = []
+
+    def scan(self) -> None:
+        def work(ctx: Any, control: Any, _report: Any) -> Any:
+            return RiskService(ctx.conn).scan(control=control)
+
+        def done(rows: Any) -> None:
+            self._rows = list(rows)
+            self._show()
+
+        self.app.run_task("Fichiers à risque", work, done)
+
+    def _show(self) -> None:
+        fill_table(
+            self.findings,
+            [
+                (r.file_id, RISK_LABELS.get(r.level, r.level), r.rel_path, r.reasons)
+                for r in self._rows
+            ],
+        )
+        high = sum(r.level == "élevé" for r in self._rows)
+        watch = sum(r.level == "à surveiller" for r in self._rows)
+        self.summary.setText(
+            f"{high} fichier(s) à risque élevé, {watch} à surveiller, "
+            f"{len(self._rows) - high - watch} pour information. Rappel : ce sont des signes, "
+            "pas des preuves de virus."
+            if self._rows
+            else "Aucun signe de risque trouvé dans les fichiers analysés (ce qui ne garantit "
+            "pas l'absence de virus)."
+        )
+
+    def trash(self) -> None:
+        chosen = [int(v) for v in selected_values(self.findings)]
+        if not chosen:
+            self.app.dialogs.info(self.win, "Corbeille", "Cliquez sur les fichiers concernés.")
+            return
+        self.trash_with_confirmation(
+            chosen,
+            "familles",
+            f"{len(chosen)} fichier(s) signalé(s) à risque. Ils peuvent être les seuls "
+            "exemplaires : ils iront quand même dans la Corbeille du Mac, récupérables.",
+            allow_unique=True,
+        )
+
+    def refresh(self) -> None:
+        if self._rows:
+            present = {
+                int(r[0])
+                for r in self.conn.execute("SELECT id FROM file_record WHERE presence = 'present'")
+            }
+            self._rows = [r for r in self._rows if r.file_id in present]
+            self._show()

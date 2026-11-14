@@ -114,6 +114,22 @@ def test_fichiers_lies_suivent_leur_robot_dans_les_dossiers_proposes(
     targets = {t for _f, t, _s, _c in service.items(preview.plan_id)}
     assert {"Images/logo.bmp", "Sons/alerte.wav", "Documents/Scalper manuel.pdf"} <= targets
     assert "Images/capture.png" not in targets  # indice seulement « possible » : pas copié
-    sources = service.preview_sources(dest)
-    isolated = {t for _f, t, _s, _c in service.items(sources.plan_id)}
-    assert {"MQ4/Scalper/Scalper.mq4", "MQ4/Scalper/logo.bmp", "MQ4/Scalper/alerte.wav"} <= isolated
+    # Isolement : Scalper a son propre dossier, copié complet ; les fichiers rangés ailleurs
+    # ne viennent qu'après validation de l'utilisateur.
+    robot = int(
+        ctx.conn.execute(
+            "SELECT id FROM file_record WHERE rel_path = 'MQL4/Experts/Scalper/Scalper.mq4'"
+        ).fetchone()[0]
+    )
+    alone = service.preview_sources(dest, [robot])
+    isolated = {t for _f, t, _s, _c in service.items(alone.plan_id)}
+    assert isolated == {
+        "MQ4/Scalper/Scalper.mq4",
+        "MQ4/Scalper/Scalper manuel.pdf",
+        "MQ4/Scalper/capture.png",
+    }
+    candidates = {c.rel_path: c for c in service.isolation_candidates([robot])}
+    assert {"MQL4/Images/logo.bmp", "Telechargements/alerte.wav"} <= set(candidates)
+    logo = candidates["MQL4/Images/logo.bmp"]
+    validated = service.preview_sources(dest, [robot], {logo.file_id: logo.source_id})
+    assert "MQ4/Scalper/logo.bmp" in {t for _f, t, _s, _c in service.items(validated.plan_id)}

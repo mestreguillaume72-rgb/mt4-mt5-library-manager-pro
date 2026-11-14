@@ -2,9 +2,10 @@
 
 1. Signature : les 4 096 premiers octets de chaque fichier ordinaire présent sont lus
    (lecture seule) pour identifier son format réel et signaler les extensions trompeuses.
-2. Archives : les ZIP sont inspectés sans extraction (voir :mod:`mtlm.formats.archives`) ;
-   RAR/7z/GZIP sont identifiés mais pas ouverts. Une archive déjà inspectée avec le même
-   contenu et la même version du moteur n'est pas ré-inspectée.
+2. Archives : ZIP, RAR, 7z, GZIP, BZIP2, XZ et TAR sont inspectés sans extraction (voir
+   :mod:`mtlm.formats.archives` et :mod:`mtlm.formats.libarchive`) : chaque fichier contenu
+   reçoit son empreinte. Une archive déjà inspectée avec le même contenu et la même version
+   du moteur n'est pas ré-inspectée.
 
 Une archive en erreur n'arrête jamais le traitement : le motif est enregistré et journalisé.
 """
@@ -29,8 +30,8 @@ from mtlm.store.database import transaction
 
 log = logging.getLogger("mtlm.formats")
 
-ARCHIVE_KINDS = {"zip", "rar", "7z", "gzip"}
-ARCHIVE_EXTS = {"zip", "rar", "7z", "gz"}
+ARCHIVE_KINDS = {"zip", "rar", "7z", "gzip", "bzip2", "xz", "tar"}
+ARCHIVE_EXTS = {"zip", "rar", "7z", "gz", "tgz", "bz2", "xz", "tar"}
 
 
 @dataclass

@@ -35,6 +35,17 @@ SPECS: dict[str, SettingSpec] = {
     s.key: s
     for s in (
         SettingSpec(
+            "archives.decompresser",
+            "Décompresser les archives et mettre l'archive à la Corbeille (0 = non, 1 = oui)",
+            0,
+            0,
+            1,
+            True,
+            "1 : à l'analyse, chaque archive lue sans problème est décompressée dans un dossier "
+            "à son nom, à côté d'elle, puis mise à la Corbeille si tout est vérifié. 0 : les "
+            "archives sont seulement lues, sans rien extraire.",
+        ),
+        SettingSpec(
             "similarite.seuil",
             "Seuil de similarité des sources",
             0.80,

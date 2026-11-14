@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from mtlm.app.archives import ArchiveService
 from mtlm.app.companions import CompanionService
 from mtlm.app.context import AppContext
 from mtlm.app.duplicates import DuplicateService
@@ -71,14 +72,32 @@ def _hash(ctx: AppContext, control: TaskControl, report: Report) -> str:
 
 
 def _formats(ctx: AppContext, control: TaskControl, report: Report) -> str:
-    limits = SettingsService(ctx.conn, ctx.journal).archive_limits()
-    summary = FormatService(ctx.conn, ctx.clock, ctx.journal, limits).run(
+    settings = SettingsService(ctx.conn, ctx.journal)
+    limits = settings.archive_limits()
+    service = FormatService(ctx.conn, ctx.clock, ctx.journal, limits)
+    summary = service.run(
         control=control, progress=lambda s: report(f"Formats : {s.signatures} signature(s)…")
     )
-    return (
+    text = (
         f"{summary.signatures} signature(s), {summary.misleading} extension(s) trompeuse(s), "
         f"{summary.archives} archive(s) dont {summary.archives_problem} avec problème"
     )
+    if int(settings.get("archives.decompresser")):
+        archives = ArchiveService(ctx.conn, ctx.clock, ctx.journal)
+        eligible = archives.eligible()
+        if eligible:
+            report(f"Décompression de {len(eligible)} archive(s)…")
+            done = archives.extract(eligible, ctx.trash, trash_archive=True)
+            text += (
+                f" ; {done.extracted} archive(s) décompressée(s) ({done.files} fichier(s)), "
+                f"{done.trashed} mise(s) à la Corbeille, {len(done.refused)} laissée(s) intacte(s)"
+            )
+            if done.extracted:
+                # Les fichiers extraits rejoignent l'analyse : inventaire, empreintes, formats.
+                _scan(ctx, control, report)
+                _hash(ctx, control, report)
+                service.run(control=control)
+    return text
 
 
 def _recognize(ctx: AppContext, control: TaskControl, report: Report) -> str:

@@ -404,7 +404,7 @@ wheels = [
 
 [[package]]
 name = "mtlm"
-version = "1.4.1"
+version = "1.5.0"
 source = { editable = "." }
 dependencies = [
     { name = "pyside6-essentials" },

@@ -134,16 +134,31 @@ def test_tout_ensemble_dans_les_dossiers_proposes(tmp_path: Path, ctx: AppContex
     result = service.execute(preview.plan_id, preview.token)
     assert result.status == "completed"
     assert (dest / "Gold Robot" / "Bibliothèques" / "Helper.dll").is_file()
-    # Isolement MQ4/MQ5 : l'indicateur utilisé va avec le robot qui l'utilise.
-    sources = service.preview_sources(dest)
+    # Isolement MQ4/MQ5 : le robot a son dossier « Gold » (copié tel quel) ; l'indicateur,
+    # la DLL et la bibliothèque qu'il utilise sont proposés, ajoutés seulement si validés.
+    robot = int(
+        ctx.conn.execute(
+            "SELECT id FROM file_record WHERE rel_path = 'MQL4/Experts/Gold/Gold Robot.mq4'"
+        ).fetchone()[0]
+    )
+    proposed = {c.rel_path: c for c in service.isolation_candidates([robot])}
+    assert {
+        "MQL4/Indicators/SuperTrend.mq4",
+        "MQL4/Indicators/SuperTrend.ex4",
+        "MQL4/Libraries/Helper.dll",
+        "MQL4/Libraries/MathLib.ex4",
+    } <= set(proposed)
+    alone = service.preview_sources(dest, [robot])
+    assert {t for _f, t, _s, _c in service.items(alone.plan_id)} == {"MQ4/Gold/Gold Robot.mq4"}
+    chosen = {c.file_id: c.source_id for c in proposed.values()}
+    sources = service.preview_sources(dest, [robot], chosen)
     isolated = {t for _f, t, _s, _c in service.items(sources.plan_id)}
     assert {
-        "MQ4/Gold Robot/Gold Robot.mq4",
-        "MQ4/Gold Robot/SuperTrend.ex4",
-        "MQ4/Gold Robot/SuperTrend.mq4",
-        "MQ4/Gold Robot/Helper.dll",
+        "MQ4/Gold/Gold Robot.mq4",
+        "MQ4/Gold/SuperTrend.ex4",
+        "MQ4/Gold/SuperTrend.mq4",
+        "MQ4/Gold/Helper.dll",
     } <= isolated
-    assert not any(t.startswith("MQ4/SuperTrend/") for t in isolated)
     # Plusieurs familles d'un coup : un dossier « Familles réunies ».
     other = int(
         ctx.conn.execute(

@@ -32,9 +32,11 @@ def test_placement_affiche_et_filtre(
     assert page.sets.rowCount() == 1
     # Le SET est dans « Presets » : le dossier prévu par MetaTrader, robot retrouvé ailleurs.
     assert page.sets.item(0, 5).text() == "Rangé dans le dossier MetaTrader prévu (Presets)"
-    page.placement.setCurrentIndex(1)  # « Rangé avec son robot »
+    assert page.placement.currentData() == "a_traiter"  # par défaut : SET à traiter
+    assert page.sets.rowCount() == 1
+    page.placement.setCurrentIndex(2)  # « Rangé avec son robot »
     assert page.sets.rowCount() == 0
-    page.placement.setCurrentIndex(4)  # « dossier MetaTrader prévu »
+    page.placement.setCurrentIndex(5)  # « dossier MetaTrader prévu »
     assert page.sets.rowCount() == 1
     window.navigate("tableau")
     assert "dans le dossier Presets de MetaTrader" in window.pages["tableau"].summary.text()
@@ -139,10 +141,11 @@ def test_propositions_de_dossiers_validees(
     assert (dest / name).is_dir()
     assert "copié(s) et vérifié(s)" in dialogs.infos[-1][1]
     dialogs.directories.append(dest)
+    dialogs.choices.append(["*"])  # l'utilisateur coche tous les fichiers proposés
     window.navigate("sources_mq")
     click(window, qtbot, "sources_mq.isoler_tout")
     wait_idle(window, qtbot)
-    isolated = [p for p in dest.iterdir() if p.name.startswith("Sources MQ4-MQ5")]
+    isolated = [p for p in dest.iterdir() if p.name.startswith("Sources MQ4-MQ5 isolées")]
     assert len(isolated) == 1
     assert list(isolated[0].rglob("*.set")) and list(isolated[0].rglob("*.mq4"))
 

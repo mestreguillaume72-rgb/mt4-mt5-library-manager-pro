@@ -22,7 +22,13 @@ from mtlm.ui.pages_actions import (
     SettingsPage,
     SourcesMqPage,
 )
-from mtlm.ui.pages_analysis import DuplicatesPage, FamiliesPage, SetsPage
+from mtlm.ui.pages_analysis import (
+    ArchivesPage,
+    DuplicatesPage,
+    FamiliesPage,
+    RiskPage,
+    SetsPage,
+)
 from mtlm.ui.pages_main import AnalysisPage, DashboardPage, DetailPage, ExplorerPage, SourcesPage
 from mtlm.ui.theme import apply_theme
 from mtlm.ui.window import MainWindow, UiApp
@@ -37,6 +43,8 @@ PAGES = [
     SetsPage,
     FamiliesPage,
     DuplicatesPage,
+    ArchivesPage,
+    RiskPage,
     QuarantinePage,
     OrganizePage,
     SourcesMqPage,
@@ -75,6 +83,11 @@ class AutoDialogs:
 
     def error(self, parent: object, title: str, text: str) -> None:
         self.errors.append(f"{title} : {text}")
+
+    def choose_items(
+        self, parent: object, title: str, text: str, items: list[tuple[str, str]]
+    ) -> list[str] | None:
+        return []  # l'auto-diagnostic ne valide jamais de lien
 
 
 def autotest(source: Path) -> int:

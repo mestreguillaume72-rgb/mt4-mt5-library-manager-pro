@@ -50,6 +50,12 @@ class Dialogs(Protocol):
     def confirm(self, parent: QWidget, title: str, text: str) -> bool: ...
     def info(self, parent: QWidget, title: str, text: str) -> None: ...
     def error(self, parent: QWidget, title: str, text: str) -> None: ...
+    def choose_items(
+        self, parent: QWidget, title: str, text: str, items: list[tuple[str, str]]
+    ) -> list[str] | None:
+        """Liste à cocher : (clé, libellé). Retourne les clés cochées, ou ``None`` si
+        l'utilisateur annule. Rien n'est coché d'avance : chaque lien est validé par lui."""
+        ...
 
 
 class QtDialogs:
@@ -78,6 +84,73 @@ class QtDialogs:
 
     def error(self, parent: QWidget, title: str, text: str) -> None:
         QMessageBox.critical(parent, title, text)
+
+    def choose_items(
+        self, parent: QWidget, title: str, text: str, items: list[tuple[str, str]]
+    ) -> list[str] | None:
+        from PySide6.QtWidgets import (
+            QDialog,
+            QDialogButtonBox,
+            QHBoxLayout,
+            QLabel,
+            QListWidget,
+            QListWidgetItem,
+            QPushButton,
+            QVBoxLayout,
+        )
+
+        dialog = QDialog(parent)
+        dialog.setWindowTitle(title)
+        dialog.resize(760, 520)
+        layout = QVBoxLayout(dialog)
+        label = QLabel(text)
+        label.setWordWrap(True)
+        layout.addWidget(label)
+        listing = QListWidget()
+        for key, caption in items:
+            item = QListWidgetItem(caption)
+            item.setData(Qt.ItemDataRole.UserRole, key)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(Qt.CheckState.Unchecked)
+            listing.addItem(item)
+        listing.itemClicked.connect(
+            lambda it: it.setCheckState(
+                Qt.CheckState.Unchecked
+                if it.checkState() == Qt.CheckState.Checked
+                else Qt.CheckState.Checked
+            )
+        )
+        layout.addWidget(listing, 1)
+        row = QHBoxLayout()
+        for caption, state in (
+            ("Tout cocher", Qt.CheckState.Checked),
+            ("Tout décocher", Qt.CheckState.Unchecked),
+        ):
+            button = QPushButton(caption)
+
+            def set_all(_checked: bool = False, value: Qt.CheckState = state) -> None:
+                for index in range(listing.count()):
+                    listing.item(index).setCheckState(value)
+
+            button.clicked.connect(set_all)
+            row.addWidget(button)
+        row.addStretch(1)
+        layout.addLayout(row)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Valider")
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("Annuler")
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return None
+        return [
+            str(listing.item(i).data(Qt.ItemDataRole.UserRole))
+            for i in range(listing.count())
+            if listing.item(i).checkState() == Qt.CheckState.Checked
+        ]
 
 
 # ---- registre d'actions ---------------------------------------------------------------------

@@ -142,14 +142,16 @@ def test_sources_mq_choisir_deux_sources_au_clic(
     dest = tmp_path / "Dest"
     dest.mkdir()
     dialogs.directories.append(dest)
+    dialogs.choices.append(["*"])  # l'utilisateur valide les fichiers proposés
     dialogs.confirm_answer = True
     click(window, qtbot, "sources_mq.isoler")
+    assert any("SuperTrend" in caption for _k, caption in dialogs.offered[-1])
     assert "2 source(s) choisie(s)" in dialogs.confirms[-1]
     wait_idle(window, qtbot)
     folder = next(dest.iterdir())
     copied = {p.relative_to(folder).as_posix() for p in folder.rglob("*") if p.is_file()}
-    assert "MQ4/Autre/Autre.mq4" in copied and "MQ4/Gold Robot/Gold Robot.mq4" in copied
-    # L'indicateur utilisé par le robot suit le robot ; la source SuperTrend non choisie, oui
-    # par dépendance, mais jamais dans son propre dossier.
-    assert "MQ4/Gold Robot/SuperTrend.mq4" in copied
+    # Autre.mq4 est seul dans « Experts » : copié seul. Gold Robot a son dossier « Gold ».
+    assert "MQ4/Autre/Autre.mq4" in copied and "MQ4/Gold/Gold Robot.mq4" in copied
+    # L'indicateur utilisé, validé par l'utilisateur, rejoint son robot.
+    assert "MQ4/Gold/SuperTrend.mq4" in copied
     assert not any(c.startswith("MQ4/SuperTrend/") for c in copied)

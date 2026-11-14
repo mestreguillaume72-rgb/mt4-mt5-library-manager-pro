@@ -453,10 +453,12 @@ class SourcesMqPage(Page):
         super().__init__(app)
         self.banner(
             "Choisissez les sources à isoler : <b>cliquez sur chaque ligne voulue</b> (un clic "
-            "ajoute, un autre clic retire), ou « Tout sélectionner ». Chaque source est copiée "
-            "dans « MQ4 » ou « MQ5 / nom de l'outil », avec ses SET associés, ses fichiers liés "
-            "(images, sons, modèles, DLL, includes) et les indicateurs ou bibliothèques qu'elle "
-            "utilise. Vous voyez la proposition avant de valider ; vos originaux ne bougent pas.",
+            "ajoute, un autre clic retire), ou « Tout sélectionner ». Si un robot a <b>son "
+            "propre dossier</b>, ce dossier est copié <b>complet, tel quel</b> (sous-dossiers "
+            "compris) ; s'il est <b>seul</b> au milieu d'autres fichiers, il est copié seul. Les "
+            "fichiers qui peuvent aller avec lui ailleurs (SET, images, modèles, DLL, "
+            "indicateurs utilisés) vous sont <b>proposés à cocher</b> : seuls ceux que vous "
+            "validez sont ajoutés. Vos originaux ne bougent pas.",
             "banner",
         )
         filters = QHBoxLayout()
@@ -545,17 +547,47 @@ class SourcesMqPage(Page):
         self._propose(None)
 
     def _propose(self, chosen: list[int] | None) -> None:
+        service = self._service()
+        ids = chosen if chosen is not None else [r.file_id for r in service.mq_sources()]
+        if not ids:
+            self.app.dialogs.info(self.win, "Isoler les MQ4/MQ5", "Aucune source MQ4/MQ5.")
+            return
+        layout = service.source_layout(ids)
+        folders = sum(1 for mode, _d in layout.values() if mode == "dossier")
+        names = {r.file_id: r.rel_path.rpartition("/")[2] for r in service.mq_sources()}
+        extras: dict[int, int] = {}
+        candidates = service.isolation_candidates(ids)
+        if candidates:
+            picked = self.app.dialogs.choose_items(
+                self,
+                "Fichiers qui peuvent aller avec",
+                "Ces fichiers semblent aller avec les sources choisies (SET reliés, images, "
+                "modèles, DLL, indicateurs utilisés…), mais ne sont pas dans leur dossier. "
+                "Cochez ceux que vous voulez ajouter (un clic coche ou décoche) ; les autres ne "
+                "seront pas copiés.",
+                [
+                    (
+                        f"{c.file_id}:{c.source_id}",
+                        f"{names.get(c.source_id, c.source_id)}  ←  {c.rel_path}  ({c.reason})",
+                    )
+                    for c in candidates
+                ],
+            )
+            if picked is None:
+                self.app.status("Isolement annulé : rien n'a été copié.")
+                return
+            for key in picked:
+                file_id, _, source_id = key.partition(":")
+                extras[int(file_id)] = int(source_id)
         what = (
-            "Toutes vos sources MQ4/MQ5"
-            if chosen is None
-            else f"{len(chosen)} source(s) choisie(s)"
+            "Toutes vos sources MQ4/MQ5" if chosen is None else f"{len(ids)} source(s) choisie(s)"
         )
         self.propose_folder(
             "Isoler les MQ4/MQ5",
-            f"{what} : chacune dans « MQ4 » ou « MQ5 / <nom de l'outil> », avec les SET qui lui "
-            "sont associés (acceptés par vous, ou de niveau « forte » non rejetés), ses fichiers "
-            "liés et les indicateurs ou bibliothèques qu'elle utilise.",
-            lambda service, destination: service.preview_sources(destination, chosen),
+            f"{what} : {folders} rangée(s) dans leur propre dossier, copié(s) complet(s) et tel(s) "
+            f"quel(s) ; {len(ids) - folders} seule(s), copiée(s) seule(s). "
+            f"{len(extras)} fichier(s) validé(s) par vous s'ajoute(nt) à leur robot.",
+            lambda svc, destination: svc.preview_sources(destination, ids, extras),
         )
 
 

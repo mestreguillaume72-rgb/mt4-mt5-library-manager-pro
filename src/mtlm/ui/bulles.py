@@ -216,12 +216,11 @@ WIDGET_TIPS.update(
 
 ACTION_TIPS.update(
     {
-        "sources_mq.isoler": "Copie seulement les sources que vous avez cliquées dans la liste "
-        "(une, deux, trois ou plus) dans un nouveau dossier, chacune avec ses SET, ses fichiers "
-        "liés et les indicateurs ou bibliothèques qu'elle utilise. Vous voyez la proposition "
-        "avant de valider.",
-        "sources_mq.isoler_tout": "Copie toutes les sources MQ4/MQ5 de la liste, chacune avec ce "
-        "qui va avec. Vous voyez la proposition avant de valider.",
+        "sources_mq.isoler": "Copie les sources cliquées (une, deux, trois ou plus) dans un "
+        "nouveau dossier : le dossier complet du robot s'il en a un, sinon le fichier seul. "
+        "Les fichiers qui peuvent aller avec (SET, images, DLL…) vous sont proposés à cocher.",
+        "sources_mq.isoler_tout": "Comme « Isoler les sources choisies », pour toutes les "
+        "sources de la liste.",
         "sources_mq.actualiser": "Recharge la liste des sources MQ4/MQ5.",
     }
 )
@@ -246,5 +245,51 @@ WIDGET_TIPS.update(
         "choisi.",
         ("sets", "assoc"): _CLIC + "Puis Accepter ou Rejeter : la décision s'applique à toutes "
         "les associations choisies.",
+    }
+)
+
+ACTION_TIPS["archives.tout_archives"] = _CLIC + "Ce bouton les sélectionne toutes."
+ACTION_TIPS["archives.aucun_archives"] = _AUCUN
+ACTION_TIPS.update(
+    {
+        "archives.decompresser": "Décompresse les archives cliquées dans la liste, chacune dans "
+        "un nouveau dossier à son nom, à côté d'elle. Chaque fichier extrait est vérifié par "
+        "son empreinte ; l'archive part ensuite à la Corbeille du Mac, seulement si tout est "
+        "vérifié. Une archive protégée, abîmée ou piégée n'est jamais touchée.",
+        "archives.corbeille": "Met à la Corbeille du Mac les archives cliquées dont TOUT le "
+        "contenu existe déjà sur le disque (« Déjà décompressée ») : rien n'est perdu. Les "
+        "autres restent en place.",
+        "archives.actualiser": "Recharge la liste des archives.",
+    }
+)
+WIDGET_TIPS.update(
+    {
+        ("archives", "archives"): _CLIC + "Colonne « État » : déjà décompressée, fichiers absents "
+        "du disque, protégée, abîmée…",
+        ("archives", "entries"): "Fichiers contenus dans la première archive choisie : type, "
+        "et s'ils existent déjà sur le disque (et où).",
+        ("analyse", "decompress"): "Cochée : à chaque analyse, les archives lues sans problème "
+        "sont décompressées dans un dossier à leur nom (fichiers vérifiés), puis mises à la "
+        "Corbeille du Mac. Décochée : les archives sont seulement lues, sans rien extraire.",
+    }
+)
+
+ACTION_TIPS["risques.tout_fichiers"] = _CLIC + "Ce bouton les sélectionne tous."
+ACTION_TIPS["risques.aucun_fichiers"] = _AUCUN
+ACTION_TIPS.update(
+    {
+        "risques.rechercher": "Lit vos fichiers sur ce Mac pour repérer des signes de risque "
+        "(DLL, téléchargement, lancement de programme, programmes cachés…). Analyse locale : "
+        "rien n'est exécuté ni envoyé sur Internet. Ce n'est pas un antivirus.",
+        "risques.corbeille": "Met les fichiers cliqués à la Corbeille du Mac (récupérables), "
+        "après confirmation.",
+    }
+)
+WIDGET_TIPS.update(
+    {
+        ("risques", "findings"): _CLIC + "« Risque élevé » : rarement utile à un robot "
+        "(téléchargement, lancement de programme, programme caché…). « À surveiller » : "
+        "souvent normal mais à connaître (DLL, Internet). Un signe n'est pas une preuve de "
+        "virus.",
     }
 )

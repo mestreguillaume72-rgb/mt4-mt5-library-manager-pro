@@ -28,6 +28,8 @@ class FakeDialogs:
         self.infos: list[tuple[str, str]] = []
         self.errors: list[tuple[str, str]] = []
         self.confirms: list[str] = []
+        self.choices: list[list[str] | None] = []  # réponses programmées des listes à cocher
+        self.offered: list[list[tuple[str, str]]] = []
 
     def choose_directory(self, parent: QWidget, title: str) -> Path | None:
         return self.directories.pop(0) if self.directories else None
@@ -44,6 +46,15 @@ class FakeDialogs:
 
     def error(self, parent: QWidget, title: str, text: str) -> None:
         self.errors.append((title, text))
+
+    def choose_items(
+        self, parent: QWidget, title: str, text: str, items: list[tuple[str, str]]
+    ) -> list[str] | None:
+        self.offered.append(items)
+        answer = self.choices.pop(0) if self.choices else []
+        if answer == ["*"]:  # « tout cocher »
+            return [key for key, _caption in items]
+        return answer
 
 
 @pytest.fixture

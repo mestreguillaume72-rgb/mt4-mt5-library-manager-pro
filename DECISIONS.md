@@ -195,3 +195,22 @@ d'exécution) : `iCustom` (robot → indicateur, cherché parmi les fichiers de 
 copiées. Dans l'isolement MQ4/MQ5, un indicateur utilisé va avec le premier robot qui
 l'utilise (un fichier n'apparaît qu'une fois par copie). Les dossiers standards de MetaTrader
 (Libraries, Include, Images, Sounds, Files, Templates, Presets) sont un placement à part entière.
+
+## D-020 — Archives, décompression choisie, fichiers à risque (1.5.0)
+
+* **Lecture de toutes les archives** : ZIP par la bibliothèque Python ; RAR, 7z, GZ, BZ2, XZ,
+  TAR par **libarchive du système** (celle de l'Utilitaire d'archive de macOS), via `ctypes`
+  — deuxième et dernière exception documentée (`formats/libarchive.py`, test statique : seules
+  libarchive de macOS et celle de Linux pour les tests). Mêmes limites qu'pour les ZIP.
+* **Décompression** : seulement si l'utilisateur la choisit (case avec confirmation, ou bouton
+  sur l'écran Archives). Écriture dans un nouveau dossier à côté de l'archive
+  (`transfer/extract.py`), chaque fichier vérifié par son empreinte ; l'archive va à la
+  Corbeille seulement si tout est vérifié. Archives protégées, abîmées, piégées ou incomplètes
+  jamais touchées.
+* **Fichiers à risque** : signes repérés en lisant seulement, sans exécution ni réseau. Ce
+  n'est pas un antivirus (pas de base de signatures, qui exigerait Internet) ; c'est écrit
+  dans l'écran et dans la bulle d'aide.
+* **SET déjà rangés avec leur robot** : considérés comme réglés (choix du propriétaire) ; ceux
+  rangés dans le dossier d'un autre robot sont signalés « peut-être mal rangés ».
+* **Isolement MQ4/MQ5** : dossier propre au robot copié tel quel, fichier seul copié seul ;
+  les liens hors du dossier ne sont ajoutés qu'après validation de l'utilisateur.

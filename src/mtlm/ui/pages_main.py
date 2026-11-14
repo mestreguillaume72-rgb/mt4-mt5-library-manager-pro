@@ -38,6 +38,7 @@ from mtlm.app.presenters import (
     human_size,
 )
 from mtlm.app.scan import ScanService
+from mtlm.app.sets import AssociationService
 from mtlm.app.sources import SourceService
 from mtlm.ui.base import fill_table, make_table, selected_value
 from mtlm.ui.theme import glow
@@ -386,7 +387,7 @@ class DashboardPage(Page):
             ("robots", "🤖  Robots, indicateurs, scripts", "sets", "Voir"),
             ("sets", "🧾  Fichiers SET", "sets", "Voir"),
             ("assoc_strong", "✅  SET reliés avec certitude", "sets", "Voir"),
-            ("assoc_check", "🟠  Associations à vérifier", "sets", "Vérifier"),
+            ("assoc_check", "🟠  SET en vrac à relier", "sets", "Vérifier"),
             ("dup_groups", "👯  Groupes de doublons exacts", "doublons", "Voir"),
             ("reclaim", "♻️  Copies en trop (quarantaine possible)", "quarantaine", "Traiter"),
             ("families", "🧬  Familles de robots", "familles", "Voir"),
@@ -526,9 +527,9 @@ class DashboardPage(Page):
                 " WHERE level = 'forte' AND user_decision <> 'rejected'"
                 " OR user_decision = 'accepted'"
             ),
-            "assoc_check": self._count(
-                "SELECT count(*) FROM association WHERE user_decision = 'none' AND level <> 'forte'"
-            ),
+            "assoc_check": AssociationService(
+                self.conn, self.app.ctx.clock, self.app.ctx.journal
+            ).to_review_count(),
             "assoc_ok": self._count(
                 "SELECT count(*) FROM association WHERE user_decision = 'accepted'"
             ),
@@ -581,8 +582,9 @@ class DashboardPage(Page):
                     f"<b>Votre bibliothèque</b> : {fmt(stats.files)} fichiers "
                     f"({values['size']}), dont <b>{fmt(int(values['robots']))}</b> robots, "
                     f"indicateurs ou scripts et <b>{fmt(int(values['sets']))}</b> SET. "
-                    f"<b>{fmt(int(values['assoc_check']))}</b> association(s) attendent votre "
-                    f"vérification ; <b>{fmt(int(values['reclaim']))}</b> copie(s) en trop "
+                    f"<b>{fmt(int(values['assoc_check']))}</b> SET en vrac ou mal rangé(s) "
+                    "attendent que vous validiez leur robot ; "
+                    f"<b>{fmt(int(values['reclaim']))}</b> copie(s) en trop "
                     "peuvent être mises en quarantaine." + self._placement_sentence()
                 )
             else:
@@ -733,6 +735,13 @@ class AnalysisPage(Page):
             check.setObjectName(f"analyse.etape.{step.key}")
             steps_layout.addWidget(check)
             self.checks[step.key] = check
+        self.decompress = QCheckBox(
+            "Décompresser les archives (ZIP, RAR, 7z…) et mettre l'archive à la Corbeille"
+        )
+        self.decompress.setObjectName("analyse.decompresser")
+        self.decompress.setChecked(self._decompress_setting())
+        self.decompress.toggled.connect(self._on_decompress)
+        steps_layout.addWidget(self.decompress)
         self.layout_.addWidget(box)
         self.button_row(
             self.btn("lancer", "Lancer les étapes cochées", self.start_selected),
@@ -761,7 +770,40 @@ class AnalysisPage(Page):
             self.btn("erreurs", "Voir les erreurs de la tâche choisie", self.show_errors)
         )
 
+    def _decompress_setting(self) -> bool:
+        from mtlm.app.settings import SettingsService
+
+        return bool(SettingsService(self.conn, self.app.ctx.journal).get("archives.decompresser"))
+
+    def _on_decompress(self, checked: bool) -> None:
+        from mtlm.app.settings import SettingsService
+
+        if checked and not self.app.dialogs.confirm(
+            self,
+            "Décompresser les archives",
+            "À chaque analyse, chaque archive lue sans problème (ZIP, RAR, 7z, TAR, GZ…) sera "
+            "décompressée dans un nouveau dossier à son nom, à côté d'elle. Chaque fichier "
+            "extrait est vérifié par son empreinte ; l'archive part ensuite à la Corbeille du "
+            "Mac (récupérable), seulement si tout est vérifié. Les archives protégées par mot "
+            "de passe, abîmées ou piégées ne sont jamais touchées.\n\nActiver ?",
+        ):
+            self.decompress.blockSignals(True)
+            self.decompress.setChecked(False)
+            self.decompress.blockSignals(False)
+            return
+        SettingsService(self.conn, self.app.ctx.journal).set(
+            "archives.decompresser", 1 if checked else 0
+        )
+        self.app.status(
+            "Les archives seront décompressées à la prochaine analyse."
+            if checked
+            else "Les archives seront seulement lues, sans rien extraire."
+        )
+
     def refresh(self) -> None:
+        self.decompress.blockSignals(True)
+        self.decompress.setChecked(self._decompress_setting())
+        self.decompress.blockSignals(False)
         jobs = JobStore(self.conn, self.app.ctx.clock).recent(30)
         fill_table(
             self.jobs,

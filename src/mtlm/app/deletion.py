@@ -33,7 +33,7 @@ from mtlm.hashing.sha256 import UnstableFileError, hash_file
 from mtlm.store.database import transaction
 from mtlm.transfer.trash import TrashBackend, TrashError, put_back
 
-ORIGINS = ("doublons", "quarantaine", "familles")
+ORIGINS = ("doublons", "quarantaine", "familles", "archives")
 
 
 class DeletionError(MtlmError):
@@ -254,6 +254,63 @@ class DeletionService:
             )
         return result
 
+    def trash_verified(
+        self, file_id: int, origin: str, keeper_kind: str, keeper_path: bytes
+    ) -> bool:
+        """Corbeille d'un fichier dont la garantie a déjà été vérifiée par l'appelant (ex. une
+        archive dont tout le contenu vient d'être décompressé et vérifié). Le fichier doit
+        être inchangé depuis l'analyse. Retourne vrai s'il est parti à la Corbeille."""
+        if self._backend is None or origin not in ORIGINS:
+            return False
+        item = self._file(file_id)
+        if item is None or not self._unchanged(item):
+            return False
+        try:
+            location = self._backend(item.path)
+        except (TrashError, OSError) as exc:
+            self._journal.append(
+                ACTOR_USER,
+                "trash.file",
+                f"fichier={file_id}",
+                result="failed",
+                details={"origine": origin, "erreur": str(exc)},
+            )
+            return False
+        with transaction(self._conn):
+            self._conn.execute(
+                "INSERT INTO deletion_record(file_id, origin, original_path_bytes,"
+                " trash_path_bytes, sha256, size, keeper_kind, keeper_file_id,"
+                " keeper_path_bytes, state, created_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, 'trashed', ?)",
+                (
+                    file_id,
+                    origin,
+                    item.path,
+                    location,
+                    item.sha256,
+                    item.size,
+                    keeper_kind,
+                    keeper_path,
+                    iso_utc(self._clock.now()),
+                ),
+            )
+            self._conn.execute(
+                "UPDATE file_record SET presence = 'missing' WHERE id = ?", (file_id,)
+            )
+            self._forget_duplicate(file_id)
+        self._journal.append(
+            ACTOR_USER,
+            "trash.file",
+            _decode(item.path),
+            details={
+                "fichier": file_id,
+                "origine": origin,
+                "corbeille": _decode(location),
+                "garantie": _decode(keeper_path),
+            },
+        )
+        return True
+
     def _forget_duplicate(self, file_id: int) -> None:
         """Le fichier quitte son groupe de doublons ; un groupe d'un seul fichier disparaît."""
         row = self._conn.execute(
@@ -320,7 +377,11 @@ class DeletionService:
         )
 
     def records(self, limit: int = 2000) -> list[DeletionRow]:
-        labels = {"fichier": "copie identique conservée", "quarantaine": "copie en quarantaine"}
+        labels = {
+            "fichier": "copie identique conservée",
+            "quarantaine": "copie en quarantaine",
+            "extraction": "contenu décompressé et vérifié",
+        }
         return [
             DeletionRow(
                 int(r[0]),

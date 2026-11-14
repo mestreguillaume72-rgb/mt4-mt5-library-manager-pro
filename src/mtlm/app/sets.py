@@ -96,9 +96,22 @@ class AssociationRow:
 PLACEMENT_LABELS = {
     "avec_son_robot": "Rangé avec son robot",
     "en_vrac": "En vrac — correspondance trouvée",
-    "avec_autre_robot": "Rangé avec un autre robot",
+    "avec_autre_robot": "Peut-être mal rangé (dans le dossier d'un autre robot)",
     "dossier_standard": "Rangé dans le dossier MetaTrader prévu (Presets)",
 }
+#: SET qui restent à traiter : tout sauf ceux déjà rangés avec leur robot (1.5.0).
+TO_PROCESS = ("en_vrac", "avec_autre_robot", "dossier_standard")
+
+
+def certainty_label(level: str, score: float) -> str:
+    """Niveau de certitude en mots simples (écran Robots et SET)."""
+    if level == "forte":
+        return "certain" if score >= 90 else "très probable"
+    return {
+        "moyenne": "probable",
+        "faible": "possible",
+        "a_verifier": "à vérifier (robot compilé seul)",
+    }.get(level, level)
 
 
 def placement_of(
@@ -571,6 +584,33 @@ class AssociationService:
                 int(set_root), _dir(set_path), int(robot_root), _dir(robot_path), dirs
             )
         return result
+
+    def to_process(self) -> set[int]:
+        """SET à traiter : en vrac, peut-être mal rangés, dans Presets, ou sans robot proposé.
+        Ceux déjà rangés avec leur robot sont considérés comme réglés."""
+        placements = self.placements()
+        every = {
+            int(r[0])
+            for r in self._conn.execute(
+                "SELECT sf.file_id FROM set_file sf JOIN file_record f ON f.id = sf.file_id"
+                " WHERE f.presence = 'present'"
+            )
+        }
+        return {s for s in every if placements.get(s) != "avec_son_robot"}
+
+    def to_review_count(self) -> int:
+        """SET à traiter dont aucune proposition n'a encore été acceptée."""
+        pending = self.to_process()
+        accepted = {
+            int(r[0])
+            for r in self._conn.execute(
+                "SELECT DISTINCT set_file_id FROM association WHERE user_decision = 'accepted'"
+            )
+        }
+        proposed = {
+            int(r[0]) for r in self._conn.execute("SELECT DISTINCT set_file_id FROM association")
+        }
+        return len((pending & proposed) - accepted)
 
     def placement_counts(self) -> dict[str, int]:
         """Nombre de SET par placement, plus « orphelins » (aucun robot proposé)."""

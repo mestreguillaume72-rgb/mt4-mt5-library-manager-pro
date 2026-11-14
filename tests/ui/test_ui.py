@@ -57,7 +57,7 @@ def page_keys(window: MainWindow) -> list[str]:
 
 def test_les_13_ecrans(window: MainWindow) -> None:
     keys = page_keys(window)
-    assert len(PAGES) == 14 == len(keys) == len(set(keys))
+    assert len(PAGES) == 16 == len(keys) == len(set(keys))
     assert set(keys) == {p.key for p in PAGES}
     for key in keys:
         window.navigate(key)

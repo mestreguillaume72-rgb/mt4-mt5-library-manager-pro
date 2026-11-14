@@ -17,6 +17,8 @@ _MAGICS: list[tuple[bytes, str]] = [
     (b"Rar!\x1a\x07", "rar"),
     (b"7z\xbc\xaf\x27\x1c", "7z"),
     (b"\x1f\x8b", "gzip"),
+    (b"BZh", "bzip2"),
+    (b"\xfd7zXZ\x00", "xz"),
     (b"%PDF-", "pdf"),
     (b"\x89PNG\r\n\x1a\n", "png"),
     (b"\xff\xd8\xff", "jpeg"),
@@ -42,6 +44,9 @@ LABELS = {
     "rar": "archive RAR",
     "7z": "archive 7-Zip",
     "gzip": "archive GZIP",
+    "bzip2": "archive BZIP2",
+    "xz": "archive XZ",
+    "tar": "archive TAR",
     "pdf": "document PDF",
     "png": "image PNG",
     "jpeg": "image JPEG",
@@ -88,6 +93,8 @@ def sniff(head: bytes) -> Signature:
     for magic, kind in _MAGICS:
         if head.startswith(magic):
             return Signature(kind, LABELS[kind])
+    if head[257:262] == b"ustar":
+        return Signature("tar", LABELS["tar"])
     if head.startswith(b"MZ"):
         return Signature("pe", LABELS["pe"])
     if head.startswith(b"BM") and len(head) > 14 and head[6:10] == b"\x00\x00\x00\x00":
@@ -121,6 +128,10 @@ EXPECTED: dict[str, set[str]] = {
     "rar": {"rar"},
     "7z": {"7z"},
     "gz": {"gzip"},
+    "tgz": {"gzip"},
+    "bz2": {"bzip2"},
+    "xz": {"xz"},
+    "tar": {"tar"},
     "dll": {"pe"},
     "exe": {"pe"},
     "pdf": {"pdf"},

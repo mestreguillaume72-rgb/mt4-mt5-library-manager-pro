@@ -1,4 +1,5 @@
-"""Inspection sécurisée des archives ZIP (F3, D-006).
+"""Inspection sécurisée des archives ZIP (F3, D-006). RAR, 7z, GZIP, BZIP2, XZ et TAR sont
+lus par :mod:`mtlm.formats.libarchive` (bibliothèque de macOS), avec les mêmes garanties.
 
 Garanties :
 
@@ -223,12 +224,11 @@ def inspect_archive(
 ) -> ArchiveReport:
     """Inspecte l'archive ``path`` (lecture seule). ``signature_kind`` vient de
     :func:`mtlm.formats.signatures.sniff`."""
-    if signature_kind in ("rar", "7z", "gzip"):
-        return ArchiveReport(
-            signature_kind,
-            "not_supported",
-            reason="format identifié mais non ouvert (seul ZIP est inspecté)",
-        )
+    if signature_kind in ("rar", "7z", "gzip", "bzip2", "xz", "tar"):
+        from mtlm.formats import libarchive
+
+        stored = signature_kind if signature_kind in ("rar", "7z", "gzip") else "other"
+        return libarchive.inspect(path, stored, limits or ArchiveLimits(), signature_kind)
     if signature_kind != "zip":
         return ArchiveReport("other", "rejected", reason="pas une archive ZIP")
     report = ArchiveReport("zip", "ok")

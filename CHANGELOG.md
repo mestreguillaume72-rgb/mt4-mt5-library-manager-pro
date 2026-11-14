@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.5.0] — Archives, SET en vrac, isolement fidèle, fichiers à risque
+
+### Ajouté
+- **Toutes les archives** : RAR, 7z, GZ, BZ2, XZ, TAR (en plus des ZIP) lues sans extraction
+  grâce à la bibliothèque de macOS (libarchive) ; chaque fichier contenu a son empreinte.
+- Écran **Archives** : « Déjà décompressée : tout est sur le disque » ou « Contient N
+  fichier(s) absent(s) du disque », contenu détaillé (type, présent sur le disque où ?),
+  décompression des archives choisies, Corbeille des archives déjà décompressées.
+- Case **« Décompresser les archives (ZIP, RAR, 7z…) et mettre l'archive à la Corbeille »**
+  (écran Analyse, avec confirmation) : extraction vérifiée dans un dossier à côté de
+  l'archive, Corbeille seulement si tout est vérifié ; les fichiers extraits sont analysés.
+- Écran **Fichiers à risque** : signes repérés en lisant seulement (DLL, téléchargement,
+  lancement de programme, effacement, clavier, programmes et scripts, fichiers déguisés,
+  archives protégées). Analyse locale, rien envoyé sur Internet — ce n'est pas un antivirus.
+
+### Modifié
+- **SET** : l'écran s'ouvre sur les SET **à traiter** (en vrac, peut-être mal rangés, dans
+  Presets, sans robot) ; ceux déjà rangés avec leur robot sont considérés comme réglés.
+  Certitude en mots : certain / très probable / probable / possible. Accueil : « SET en vrac
+  à relier ».
+- **Isolement MQ4/MQ5** : un robot qui a son propre dossier est copié avec le **dossier
+  complet, tel quel** ; un fichier seul est copié seul. Les fichiers qui peuvent aller avec
+  (SET, images, DLL, indicateurs utilisés…) sont **proposés à cocher** : seuls ceux validés
+  par l'utilisateur sont ajoutés.
+
 ## [1.4.1] — Écran « Sources MQ4/MQ5 », sélection au simple clic
 
 ### Ajouté

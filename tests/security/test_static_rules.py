@@ -64,10 +64,14 @@ FORBIDDEN_CALLS = {
 }
 # Seule exception à l'interdiction de ctypes (DECISIONS D-016) : la mise à la Corbeille, qui
 # appelle l'API officielle d'Apple et ne charge que deux bibliothèques système fixes.
-CTYPES_ALLOWED_FILE = "transfer/trash.py"
-APPLE_LIBRARIES = {
-    "/usr/lib/libobjc.A.dylib",
-    "/System/Library/Frameworks/Foundation.framework/Foundation",
+# Exceptions à l'interdiction de ctypes (DECISIONS D-016, D-020) : fichier → bibliothèques
+# système autorisées. Aucune bibliothèque de l'utilisateur n'est jamais chargée.
+CTYPES_ALLOWED: dict[str, set[str]] = {
+    "transfer/trash.py": {
+        "/usr/lib/libobjc.A.dylib",
+        "/System/Library/Frameworks/Foundation.framework/Foundation",
+    },
+    "formats/libarchive.py": {"/usr/lib/libarchive.2.dylib", "libarchive.so.13"},
 }
 
 # Modules qui lisent les sources de l'utilisateur : aucune écriture possible.
@@ -121,7 +125,7 @@ ALLOWED_DEPENDENCIES: dict[str, set[str]] = {
     "metatrader": {"core", "fs", "formats"},
     "setfiles": {"core", "fs", "formats"},
     "matching": {"core", "store", "metatrader", "setfiles"},
-    "transfer": {"core", "fs", "hashing", "store", "audit"},
+    "transfer": {"core", "fs", "hashing", "formats", "store", "audit"},
     "reports": {"core", "store", "transfer"},
     "app": {
         "core",
@@ -211,8 +215,8 @@ def check_source(
             )
             for name in names:
                 root = name.split(".")[0]
-                ctypes_exception = root == "ctypes" and filename.replace("\\", "/").endswith(
-                    CTYPES_ALLOWED_FILE
+                ctypes_exception = root == "ctypes" and any(
+                    filename.replace("\\", "/").endswith(allowed) for allowed in CTYPES_ALLOWED
                 )
                 if (name in FORBIDDEN_IMPORTS or root in FORBIDDEN_IMPORTS) and not (
                     ctypes_exception
@@ -380,8 +384,9 @@ def test_detecte_dependance_interdite(package: str, snippet: str) -> None:
     assert check_source(snippet, "x.py", analysis=False, package=package)
 
 
-def test_ctypes_uniquement_pour_la_corbeille_et_bibliotheques_apple() -> None:
-    """La seule utilisation de ctypes charge exclusivement libobjc et Foundation d'Apple."""
+def test_ctypes_uniquement_pour_les_bibliotheques_systeme_autorisees() -> None:
+    """ctypes n'est utilisé que dans les fichiers autorisés, et n'y charge que les
+    bibliothèques système prévues (Corbeille du Mac, libarchive)."""
 
     def imported_roots(path: Path) -> set[str]:
         roots: set[str] = set()
@@ -392,28 +397,42 @@ def test_ctypes_uniquement_pour_la_corbeille_et_bibliotheques_apple() -> None:
                 roots.add((n.module or "").split(".")[0])
         return roots
 
-    users = [p.relative_to(SRC).as_posix() for p in iter_sources() if "ctypes" in imported_roots(p)]
-    assert users == [CTYPES_ALLOWED_FILE]
-    tree = ast.parse((SRC / CTYPES_ALLOWED_FILE).read_text(encoding="utf-8"))
-    constants = {
-        t.id: n.value.value
-        for n in ast.walk(tree)
-        if isinstance(n, ast.Assign) and isinstance(n.value, ast.Constant)
-        for t in n.targets
-        if isinstance(t, ast.Name)
-    }
-    loads = [
-        n
-        for n in ast.walk(tree)
-        if isinstance(n, ast.Call)
-        and (_dotted(n.func) or "").startswith("ctypes.")
-        and (_dotted(n.func) or "").split(".")[-1] in ("CDLL", "LoadLibrary", "PyDLL", "WinDLL")
-    ]
-    assert len(loads) == 2
-    for call in loads:
-        assert len(call.args) == 1 and isinstance(call.args[0], ast.Name)
-        assert constants[call.args[0].id] in APPLE_LIBRARIES
-    assert "LoadLibrary" not in (SRC / CTYPES_ALLOWED_FILE).read_text(encoding="utf-8")
+    users = sorted(
+        p.relative_to(SRC).as_posix() for p in iter_sources() if "ctypes" in imported_roots(p)
+    )
+    assert users == sorted(CTYPES_ALLOWED)
+    for rel, libraries in CTYPES_ALLOWED.items():
+        text = (SRC / rel).read_text(encoding="utf-8")
+        tree = ast.parse(text)
+        constants = {
+            t.id: n.value.value
+            for n in ast.walk(tree)
+            if isinstance(n, ast.Assign) and isinstance(n.value, ast.Constant)
+            for t in n.targets
+            if isinstance(t, ast.Name)
+        }
+        loads = [
+            n
+            for n in ast.walk(tree)
+            if isinstance(n, ast.Call)
+            and (_dotted(n.func) or "").startswith("ctypes.")
+            and (_dotted(n.func) or "").split(".")[-1] in ("CDLL", "LoadLibrary", "PyDLL", "WinDLL")
+        ]
+        assert loads, rel
+        for call in loads:
+            assert len(call.args) == 1, rel
+            argument = call.args[0]
+            names = (
+                [argument.id]
+                if isinstance(argument, ast.Name)
+                else [n.id for n in ast.walk(argument) if isinstance(n, ast.Name)]
+            )
+            assert names, rel
+            for name in names:
+                if name in constants:
+                    assert constants[name] in libraries, (rel, name)
+        assert set(constants.values()) >= libraries, rel
+        assert "LoadLibrary" not in text and "find_library" not in text, rel
 
 
 def test_ctypes_reste_interdit_ailleurs() -> None:

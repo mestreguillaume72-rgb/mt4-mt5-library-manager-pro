@@ -24,6 +24,7 @@ EXPECTED_TABLES = {
     "mql_reference",
     "companion_link",
     "mql_icustom",
+    "archive_extraction",
     "tool_dependency",
     "job",
     "job_checkpoint",

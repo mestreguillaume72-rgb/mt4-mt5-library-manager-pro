@@ -195,10 +195,15 @@ def test_archive_imbriquee_et_profondeur(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("kind", ["rar", "7z", "gzip"])
-def test_formats_identifies_non_ouverts(tmp_path: Path, kind: str) -> None:
+def test_fausses_archives_signalees(tmp_path: Path, kind: str) -> None:
+    """1.5.0 : RAR/7z/GZIP sont ouverts (libarchive) ; un faux fichier est « illisible »,
+    jamais pris pour un fichier ordinaire (ni « non pris en charge » quand libarchive est là)."""
+    from mtlm.formats import libarchive
+
     f = tmp_path / "a"
     f.write_bytes(b"x")
-    assert inspect_archive(b(f), kind).status == "not_supported"
+    expected = "corrupt" if libarchive.available() else "not_supported"
+    assert inspect_archive(b(f), kind).status == expected
 
 
 def test_pas_une_archive(tmp_path: Path) -> None:

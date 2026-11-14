@@ -17,6 +17,7 @@ from mtlm.app.sources import SourceService
 from mtlm.cli.main import EXIT_ERROR, EXIT_OK, main
 from mtlm.core.clock import FixedClock
 from mtlm.core.paths import AppPaths
+from mtlm.formats import libarchive
 from tests.support.archives import make_bomb, make_encrypted, make_zip
 from tests.support.fs_snapshot import diff_snapshots, take_snapshot
 
@@ -67,7 +68,8 @@ def test_signatures_et_archives(tmp_path: Path, ctx: AppContext) -> None:
         "bombe.zip": "partial",
         "secret.zip": "encrypted",
         "pas_un_zip.zip": "rejected",
-        "archive.rar": "not_supported",
+        # 1.5.0 : les RAR sont ouverts (libarchive) ; celui-ci est un faux, donc illisible.
+        "archive.rar": "corrupt" if libarchive.available() else "not_supported",
     }
     # Le fichier contenu dans pack.zip est un doublon exact de Robot.mq4 : même contenu.
     same = ctx.conn.execute(
