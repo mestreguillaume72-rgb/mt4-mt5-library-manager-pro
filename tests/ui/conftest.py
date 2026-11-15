@@ -30,6 +30,7 @@ class FakeDialogs:
         self.confirms: list[str] = []
         self.choices: list[list[str] | None] = []  # réponses programmées des listes à cocher
         self.offered: list[list[tuple[str, str]]] = []
+        self.texts: list[str | None] = []  # réponses programmées des saisies de texte
 
     def choose_directory(self, parent: QWidget, title: str) -> Path | None:
         return self.directories.pop(0) if self.directories else None
@@ -46,6 +47,9 @@ class FakeDialogs:
 
     def error(self, parent: QWidget, title: str, text: str) -> None:
         self.errors.append((title, text))
+
+    def ask_text(self, parent: QWidget, title: str, text: str, default: str = "") -> str | None:
+        return self.texts.pop(0) if self.texts else None
 
     def choose_items(
         self, parent: QWidget, title: str, text: str, items: list[tuple[str, str]]

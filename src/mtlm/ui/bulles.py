@@ -229,22 +229,12 @@ _CLIC = (
     "une, deux, trois ou plus. "
 )
 ACTION_TIPS["sources_mq.tout_sources"] = _TOUT
-ACTION_TIPS["sources_mq.choisir_robots"] = (
-    "Ajoute à la sélection tous les robots (Expert Advisors) de la liste, MQ4 et MQ5. Vous "
-    "pouvez ensuite en retirer d'un clic, ou ajouter les indicateurs."
-)
-ACTION_TIPS["sources_mq.choisir_indicateurs"] = (
-    "Ajoute à la sélection tous les indicateurs de la liste, MQ4 et MQ5. Vous pouvez ensuite "
-    "en retirer d'un clic, ou ajouter les robots."
-)
+
 for _key in [k for k in ACTION_TIPS if ".tout_" in k]:
     ACTION_TIPS[_key] = _CLIC + "Ce bouton les sélectionne toutes."
 WIDGET_TIPS.update(
     {
         ("sources_mq", "search"): "Tapez une partie du nom ou du dossier, puis Entrée.",
-        ("sources_mq", "by_type"): "Cochée : le nouveau dossier est rangé en « Robots » et "
-        "« Indicateurs » (et « Scripts »), puis MQ4 / MQ5, un dossier par outil avec tout ce "
-        "qui va avec. Décochée : rangement en MQ4 / MQ5 seulement.",
         ("sources_mq", "platform"): "N'afficher que les sources MQ4 ou MQ5.",
         ("sources_mq", "tool_type"): "N'afficher qu'un type : robots, indicateurs, scripts…",
         ("sources_mq", "sources"): _CLIC + "Colonnes : SET associés, fichiers liés (images, "
@@ -304,3 +294,37 @@ WIDGET_TIPS.update(
         "virus.",
     }
 )
+
+
+# ---- 1.6.0 : robots et indicateurs isolés ---------------------------------------------------
+for _page, _one, _many in (
+    ("robots_isoles", "robot", "robots"),
+    ("indicateurs_isoles", "indicateur", "indicateurs"),
+):
+    ACTION_TIPS.update(
+        {
+            f"{_page}.tout_outils": _CLIC + "Ce bouton les sélectionne tous.",
+            f"{_page}.aucun_outils": _AUCUN,
+            f"{_page}.grouper": f"Réunit les {_many} cliqués dans un groupe que vous nommez "
+            "(par exemple « Scalpers » ou « Or ») : le groupe deviendra un dossier. Un "
+            f"{_one} déjà dans un groupe change de groupe.",
+            f"{_page}.degrouper": f"Retire les {_many} cliqués de leur groupe : ils seront "
+            "rangés à la racine du nouveau dossier.",
+            f"{_page}.isoler": f"Propose un nouveau dossier « {_many.capitalize()} isolés » avec "
+            f"les {_many} cliqués, chacun avec tout ce qui va avec (versions, compilés, SET, "
+            "indicateurs utilisés, DLL, modèles, images). Aperçu d'abord ; copie vérifiée "
+            "seulement si vous validez. Vos originaux ne bougent pas.",
+            f"{_page}.isoler_tout": f"Comme « Isoler les {_many} choisis », pour tous les "
+            f"{_many} reconnus.",
+            f"{_page}.actualiser": f"Recharge la liste des {_many}.",
+        }
+    )
+    WIDGET_TIPS.update(
+        {
+            (_page, "search"): "Tapez une partie du nom, puis Entrée.",
+            (_page, "tools"): _CLIC + "Colonne « Groupe » : le dossier de groupe choisi.",
+            (_page, "mode"): f"« Un dossier par {_one} » : chaque {_one} a son dossier avec "
+            "tout dedans. « Un seul grand dossier » : tous les fichiers ensemble, sans "
+            "sous-dossiers (dans chaque groupe s'il y en a).",
+        }
+    )

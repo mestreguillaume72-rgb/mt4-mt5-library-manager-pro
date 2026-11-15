@@ -89,9 +89,9 @@ class IsolationCandidate:
     reason: str
 
 
-#: Rangement par type (1.6.0) : « Robots/MQ4/… », « Indicateurs/MQ5/… ».
-TYPE_FOLDERS = {"ea": "Robots", "indicator": "Indicateurs", "script": "Scripts"}
-OTHER_TYPE_FOLDER = "Autres outils"
+#: Écrans « Robots isolés » / « Indicateurs isolés » (1.6.0).
+ISOLATED_ROOTS = {"ea": "Robots isolés", "indicator": "Indicateurs isolés"}
+GROUPING_MODES = ("par_outil", "un_dossier")
 
 #: Dossiers « conteneurs » : une source qui y est rangée n'a pas de dossier propre.
 STANDARD_CONTAINERS = {
@@ -580,6 +580,69 @@ class OrganizeService:
             excluded_d,
         )
 
+    def preview_isolated(
+        self,
+        destination: Path,
+        tool_type: str,
+        family_ids: list[int],
+        *,
+        groups: dict[int, str] | None = None,
+        mode: str = "par_outil",
+    ) -> Preview:
+        """Robots (``ea``) ou indicateurs (``indicator``) isolés dans un endroit à part :
+        ``Robots isolés <date>/`` ou ``Indicateurs isolés <date>/``, sans mélange avec les
+        sources MQ4/MQ5. Chaque outil vient avec tout ce qui va avec (versions, compilés,
+        SET, indicateurs utilisés, DLL, modèles, images…).
+
+        * ``mode="par_outil"`` : un dossier par outil (``<nom>/…``) ;
+        * ``mode="un_dossier"`` : tous les fichiers ensemble dans un seul grand dossier ;
+        * ``groups`` (famille → nom de groupe) : les outils d'un groupe vont dans
+          ``<groupe>/`` (puis un dossier par outil, ou tous ensemble selon le mode) ; les
+          outils sans groupe restent à la racine.
+
+        Copie vérifiée après validation ; les originaux ne bougent pas."""
+        if tool_type not in ISOLATED_ROOTS:
+            raise OrganizeError(f"Type inconnu : {tool_type}")
+        if mode not in GROUPING_MODES:
+            raise OrganizeError(f"Rangement inconnu : {mode}")
+        ids = list(dict.fromkeys(family_ids))
+        if not ids:
+            raise OrganizeError("Choisissez au moins un outil.")
+        groups = groups or {}
+        target_root = self._destination(destination)
+        plan_root = self._unique_folder(
+            target_root, f"{ISOLATED_ROOTS[tool_type]} {self._clock.now():%Y-%m-%d}"
+        )
+        selection: list[tuple[tuple[Any, ...], str]] = []
+        names: list[str] = []
+        for family_id in ids:
+            group = groups.get(family_id, "").strip()
+            base = f"{_component(group)}/" if group else ""
+            name = self._family_name(family_id)
+            names.append(name)
+            prefix = base if mode == "un_dossier" else f"{base}{_component(name)}/"
+            _name, items = self._family_selection(family_id, prefix)
+            if mode == "un_dossier":
+                items = [(r, f"{base}{_component(str(r[9]))}") for r, _t in items]
+            selection.extend(items)
+        planned, collisions, excluded_q, excluded_d = self._place(selection)
+        if not planned:
+            raise OrganizeError("Aucun fichier présent pour ces outils.")
+        return self._record_plan(
+            plan_root,
+            planned,
+            collisions,
+            f"isoles-{tool_type}-v1",
+            {
+                "familles": ids,
+                "noms": names,
+                "rangement": mode,
+                "groupes": sorted({g.strip() for g in groups.values() if g.strip()}),
+            },
+            excluded_q,
+            excluded_d,
+        )
+
     def _family_name(self, family_id: int) -> str:
         row = self._conn.execute(
             "SELECT display_name FROM file_family WHERE id = ?", (family_id,)
@@ -725,13 +788,8 @@ class OrganizeService:
         destination: Path,
         file_ids: list[int] | None = None,
         extras: dict[int, int] | None = None,
-        *,
-        by_type: bool = False,
     ) -> Preview:
         """Proposition : isoler les sources MQ4/MQ5 (toutes, ou ``file_ids`` choisies).
-
-        Avec ``by_type`` : rangement dans ``Robots/``, ``Indicateurs/``, ``Scripts/`` (ou
-        ``Autres outils/``) puis ``MQ4|MQ5/<nom>/`` avec tout ce qui va avec.
 
         * source rangée dans **son propre dossier** : le dossier est copié **complet, tel
           quel** (sous-dossiers compris) dans ``MQ4|MQ5/<nom du dossier>/`` ;
@@ -758,24 +816,11 @@ class OrganizeService:
         ]
         sources = self._files(source_ids)
         layout = self.source_layout(list(sources))
-        types: dict[int, str] = {}
-        if by_type and sources:
-            marks = ",".join("?" * len(sources))
-            types = {
-                int(f): str(t or "")
-                for f, t in self._conn.execute(
-                    f"SELECT file_id, detected_type FROM file_analysis WHERE file_id IN ({marks})",
-                    list(sources),
-                )
-            }
         folder_of: dict[int, str] = {}
         selection: list[tuple[tuple[Any, ...], str]] = []
         copied_folders: dict[tuple[int, str], str] = {}
         for source_id, r in sources.items():
             platform = "MQ4" if str(r[9]).casefold().endswith(".mq4") else "MQ5"
-            if by_type:
-                kind = TYPE_FOLDERS.get(types.get(source_id, ""), OTHER_TYPE_FOLDER)
-                platform = f"{kind}/{platform}"
             mode, directory = layout.get(source_id, ("seul", ""))
             if mode == "dossier":
                 root_id = int(
@@ -830,7 +875,6 @@ class OrganizeService:
                 "sources": len(sources),
                 "dossiers_complets": len(copied_folders),
                 "fichiers_valides": added,
-                "par_type": by_type,
             },
             excluded_q,
             excluded_d,

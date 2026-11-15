@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QItemSelectionModel, Qt
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -494,18 +494,7 @@ class SourcesMqPage(Page):
             multi=True,
         )
         self.layout_.addWidget(self.sources, 1)
-        self.button_row(
-            *self.select_buttons("sources", self.sources),
-            self.btn("choisir_robots", "Choisir tous les robots", lambda: self.pick_type("ea")),
-            self.btn(
-                "choisir_indicateurs",
-                "Choisir tous les indicateurs",
-                lambda: self.pick_type("indicator"),
-            ),
-        )
-        self.by_type = QCheckBox("Ranger dans des dossiers Robots / Indicateurs")
-        self.by_type.setChecked(True)
-        self.layout_.addWidget(self.by_type)
+        self.button_row(*self.select_buttons("sources", self.sources))
         self.button_row(
             self.btn("isoler", "Isoler les sources choisies…", self.isolate_selected),
             self.btn("isoler_tout", "Isoler toutes les sources…", self.isolate_all),
@@ -542,26 +531,6 @@ class SourcesMqPage(Page):
                 )
             ],
         )
-
-    def pick_type(self, tool_type: str) -> None:
-        """Sélectionne toutes les sources d'un type (robots ou indicateurs), MQ4 et MQ5,
-        en plus de celles déjà choisies."""
-        if self.tool_type.currentData() not in (None, tool_type):
-            self.tool_type.setCurrentIndex(0)  # recharge la liste avec tous les types
-        label = {"ea": "Robot", "indicator": "Indicateur"}[tool_type]
-        model = self.sources.selectionModel()
-        count = 0
-        for row in range(self.sources.rowCount()):
-            item = self.sources.item(row, 2)
-            if item is not None and item.text() == label:
-                model.select(
-                    self.sources.model().index(row, 0),
-                    QItemSelectionModel.SelectionFlag.Select
-                    | QItemSelectionModel.SelectionFlag.Rows,
-                )
-                count += 1
-        names = {"ea": "robot(s)", "indicator": "indicateur(s)"}
-        self.app.status(f"{count} {names[tool_type]} ajouté(s) à la sélection.")
 
     def isolate_selected(self) -> None:
         chosen = [int(v) for v in selected_values(self.sources)]
@@ -613,19 +582,12 @@ class SourcesMqPage(Page):
         what = (
             "Toutes vos sources MQ4/MQ5" if chosen is None else f"{len(ids)} source(s) choisie(s)"
         )
-        by_type = self.by_type.isChecked()
-        where = (
-            " Rangement : Robots/MQ4, Robots/MQ5, Indicateurs/MQ4, Indicateurs/MQ5 (et Scripts), "
-            "un dossier par outil avec tout dedans."
-            if by_type
-            else " Rangement : MQ4 et MQ5, un dossier par outil avec tout dedans."
-        )
         self.propose_folder(
             "Isoler les MQ4/MQ5",
             f"{what} : {folders} rangée(s) dans leur propre dossier, copié(s) complet(s) et tel(s) "
             f"quel(s) ; {len(ids) - folders} seule(s), copiée(s) seule(s). "
-            f"{len(extras)} fichier(s) validé(s) par vous s'ajoute(nt) à leur outil." + where,
-            lambda svc, destination: svc.preview_sources(destination, ids, extras, by_type=by_type),
+            f"{len(extras)} fichier(s) validé(s) par vous s'ajoute(nt) à leur outil.",
+            lambda svc, destination: svc.preview_sources(destination, ids, extras),
         )
 
 

@@ -29,11 +29,13 @@ from mtlm.ui.pages_analysis import (
     RiskPage,
     SetsPage,
 )
+from mtlm.ui.pages_isolated import IndicatorsPage, RobotsPage
 from mtlm.ui.pages_main import AnalysisPage, DashboardPage, DetailPage, ExplorerPage, SourcesPage
 from mtlm.ui.theme import apply_theme
 from mtlm.ui.window import MainWindow, UiApp
 
-#: Les 13 écrans exigés par la spécification (F11) + « Sources MQ4/MQ5 » (1.4.0).
+#: Les 13 écrans exigés par la spécification (F11) + « Sources MQ4/MQ5 » (1.4.0)
+#: + « Robots isolés » et « Indicateurs isolés » (1.6.0).
 PAGES = [
     DashboardPage,
     SourcesPage,
@@ -48,6 +50,8 @@ PAGES = [
     QuarantinePage,
     OrganizePage,
     SourcesMqPage,
+    RobotsPage,
+    IndicatorsPage,
     ReportsPage,
     SettingsPage,
     HelpPage,
@@ -84,6 +88,9 @@ class AutoDialogs:
     def error(self, parent: object, title: str, text: str) -> None:
         self.errors.append(f"{title} : {text}")
 
+    def ask_text(self, parent: object, title: str, text: str, default: str = "") -> str | None:
+        return None  # l'auto-diagnostic ne saisit rien
+
     def choose_items(
         self, parent: object, title: str, text: str, items: list[tuple[str, str]]
     ) -> list[str] | None:
@@ -91,7 +98,7 @@ class AutoDialogs:
 
 
 def autotest(source: Path) -> int:
-    """Auto-diagnostic de l'application installée (sans écran possible) : ouvre les 14 écrans,
+    """Auto-diagnostic de l'application installée (sans écran possible) : ouvre tous les écrans,
     ajoute ``source`` (lecture seule), lance toute l'analyse et vérifie les résultats. Les
     données de l'application sont placées dans un dossier temporaire supprimé à la fin."""
     import tempfile

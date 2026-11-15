@@ -13,10 +13,15 @@
 - **Accueil** : nombre de fichiers lus dans les archives (dont robots, indicateurs et SET).
 
 ### Ajouté
-- Écran **Sources MQ4/MQ5** : boutons « Choisir tous les robots » et « Choisir tous les
-  indicateurs » (MQ4 et MQ5), et case **« Ranger dans des dossiers Robots / Indicateurs »**
-  (cochée par défaut) : `Robots/MQ4/<nom>/`, `Robots/MQ5/…`, `Indicateurs/MQ4/…`,
-  `Indicateurs/MQ5/…` (et `Scripts/…`), chaque outil avec tout ce qui va avec.
+- Deux écrans à part, **sans mélange avec « Sources MQ4/MQ5 »** : **Robots isolés** et
+  **Indicateurs isolés**. Chaque robot ou indicateur (MQ4, MQ5, EX4, EX5) vient avec tout ce
+  qui va avec (versions, compilés, SET, indicateurs utilisés, DLL, modèles, images).
+  - **Groupes de dossiers** : « Mettre dans un groupe… » réunit les outils cliqués dans un
+    groupe nommé (par exemple « Or », « Scalpers ») qui devient un dossier.
+  - Rangement au choix : **un dossier par outil** ou **un seul grand dossier** (tous les
+    fichiers ensemble).
+  - Nouveau dossier « Robots isolés <date> » ou « Indicateurs isolés <date> » ; aperçu, puis
+    copie vérifiée après validation.
 
 ## [1.5.0] — Archives, SET en vrac, isolement fidèle, fichiers à risque
 

@@ -19,16 +19,22 @@ Pendant le calcul, la progression indique les Go lus, la vitesse et le **temps r
 estimé**. Sur un disque dur classique, régler « Calculs d'empreintes en parallèle » à 1 ou 2
 est souvent plus rapide.
 
-## Ranger robots et indicateurs dans des dossiers séparés
+## Robots isolés, indicateurs isolés
 
-Écran **Sources MQ4/MQ5** :
+Deux écrans à part (menu **Actions**), séparés de l'écran « Sources MQ4/MQ5 » :
+**Robots isolés** et **Indicateurs isolés**. Chaque robot ou indicateur (MQ4, MQ5, EX4, EX5)
+vient avec tout ce qui va avec : versions, compilés, SET, indicateurs utilisés, DLL, modèles,
+images.
 
-1. « Choisir tous les robots » et/ou « Choisir tous les indicateurs » (MQ4 et MQ5), ou un
-   clic sur chaque ligne voulue ;
-2. laissez cochée la case « Ranger dans des dossiers Robots / Indicateurs » ;
-3. « Isoler les sources choisies… », choisissez le dossier de destination, cochez les
-   fichiers proposés qui vont avec, puis validez.
+1. Cliquez sur les robots (ou indicateurs) voulus, ou « Tout sélectionner ».
+2. Facultatif : **« Mettre dans un groupe… »** et tapez un nom (par exemple « Or » ou
+   « Scalpers ») ; recommencez pour faire d'autres groupes. Chaque groupe devient un
+   dossier. « Retirer du groupe » remet un outil à la racine.
+3. Choisissez le rangement : **un dossier par robot** (avec tout dedans) ou **un seul grand
+   dossier** (tous les fichiers ensemble).
+4. « Isoler les robots choisis… » (ou « Isoler tous les robots… »), choisissez où créer le
+   dossier, regardez l'aperçu et validez.
 
-Résultat : `Robots/MQ4/<nom>/`, `Robots/MQ5/<nom>/`, `Indicateurs/MQ4/<nom>/`,
-`Indicateurs/MQ5/<nom>/` (et `Scripts/…`), chaque outil avec tout ce qui va avec. C'est une
-**copie vérifiée** : vos fichiers d'origine ne bougent pas.
+Résultat : un nouveau dossier « Robots isolés <date> » (ou « Indicateurs isolés <date> »),
+par exemple `Or/Gold Robot/…`, `Scalpers/…`, `Autre robot/…`. C'est une **copie vérifiée** :
+vos fichiers d'origine ne bougent pas.

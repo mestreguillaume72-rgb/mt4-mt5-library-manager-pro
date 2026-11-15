@@ -225,5 +225,8 @@ l'utilise (un fichier n'apparaît qu'une fois par copie). Les dossiers standards
   Les autres sont seulement listés. Réglage `empreintes.tout_lire` = 1 pour tout lire.
 * **Conséquence assumée** : un fichier non lu n'a pas d'empreinte, il n'apparaît donc ni
   dans les doublons ni dans les copies ; il n'est jamais touché.
-* **Rangement par type** : `Robots|Indicateurs|Scripts|Autres outils / MQ4|MQ5 / <nom>`
-  d'après le type reconnu (`file_analysis.detected_type`) ; copie vérifiée, comme avant.
+* **Robots et indicateurs isolés** (demande du propriétaire : « pas mélangé avec les
+  MQ4/MQ5 ») : deux écrans dédiés, fondés sur les familles de type principal `ea` ou
+  `indicator` (sources et compilés). Destination « Robots isolés <date> » ou « Indicateurs
+  isolés <date> » ; groupes nommés par l'utilisateur (gardés le temps de la session) ; un
+  dossier par outil ou un seul grand dossier. L'écran « Sources MQ4/MQ5 » reste inchangé.

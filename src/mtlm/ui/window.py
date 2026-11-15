@@ -1,4 +1,4 @@
-"""Fenêtre principale : barre latérale (16 écrans), pile de pages, barre d'état, tâches."""
+"""Fenêtre principale : barre latérale (18 écrans), pile de pages, barre d'état, tâches."""
 
 from __future__ import annotations
 
@@ -118,7 +118,17 @@ class UiApp:
 SECTIONS: list[tuple[str, list[str]]] = [
     ("COMMENCER", ["tableau", "sources", "analyse"]),
     ("RÉSULTATS", ["explorateur", "detail", "sets", "familles", "doublons", "archives", "risques"]),
-    ("ACTIONS", ["quarantaine", "organisation", "sources_mq", "rapports"]),
+    (
+        "ACTIONS",
+        [
+            "quarantaine",
+            "organisation",
+            "sources_mq",
+            "robots_isoles",
+            "indicateurs_isoles",
+            "rapports",
+        ],
+    ),
     ("RÉGLAGES", ["parametres", "aide"]),
 ]
 

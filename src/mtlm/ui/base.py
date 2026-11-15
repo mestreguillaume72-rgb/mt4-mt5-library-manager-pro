@@ -50,6 +50,10 @@ class Dialogs(Protocol):
     def confirm(self, parent: QWidget, title: str, text: str) -> bool: ...
     def info(self, parent: QWidget, title: str, text: str) -> None: ...
     def error(self, parent: QWidget, title: str, text: str) -> None: ...
+    def ask_text(self, parent: QWidget, title: str, text: str, default: str = "") -> str | None:
+        """Texte saisi par l'utilisateur (nom d'un groupe…), ou ``None`` s'il annule."""
+        ...
+
     def choose_items(
         self, parent: QWidget, title: str, text: str, items: list[tuple[str, str]]
     ) -> list[str] | None:
@@ -84,6 +88,12 @@ class QtDialogs:
 
     def error(self, parent: QWidget, title: str, text: str) -> None:
         QMessageBox.critical(parent, title, text)
+
+    def ask_text(self, parent: QWidget, title: str, text: str, default: str = "") -> str | None:
+        from PySide6.QtWidgets import QInputDialog
+
+        value, ok = QInputDialog.getText(parent, title, text, text=default)
+        return value if ok else None
 
     def choose_items(
         self, parent: QWidget, title: str, text: str, items: list[tuple[str, str]]
