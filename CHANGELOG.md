@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.6.0] — Analyse d'un disque entier plus rapide, rangement Robots / Indicateurs
+
+### Modifié
+- **Empreintes ciblées** (réglage « Lire en entier tous les fichiers du disque », 0 par
+  défaut) : seuls les fichiers MetaTrader (.mq4, .mq5, .mqh, .ex4, .ex5, .set, .tpl, .chr,
+  .dll, .ini…), les archives, et les fichiers rangés dans un dossier de robot (ou jusqu'à
+  2 niveaux en dessous) sont lus en entier. Les autres fichiers du disque (vidéos, photos,
+  images disque…) sont seulement listés : l'analyse d'un disque entier est bien plus rapide.
+  Les empreintes déjà calculées sont conservées.
+- **Progression des empreintes** : Go lus / Go à lire, vitesse et **temps restant estimé**.
+- **Accueil** : nombre de fichiers lus dans les archives (dont robots, indicateurs et SET).
+
+### Ajouté
+- Écran **Sources MQ4/MQ5** : boutons « Choisir tous les robots » et « Choisir tous les
+  indicateurs » (MQ4 et MQ5), et case **« Ranger dans des dossiers Robots / Indicateurs »**
+  (cochée par défaut) : `Robots/MQ4/<nom>/`, `Robots/MQ5/…`, `Indicateurs/MQ4/…`,
+  `Indicateurs/MQ5/…` (et `Scripts/…`), chaque outil avec tout ce qui va avec.
+
 ## [1.5.0] — Archives, SET en vrac, isolement fidèle, fichiers à risque
 
 ### Ajouté

@@ -16,7 +16,7 @@ from mtlm.app.context import AppContext
 from mtlm.app.duplicates import DuplicateService
 from mtlm.app.families import FamilyService
 from mtlm.app.formats import FormatService
-from mtlm.app.hashing import HashService
+from mtlm.app.hashing import HashService, HashSummary
 from mtlm.app.recognize import RecognitionService
 from mtlm.app.scan import ScanService
 from mtlm.app.sets import AssociationService, SetService
@@ -57,18 +57,51 @@ def _scan(ctx: AppContext, control: TaskControl, report: Report) -> str:
 
 
 def _hash(ctx: AppContext, control: TaskControl, report: Report) -> str:
-    workers = int(SettingsService(ctx.conn, ctx.journal).get("empreintes.travailleurs"))
+    settings = SettingsService(ctx.conn, ctx.journal)
+    workers = int(settings.get("empreintes.travailleurs"))
     summary = HashService(ctx.conn, ctx.clock, ctx.journal).run(
         workers=workers,
         control=control,
-        progress=lambda s: report(f"Empreintes : {s.hashed + s.errors}/{s.candidates}…"),
+        progress=lambda s: report(hash_progress_text(s)),
+        useful_only=not int(settings.get("empreintes.tout_lire")),
     )
     if summary.state == "cancelled":
         raise Cancelled
-    return (
+    text = (
         f"{summary.hashed} empreinte(s) calculée(s), {summary.errors} erreur(s) "
         f"({summary.mib_per_second:.1f} Mio/s)"
     )
+    if summary.skipped_unrelated:
+        text += (
+            f" ; {summary.skipped_unrelated} fichier(s) sans rapport avec MetaTrader "
+            "seulement listé(s)"
+        )
+    return text
+
+
+def duration_text(seconds: float) -> str:
+    """Durée lisible en français : « 2 h 05 min », « 7 min », « moins d'une minute »."""
+    minutes = int(seconds // 60)
+    if minutes < 1:
+        return "moins d'une minute"
+    hours, minutes = divmod(minutes, 60)
+    if hours:
+        return f"{hours} h {minutes:02d} min"
+    return f"{minutes} min"
+
+
+def hash_progress_text(summary: HashSummary) -> str:
+    done = summary.hashed + summary.errors
+    text = f"Empreintes : {done}/{summary.candidates}"
+    if summary.bytes_total:
+        text += f" ({summary.bytes_read / 2**30:.1f}/{summary.bytes_total / 2**30:.1f} Go"
+        if summary.seconds >= 2:
+            text += f", {summary.mib_per_second:.1f} Mio/s"
+        text += ")"
+    remaining = summary.remaining_seconds
+    if remaining is not None:
+        text += f" — reste environ {duration_text(remaining)}"
+    return text + "…"
 
 
 def _formats(ctx: AppContext, control: TaskControl, report: Report) -> str:

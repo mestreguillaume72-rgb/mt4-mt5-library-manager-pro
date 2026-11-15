@@ -214,3 +214,16 @@ l'utilise (un fichier n'apparaît qu'une fois par copie). Les dossiers standards
   rangés dans le dossier d'un autre robot sont signalés « peut-être mal rangés ».
 * **Isolement MQ4/MQ5** : dossier propre au robot copié tel quel, fichier seul copié seul ;
   les liens hors du dossier ne sont ajoutés qu'après validation de l'utilisateur.
+
+## D-021 — Empreintes ciblées sur un disque entier, rangement par type (1.6.0)
+
+* **Constat** : sur le disque entier du propriétaire (454 Go, 16 645 fichiers), l'étape
+  « Empreintes » lisait tout et durait plus de 15 h.
+* **Décision** : par défaut, seuls les fichiers liés à MetaTrader sont lus en entier
+  (extensions MetaTrader, archives, et fichiers ≤ 256 Mio d'un dossier contenant des
+  fichiers MetaTrader ou jusqu'à 2 niveaux en dessous ; la racine du disque ne compte pas).
+  Les autres sont seulement listés. Réglage `empreintes.tout_lire` = 1 pour tout lire.
+* **Conséquence assumée** : un fichier non lu n'a pas d'empreinte, il n'apparaît donc ni
+  dans les doublons ni dans les copies ; il n'est jamais touché.
+* **Rangement par type** : `Robots|Indicateurs|Scripts|Autres outils / MQ4|MQ5 / <nom>`
+  d'après le type reconnu (`file_analysis.detected_type`) ; copie vérifiée, comme avant.

@@ -22,6 +22,7 @@ import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
+from typing import Any
 
 from mtlm import ENGINE_VERSION
 from mtlm.app.jobs import JobStore
@@ -35,6 +36,17 @@ from mtlm.store.database import transaction
 log = logging.getLogger("mtlm.hashing")
 
 DEFAULT_BATCH = 256
+
+#: Fichiers MetaTrader : toujours lus en entier (robots, indicateurs, scripts, includes,
+#: réglages, modèles de graphique, profils, DLL, fichiers de configuration).
+METATRADER_EXTS = frozenset(
+    {"mq4", "mq5", "mqh", "ex4", "ex5", "set", "tpl", "chr", "dll", "ini", "mqproj", "csv"}
+)
+#: Archives : toujours lues (elles peuvent contenir des robots).
+ARCHIVE_EXTS = frozenset({"zip", "rar", "7z", "gz", "tgz", "bz2", "xz", "tar"})
+#: Autres fichiers : lus seulement dans un dossier de robot (ou 2 niveaux en dessous).
+NEAR_LEVELS = 2
+MAX_COMPANION_BYTES = 256 * 1024 * 1024
 
 
 def default_workers() -> int:
@@ -50,6 +62,16 @@ class HashSummary:
     errors: int = 0
     bytes_read: int = 0
     seconds: float = 0.0
+    bytes_total: int = 0
+    skipped_unrelated: int = 0
+
+    @property
+    def remaining_seconds(self) -> float | None:
+        """Temps restant estimé d'après la vitesse mesurée (None tant qu'inconnu)."""
+        if self.seconds < 2 or self.bytes_read <= 0:
+            return None
+        speed = self.bytes_read / self.seconds
+        return max(0.0, (self.bytes_total - self.bytes_read) / speed)
 
     @property
     def mib_per_second(self) -> float:
@@ -91,11 +113,14 @@ class HashService:
             )
         return cursor.rowcount
 
-    def _candidates(self, source_id: int | None, retry_errors: bool) -> list[_Task]:
+    def _candidates(
+        self, source_id: int | None, retry_errors: bool, *, useful_only: bool = False
+    ) -> list[_Task]:
         states = ["not_computed", "stale"] + (["error"] if retry_errors else [])
         sql = (
             "SELECT f.id, s.path, f.rel_path_bytes, f.size, f.mtime_ns, f.inode, f.device,"
-            " f.hash_state FROM file_record f JOIN source_root s ON s.id = f.root_id"
+            " f.hash_state, f.ext, f.root_id, f.rel_path FROM file_record f"
+            " JOIN source_root s ON s.id = f.root_id"
             " WHERE s.status = 'ok' AND f.presence = 'present' AND f.file_type = 'file'"
             " AND f.is_dataless = 0"
             f" AND f.hash_state IN ({','.join('?' * len(states))})"
@@ -105,6 +130,8 @@ class HashService:
             sql += " AND f.root_id = ?"
             params.append(source_id)
         rows = self._conn.execute(sql + " ORDER BY f.id", params).fetchall()
+        if useful_only:
+            rows = self._useful(rows)
         return [
             _Task(
                 int(r[0]),
@@ -115,6 +142,43 @@ class HashService:
             for r in rows
         ]
 
+    def _useful(self, rows: list[Any]) -> list[Any]:
+        """Fichiers utiles : MetaTrader et archives toujours ; les autres (images, sons,
+        documents, sous-dossiers…) seulement s'ils sont rangés dans un dossier qui contient
+        des fichiers MetaTrader, ou juste en dessous (2 niveaux), et pas trop gros. Le reste
+        du disque (vidéos, photos, images disque…) est seulement listé, pas lu."""
+        mt_dirs = {
+            (int(root), str(rel).rpartition("/")[0])
+            for root, rel in self._conn.execute(
+                "SELECT root_id, rel_path FROM file_record WHERE presence = 'present'"
+                f" AND ext IN ({','.join('?' * len(METATRADER_EXTS))})",
+                tuple(METATRADER_EXTS),
+            )
+        }
+
+        def near_metatrader(root: int, rel: str) -> bool:
+            directory = rel.rpartition("/")[0]
+            for _level in range(NEAR_LEVELS + 1):
+                if (root, directory) in mt_dirs:
+                    return True
+                if not directory:
+                    return False
+                directory = directory.rpartition("/")[0]
+                if not directory:
+                    return False  # la racine du disque ne compte pas comme dossier de robot
+            return False
+
+        kept = []
+        for row in rows:
+            ext = str(row[8] or "")
+            always = ext in METATRADER_EXTS or ext in ARCHIVE_EXTS
+            if always or (
+                int(row[3] or 0) <= MAX_COMPANION_BYTES
+                and near_metatrader(int(row[9]), str(row[10]))
+            ):
+                kept.append(row)
+        return kept
+
     def run(
         self,
         source_id: int | None = None,
@@ -124,12 +188,24 @@ class HashService:
         control: TaskControl | None = None,
         progress: HashProgress | None = None,
         batch_size: int = DEFAULT_BATCH,
+        useful_only: bool = False,
     ) -> HashSummary:
         ctl = control or TaskControl()
         self.reset_interrupted()
-        tasks = self._candidates(source_id, retry_errors)
+        everything = self._candidates(source_id, retry_errors)
+        tasks = (
+            self._candidates(source_id, retry_errors, useful_only=True)
+            if useful_only
+            else everything
+        )
         job_id = self._jobs.create("hash", {"source_id": source_id, "retry_errors": retry_errors})
-        summary = HashSummary(job_id=job_id, state="running", candidates=len(tasks))
+        summary = HashSummary(
+            job_id=job_id,
+            state="running",
+            candidates=len(tasks),
+            bytes_total=sum(t.expected.size for t in tasks),
+            skipped_unrelated=len(everything) - len(tasks),
+        )
         self._jobs.progress(job_id, 0, total=len(tasks))
         self._journal.append(
             ACTOR_USER,

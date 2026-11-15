@@ -197,3 +197,40 @@ def test_cli_empreintes_et_detail(
     assert code == EXIT_ERROR and "inconnu" in err
     code, _, _ = run(["empreintes", "--travailleurs", "0"])
     assert code == EXIT_USAGE
+
+
+def test_empreintes_utiles_seulement(tmp_path: Path, ctx: AppContext) -> None:
+    """1.6.0 : sur un disque entier, seuls les fichiers liés à MetaTrader sont lus."""
+    root = tmp_path / "disque"
+    (root / "Robots" / "Alpha").mkdir(parents=True)
+    (root / "Robots" / "Alpha" / "Alpha.mq4").write_text("int start(){return 0;}")
+    (root / "Robots" / "Alpha" / "Alpha.set").write_text("Lots=0.1\n")
+    (root / "Robots" / "Alpha" / "notice.pdf").write_bytes(b"%PDF-1.4 notice")
+    (root / "Robots" / "Alpha" / "Images").mkdir()
+    (root / "Robots" / "Alpha" / "Images" / "logo.png").write_bytes(b"\x89PNG logo")
+    (root / "Robots" / "modele.tpl").write_text("<chart>\n</chart>\n")
+    (root / "Robots" / "pack.zip").write_bytes(b"PK\x05\x06" + b"\x00" * 18)
+    (root / "Vacances").mkdir()
+    (root / "Vacances" / "plage.jpg").write_bytes(b"\xff\xd8\xff" + b"x" * 5000)
+    (root / "Vacances" / "film.mp4").write_bytes(b"y" * 9000)
+    source = SourceService(ctx.conn, ctx.clock, ctx.journal, ctx.paths).add(root)
+    ScanService(ctx.conn, ctx.clock, ctx.journal).scan(source.id)
+    summary = HashService(ctx.conn, ctx.clock, ctx.journal).run(useful_only=True)
+    assert (summary.hashed, summary.skipped_unrelated) == (6, 2)
+    assert summary.bytes_total == summary.bytes_read
+    hashed = set(stored_hashes(ctx))
+    assert "Vacances/plage.jpg" not in hashed and "Vacances/film.mp4" not in hashed
+    assert "Robots/Alpha/notice.pdf" in hashed and "Robots/modele.tpl" in hashed
+    assert "Robots/Alpha/Images/logo.png" in hashed
+
+
+def test_texte_de_progression_avec_temps_restant() -> None:
+    from mtlm.app.pipeline import duration_text, hash_progress_text
+
+    s = HashSummary(job_id=1, state="running", candidates=10, hashed=5)
+    s.bytes_total, s.bytes_read, s.seconds = 4 * 2**30, 2**30, 100.0
+    text = hash_progress_text(s)
+    assert text.startswith("Empreintes : 5/10 (1.0/4.0 Go")
+    assert "reste environ 5 min" in text
+    assert duration_text(30) == "moins d'une minute"
+    assert duration_text(7500) == "2 h 05 min"

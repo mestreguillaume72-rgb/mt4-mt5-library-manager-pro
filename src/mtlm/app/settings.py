@@ -46,6 +46,19 @@ SPECS: dict[str, SettingSpec] = {
             "archives sont seulement lues, sans rien extraire.",
         ),
         SettingSpec(
+            "empreintes.tout_lire",
+            "Lire en entier tous les fichiers du disque (0 = robots et indicateurs seulement)",
+            0,
+            0,
+            1,
+            True,
+            "0 (conseillé) : seuls les fichiers MetaTrader (.mq4, .mq5, .ex4, .ex5, .mqh, .set, "
+            ".tpl, .dll…), les archives, et les images, sons et documents rangés à côté d'eux "
+            "sont lus en entier. Les autres fichiers (vidéos, photos, images disque…) sont "
+            "seulement listés : l'analyse d'un disque entier est beaucoup plus rapide. 1 : tout "
+            "est lu, ce qui peut prendre des heures sur un grand disque.",
+        ),
+        SettingSpec(
             "similarite.seuil",
             "Seuil de similarité des sources",
             0.80,

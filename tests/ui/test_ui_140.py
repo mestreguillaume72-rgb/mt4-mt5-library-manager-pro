@@ -151,7 +151,37 @@ def test_sources_mq_choisir_deux_sources_au_clic(
     folder = next(dest.iterdir())
     copied = {p.relative_to(folder).as_posix() for p in folder.rglob("*") if p.is_file()}
     # Autre.mq4 est seul dans « Experts » : copié seul. Gold Robot a son dossier « Gold ».
-    assert "MQ4/Autre/Autre.mq4" in copied and "MQ4/Gold/Gold Robot.mq4" in copied
+    # Rangement par défaut (1.6.0) : « Robots/MQ4/… ».
+    assert "Robots/MQ4/Autre/Autre.mq4" in copied and "Robots/MQ4/Gold/Gold Robot.mq4" in copied
     # L'indicateur utilisé, validé par l'utilisateur, rejoint son robot.
-    assert "MQ4/Gold/SuperTrend.mq4" in copied
-    assert not any(c.startswith("MQ4/SuperTrend/") for c in copied)
+    assert "Robots/MQ4/Gold/SuperTrend.mq4" in copied
+    assert not any("/SuperTrend/" in c for c in copied)
+
+
+def test_sources_mq_choisir_robots_et_indicateurs_par_type(
+    window: MainWindow, qtbot: object, dialogs: FakeDialogs, tmp_path: Path
+) -> None:
+    """1.6.0 : « Choisir tous les robots / indicateurs » et rangement Robots / Indicateurs."""
+    lib = tmp_path / "lib"
+    build_dependencies(lib)
+    analysed(window, qtbot, dialogs, lib)
+    window.navigate("sources_mq")
+    page: Any = window.pages["sources_mq"]
+    page.refresh()
+    click(window, qtbot, "sources_mq.choisir_indicateurs")
+    assert page.counter_sources.text() == "1 sélectionné(s)"
+    click(window, qtbot, "sources_mq.choisir_robots")
+    assert page.counter_sources.text() == "2 sélectionné(s)"
+    assert page.by_type.isChecked()
+    dest = tmp_path / "Dest"
+    dest.mkdir()
+    dialogs.directories.append(dest)
+    dialogs.choices.append([])  # aucun fichier en plus
+    dialogs.confirm_answer = True
+    click(window, qtbot, "sources_mq.isoler")
+    assert "Robots/MQ4" in dialogs.confirms[-1]
+    wait_idle(window, qtbot)
+    folder = next(dest.iterdir())
+    copied = {p.relative_to(folder).as_posix() for p in folder.rglob("*") if p.is_file()}
+    assert any(c.startswith("Robots/MQ4/") and c.endswith("Gold Robot.mq4") for c in copied)
+    assert any(c.startswith("Indicateurs/MQ4/") and c.endswith("SuperTrend.mq4") for c in copied)

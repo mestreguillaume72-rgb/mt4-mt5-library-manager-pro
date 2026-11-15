@@ -428,6 +428,8 @@ class DashboardPage(Page):
             "missing",
             "hashed",
             "hash_todo",
+            "in_archives",
+            "in_archives_tools",
             "assoc_ok",
             "orphans",
             "quarantined",
@@ -543,10 +545,23 @@ class DashboardPage(Page):
                 "SELECT count(*) FROM duplicate_member WHERE admissible_for_quarantine = 1"
             ),
             "quarantined": self._count("SELECT count(*) FROM file_record WHERE in_quarantine = 1"),
+            "in_archives": self._count(
+                "SELECT count(*) FROM archive_entry e JOIN file_record f"
+                " ON f.id = e.archive_file_id WHERE f.presence = 'present' AND e.is_dir = 0"
+            ),
+            "in_archives_tools": self._count(
+                "SELECT count(*) FROM archive_entry e JOIN file_record f"
+                " ON f.id = e.archive_file_id WHERE f.presence = 'present' AND e.is_dir = 0"
+                " AND (lower(e.inner_path) LIKE '%.mq4' OR lower(e.inner_path) LIKE '%.mq5'"
+                " OR lower(e.inner_path) LIKE '%.ex4' OR lower(e.inner_path) LIKE '%.ex5'"
+                " OR lower(e.inner_path) LIKE '%.set')"
+            ),
         }
         for key, value in values.items():
             self.values[key].setText(fmt(value) if isinstance(value, int) else str(value))
         self._apply_tones(values, analysed > 0)
+        if values["in_archives"]:
+            self.hints["files"].setText(f"+ {fmt(values['in_archives'])} dans les archives")
         # États des 3 étapes.
         done = [sources > 0, analysed > 0, values["assoc_ok"] > 0 or values["quarantined"] > 0]
         texts = [
@@ -580,7 +595,9 @@ class DashboardPage(Page):
             if analysed:
                 self.summary.setText(
                     f"<b>Votre bibliothèque</b> : {fmt(stats.files)} fichiers "
-                    f"({values['size']}), dont <b>{fmt(int(values['robots']))}</b> robots, "
+                    f"({values['size']})"
+                    + self._archives_sentence(values)
+                    + f", dont <b>{fmt(int(values['robots']))}</b> robots, "
                     f"indicateurs ou scripts et <b>{fmt(int(values['sets']))}</b> SET. "
                     f"<b>{fmt(int(values['assoc_check']))}</b> SET en vrac ou mal rangé(s) "
                     "attendent que vous validiez leur robot ; "
@@ -590,6 +607,16 @@ class DashboardPage(Page):
             else:
                 self.summary.setText("Étape suivante : cliquez sur <b>« Tout analyser »</b>.")
         self._tick()
+
+    @staticmethod
+    def _archives_sentence(values: dict[str, Any]) -> str:
+        inside = int(values["in_archives"])
+        if not inside:
+            return ""
+        return (
+            f" + <b>{fmt(inside)}</b> fichier(s) lu(s) dans les archives (dont "
+            f"{fmt(int(values['in_archives_tools']))} robots, indicateurs ou SET)"
+        )
 
     def _placement_sentence(self) -> str:
         from mtlm.app.sets import AssociationService

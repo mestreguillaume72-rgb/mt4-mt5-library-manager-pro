@@ -229,11 +229,22 @@ _CLIC = (
     "une, deux, trois ou plus. "
 )
 ACTION_TIPS["sources_mq.tout_sources"] = _TOUT
+ACTION_TIPS["sources_mq.choisir_robots"] = (
+    "Ajoute à la sélection tous les robots (Expert Advisors) de la liste, MQ4 et MQ5. Vous "
+    "pouvez ensuite en retirer d'un clic, ou ajouter les indicateurs."
+)
+ACTION_TIPS["sources_mq.choisir_indicateurs"] = (
+    "Ajoute à la sélection tous les indicateurs de la liste, MQ4 et MQ5. Vous pouvez ensuite "
+    "en retirer d'un clic, ou ajouter les robots."
+)
 for _key in [k for k in ACTION_TIPS if ".tout_" in k]:
     ACTION_TIPS[_key] = _CLIC + "Ce bouton les sélectionne toutes."
 WIDGET_TIPS.update(
     {
         ("sources_mq", "search"): "Tapez une partie du nom ou du dossier, puis Entrée.",
+        ("sources_mq", "by_type"): "Cochée : le nouveau dossier est rangé en « Robots » et "
+        "« Indicateurs » (et « Scripts »), puis MQ4 / MQ5, un dossier par outil avec tout ce "
+        "qui va avec. Décochée : rangement en MQ4 / MQ5 seulement.",
         ("sources_mq", "platform"): "N'afficher que les sources MQ4 ou MQ5.",
         ("sources_mq", "tool_type"): "N'afficher qu'un type : robots, indicateurs, scripts…",
         ("sources_mq", "sources"): _CLIC + "Colonnes : SET associés, fichiers liés (images, "

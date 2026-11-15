@@ -89,6 +89,10 @@ class IsolationCandidate:
     reason: str
 
 
+#: Rangement par type (1.6.0) : « Robots/MQ4/… », « Indicateurs/MQ5/… ».
+TYPE_FOLDERS = {"ea": "Robots", "indicator": "Indicateurs", "script": "Scripts"}
+OTHER_TYPE_FOLDER = "Autres outils"
+
 #: Dossiers « conteneurs » : une source qui y est rangée n'a pas de dossier propre.
 STANDARD_CONTAINERS = {
     "experts",
@@ -721,8 +725,13 @@ class OrganizeService:
         destination: Path,
         file_ids: list[int] | None = None,
         extras: dict[int, int] | None = None,
+        *,
+        by_type: bool = False,
     ) -> Preview:
         """Proposition : isoler les sources MQ4/MQ5 (toutes, ou ``file_ids`` choisies).
+
+        Avec ``by_type`` : rangement dans ``Robots/``, ``Indicateurs/``, ``Scripts/`` (ou
+        ``Autres outils/``) puis ``MQ4|MQ5/<nom>/`` avec tout ce qui va avec.
 
         * source rangée dans **son propre dossier** : le dossier est copié **complet, tel
           quel** (sous-dossiers compris) dans ``MQ4|MQ5/<nom du dossier>/`` ;
@@ -749,11 +758,24 @@ class OrganizeService:
         ]
         sources = self._files(source_ids)
         layout = self.source_layout(list(sources))
+        types: dict[int, str] = {}
+        if by_type and sources:
+            marks = ",".join("?" * len(sources))
+            types = {
+                int(f): str(t or "")
+                for f, t in self._conn.execute(
+                    f"SELECT file_id, detected_type FROM file_analysis WHERE file_id IN ({marks})",
+                    list(sources),
+                )
+            }
         folder_of: dict[int, str] = {}
         selection: list[tuple[tuple[Any, ...], str]] = []
         copied_folders: dict[tuple[int, str], str] = {}
         for source_id, r in sources.items():
             platform = "MQ4" if str(r[9]).casefold().endswith(".mq4") else "MQ5"
+            if by_type:
+                kind = TYPE_FOLDERS.get(types.get(source_id, ""), OTHER_TYPE_FOLDER)
+                platform = f"{kind}/{platform}"
             mode, directory = layout.get(source_id, ("seul", ""))
             if mode == "dossier":
                 root_id = int(
@@ -808,6 +830,7 @@ class OrganizeService:
                 "sources": len(sources),
                 "dossiers_complets": len(copied_folders),
                 "fichiers_valides": added,
+                "par_type": by_type,
             },
             excluded_q,
             excluded_d,

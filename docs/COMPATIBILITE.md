@@ -9,8 +9,8 @@ exécution réelle.
 | 15 (GitHub `macos-15-intel`) | Intel (x86_64) | idem | CI « CI macOS » à chaque envoi | ✅ moteur et interface (hors écran) |
 | 15 (GitHub `macos-15`) | Apple Silicon | construction `.app`, signature ad hoc vérifiée, auto-diagnostic, DMG vérifié, application lancée depuis le DMG monté | run 42919451282 | ✅ |
 | 15 (GitHub `macos-15-intel`) | Intel | idem | run 42919451282 | ✅ |
-| Mac du propriétaire : iMac Retina 5K 27" fin 2015, macOS 12.7.6 Monterey | Intel (x86_64) | v1.2.0 : refus (Qt 6.12 exige macOS 14) ; v1.2.1 : application Apple Silicon ouverte par erreur — corrigé en v1.2.2 (universelle) | retours du propriétaire | ⏳ v1.2.2 à confirmer par le propriétaire |
-| macOS 12 à 14 | Intel et Apple Silicon | **chaque binaire** de l'application exige au plus macOS 12.0 (`tools/verifier_minos.sh`, échec de la CI sinon) ; aucun Mac 12–14 disponible en CI (exécution non testée) | CI « Application macOS », fichier `minos.txt` | ⏳ lancement à confirmer sur le Mac du propriétaire |
+| Mac du propriétaire : iMac Retina 5K 27" fin 2015, macOS 12.7.6 Monterey | Intel (x86_64) | v1.2.0 : refus (Qt 6.12 exige macOS 14) ; v1.2.1 : application Apple Silicon ouverte par erreur — corrigé en v1.2.2 (universelle) | retours du propriétaire | ✅ application ouverte et analyse d'un disque entier lancée (photo du propriétaire, v1.5.0) |
+| macOS 12 à 14 | Intel et Apple Silicon | **chaque binaire** de l'application exige au plus macOS 12.0 (`tools/verifier_minos.sh`, échec de la CI sinon) ; aucun Mac 12–14 disponible en CI (exécution non testée) | CI « Application macOS », fichier `minos.txt` | ✅ macOS 12.7.6 confirmé sur le Mac du propriétaire ; 13 et 14 non testés |
 
 Limites :
 - Application **non notarisée** (pas de compte Apple Developer, Q-03) : ouverture par clic droit
