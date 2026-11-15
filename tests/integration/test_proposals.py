@@ -80,8 +80,14 @@ def test_isoler_sources_mq_fichier_seul_et_set_valides(tmp_path: Path, ctx: AppC
     assert sets
     validated = service.preview_sources(mkd(tmp_path / "Dest2"), None, sets)
     with_sets = [t for _f, t, _s, _c in service.items(validated.plan_id)]
-    folders_with_source = {t.rpartition("/")[0] for t in with_sets if t.endswith(".mq4")}
-    assert all(t.rpartition("/")[0] in folders_with_source for t in with_sets if t.endswith(".set"))
+    # Chaque SET validé rejoint le dossier de sa source (une source identique à une autre
+    # n'est pas recopiée : pas de doublon, mais son SET garde son dossier).
+    stems = {
+        f"MQ4/{str(n).rpartition('.')[0]}"
+        for (n,) in ctx.conn.execute("SELECT name FROM file_record WHERE ext = 'mq4'")
+    }
+    assert all(t.rpartition("/")[0] in stems for t in with_sets if t.endswith(".set"))
+    assert validated.excluded_duplicates >= 1
     result = service.execute(validated.plan_id, validated.token)
     assert result.status == "completed"
     assert diff_snapshots(before, take_snapshot(lib)) == []
@@ -106,9 +112,9 @@ def test_dossier_propre_copie_complet_tel_quel(tmp_path: Path, ctx: AppContext) 
         "MQ4/Gold Scalper Pro/Gold Scalper Pro.mq4",
         "MQ4/Gold Scalper Pro/Gold Scalper Pro.ex4",
         "MQ4/Gold Scalper Pro/Presets/eurusd.set",
-        "MQ4/Gold Scalper Pro/Presets/copie.set",
         "MQ4/Gold Scalper Pro/Images/logo.png",
     }
+    assert preview.excluded_duplicates == 1  # « copie.set », identique : pas de doublon
     assert service.execute(preview.plan_id, preview.token).status == "completed"
 
 
@@ -121,3 +127,33 @@ def test_propositions_refusees_si_destination_invalide(tmp_path: Path, ctx: AppC
         service.preview_sources(lib / "MQL4")  # dans une source : refusé
     with pytest.raises(OrganizeError, match="inconnue"):
         service.preview_family(mkd(tmp_path / "Dest"), 999_999)
+
+
+def test_robot_isole_avec_son_dossier_entier_sans_doublon(tmp_path: Path, ctx: AppContext) -> None:
+    """1.6.0 : un robot (même seulement compilé) est copié avec son dossier entier, au-dessus
+    de « MQL4/Experts » ; une copie identique ailleurs n'est pas recopiée."""
+    lib = tmp_path / "lib"
+    pack = lib / "Telechargements" / "Gold Pack"
+    for rel, data in {
+        "MQL4/Experts/Gold.ex4": b"EX4 fictif gold",
+        "MQL4/Indicators/Helper.ex4": b"EX4 fictif helper",
+        "Presets/eurusd.set": b"Lots=0.1\n",
+        "Manuel.pdf": b"%PDF-1.4 manuel",
+    }.items():
+        (pack / rel).parent.mkdir(parents=True, exist_ok=True)
+        (pack / rel).write_bytes(data)
+    (lib / "Autre" / "Experts").mkdir(parents=True)
+    (lib / "Autre" / "Experts" / "Gold.ex4").write_bytes(b"EX4 fictif gold")  # identique
+    analyse(ctx, lib)
+    service = organize(ctx)
+    family = family_of(ctx, "Telechargements/Gold Pack/MQL4/Experts/Gold.ex4")
+    preview = service.preview_isolated(mkd(tmp_path / "Dest"), "ea", [family])
+    targets = {t for _f, t, _s, _c in service.items(preview.plan_id)}
+    assert targets == {
+        "Gold/MQL4/Experts/Gold.ex4",
+        "Gold/MQL4/Indicators/Helper.ex4",
+        "Gold/Presets/eurusd.set",
+        "Gold/Manuel.pdf",
+    }
+    assert preview.excluded_duplicates >= 1
+    assert service.execute(preview.plan_id, preview.token).status == "completed"

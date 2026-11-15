@@ -44,6 +44,24 @@ METATRADER_EXTS = frozenset(
 )
 #: Archives : toujours lues (elles peuvent contenir des robots).
 ARCHIVE_EXTS = frozenset({"zip", "rar", "7z", "gz", "tgz", "bz2", "xz", "tar"})
+#: Dossiers standard de MetaTrader traversés pour trouver le dossier propre d'un robot.
+MT_CONTAINERS = frozenset(
+    {
+        "experts",
+        "indicators",
+        "scripts",
+        "libraries",
+        "include",
+        "files",
+        "presets",
+        "mql4",
+        "mql5",
+        "services",
+        "templates",
+        "images",
+        "sounds",
+    }
+)
 #: Autres fichiers : lus seulement dans un dossier de robot (ou 2 niveaux en dessous).
 NEAR_LEVELS = 2
 MAX_COMPANION_BYTES = 256 * 1024 * 1024
@@ -147,14 +165,20 @@ class HashService:
         documents, sous-dossiers…) seulement s'ils sont rangés dans un dossier qui contient
         des fichiers MetaTrader, ou juste en dessous (2 niveaux), et pas trop gros. Le reste
         du disque (vidéos, photos, images disque…) est seulement listé, pas lu."""
-        mt_dirs = {
-            (int(root), str(rel).rpartition("/")[0])
-            for root, rel in self._conn.execute(
-                "SELECT root_id, rel_path FROM file_record WHERE presence = 'present'"
-                f" AND ext IN ({','.join('?' * len(METATRADER_EXTS))})",
-                tuple(METATRADER_EXTS),
-            )
-        }
+        mt_dirs: set[tuple[int, str]] = set()
+        for root, rel in self._conn.execute(
+            "SELECT root_id, rel_path FROM file_record WHERE presence = 'present'"
+            f" AND ext IN ({','.join('?' * len(METATRADER_EXTS))})",
+            tuple(METATRADER_EXTS),
+        ):
+            directory = str(rel).rpartition("/")[0]
+            mt_dirs.add((int(root), directory))
+            # Dossier du robot au-dessus de « MQL4/Experts », « Indicators »… : ses notices,
+            # images et SET sont lus aussi (le dossier entier peut être copié).
+            while directory and directory.rpartition("/")[2].casefold() in MT_CONTAINERS:
+                directory = directory.rpartition("/")[0]
+                if directory:
+                    mt_dirs.add((int(root), directory))
 
         def near_metatrader(root: int, rel: str) -> bool:
             directory = rel.rpartition("/")[0]

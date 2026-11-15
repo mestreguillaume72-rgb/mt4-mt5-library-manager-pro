@@ -30,8 +30,10 @@ class IsolatedToolsPage(Page):
             "réunissez-les si vous voulez dans des <b>groupes</b> (« Mettre dans un "
             "groupe… »), puis choisissez <b>un dossier par "
             f"{self.singular}</b> ou <b>un seul grand dossier</b>. Chaque {self.singular} vient "
-            "avec tout ce qui va avec : versions MQ4/MQ5, compilés EX4/EX5, SET, indicateurs "
-            "utilisés, DLL, modèles, images. Vos originaux ne bougent pas.",
+            "avec <b>son dossier entier</b> (même s'il n'y a que l'EX4/EX5) et tout ce qui va "
+            "avec : versions, SET, indicateurs utilisés, DLL, modèles, images. <b>Aucun "
+            "doublon</b> : un fichier identique n'est copié qu'une fois. Vos originaux ne "
+            "bougent pas.",
             "banner",
         )
         filters = QHBoxLayout()

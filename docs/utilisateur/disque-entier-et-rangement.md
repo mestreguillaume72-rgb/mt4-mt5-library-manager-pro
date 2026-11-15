@@ -48,6 +48,11 @@ images.
 4. « Isoler les robots choisis… » (ou « Isoler tous les robots… »), choisissez où créer le
    dossier, regardez l'aperçu et validez.
 
+Chaque robot vient avec **son dossier entier** (sous-dossiers, SET, notices, images),
+même s'il n'y a que le fichier EX4/EX5 : pour `Gold Pack/MQL4/Experts/Gold.ex4`, c'est tout
+le dossier `Gold Pack` qui est copié. **Aucun doublon** : un fichier identique à un autre
+n'est copié qu'une fois.
+
 Résultat : un nouveau dossier « Robots isolés <date> » (ou « Indicateurs isolés <date> »),
 par exemple `Or/Gold Robot/…`, `Scalpers/…`, `Autre robot/…`. C'est une **copie vérifiée** :
 vos fichiers d'origine ne bougent pas.

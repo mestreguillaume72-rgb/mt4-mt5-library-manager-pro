@@ -230,6 +230,11 @@ l'utilise (un fichier n'apparaît qu'une fois par copie). Les dossiers standards
   `indicator` (sources et compilés). Destination « Robots isolés <date> » ou « Indicateurs
   isolés <date> » ; groupes nommés par l'utilisateur (gardés le temps de la session) ; un
   dossier par outil ou un seul grand dossier.
+* **Dossier entier, sans doublon** (demande du propriétaire) : l'isolement copie le dossier
+  propre de l'outil (remontée au-dessus des dossiers standard ; dossier à son nom ou ne
+  contenant que lui ; ≤ 2000 fichiers). Les copies identiques ne sont plus recopiées,
+  y compris dans « Sources MQ4/MQ5 » (remplace la « copie fidèle » de D-020). Les fichiers
+  d'un tel dossier sont lus par l'analyse ciblée.
 * **Reconnaissance** : pour un MQ4 ancien (`start()`), les fonctions utilisées priment sur
   le dossier (ordres = robot, tampons = indicateur) ; si les deux ou aucun, le dossier
   tranche. Contenu des archives reconnu en mémoire par un classificateur fourni par la

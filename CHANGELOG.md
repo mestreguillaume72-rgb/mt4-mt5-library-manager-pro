@@ -3,6 +3,12 @@
 ## [1.6.0] — Analyse d'un disque entier plus rapide, rangement Robots / Indicateurs
 
 ### Modifié
+- **Dossier entier, sans doublon** (Robots isolés, Indicateurs isolés, Sources MQ4/MQ5) :
+  un robot ou indicateur est copié avec **son dossier entier** (sous-dossiers, SET, notices,
+  images), même s'il n'y a que l'EX4/EX5. Le dossier du robot est trouvé au-dessus des
+  dossiers standard (`Gold Pack/MQL4/Experts/Gold.ex4` → dossier `Gold Pack`). Une copie
+  identique n'est **jamais recopiée** ; un dossier qui n'apporte rien de nouveau est laissé
+  de côté.
 - **Empreintes ciblées** (réglage « Lire en entier tous les fichiers du disque », 0 par
   défaut) : seuls les fichiers MetaTrader (.mq4, .mq5, .mqh, .ex4, .ex5, .set, .tpl, .chr,
   .dll, .ini…), les archives, et les fichiers rangés dans un dossier de robot (ou jusqu'à

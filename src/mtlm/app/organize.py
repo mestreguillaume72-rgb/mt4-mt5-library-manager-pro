@@ -634,7 +634,7 @@ class OrganizeService:
             name = self._family_name(family_id)
             names.append(name)
             prefix = base if mode == "un_dossier" else f"{base}{_component(name)}/"
-            _name, items = self._family_selection(family_id, prefix)
+            items = self._tool_with_folders(family_id, prefix)
             if mode == "un_dossier":
                 items = [(r, f"{base}{_component(str(r[9]))}") for r, _t in items]
             selection.extend(items)
@@ -655,6 +655,57 @@ class OrganizeService:
             excluded_q,
             excluded_d,
         )
+
+    def _tool_with_folders(self, family_id: int, prefix: str) -> list[tuple[tuple[Any, ...], str]]:
+        """Un outil (famille) avec **son dossier entier** : chaque dossier propre à l'outil
+        (voir :meth:`own_folder`) est repris complet, sous-dossiers compris (SET, images,
+        notices…), puis s'ajoutent les autres fichiers de la famille et ce qui va avec
+        (indicateurs utilisés, DLL, modèles…)."""
+        members = [
+            int(r[0])
+            for r in self._conn.execute(
+                "SELECT fm.file_id FROM family_member fm JOIN file_record f ON f.id = fm.file_id"
+                " WHERE fm.family_id = ? AND f.ext IN ('mq4', 'mq5', 'ex4', 'ex5')"
+                " ORDER BY fm.file_id",
+                (family_id,),
+            )
+        ]
+        folders: list[tuple[int, str]] = []
+        for member in members:
+            found = self.own_folder(member)
+            if found and found not in folders:
+                folders.append(found)
+        # Un dossier contenu dans un autre n'est pris qu'une fois (le plus grand).
+        folders = [
+            (root, d)
+            for root, d in folders
+            if not any(r2 == root and d.startswith(d2 + "/") for r2, d2 in folders)
+        ]
+        # Pas de doublon : un dossier qui n'apporte rien de nouveau (copie identique d'un
+        # autre, ou d'une partie) est laissé de côté ; le plus complet passe en premier.
+        contents = {folder: self._files(self._folder_members(*folder)) for folder in folders}
+        kept: list[tuple[int, str]] = []
+        seen: set[int] = set()
+        for folder in sorted(folders, key=lambda f: (-len(contents[f]), f[1])):
+            new = {int(r[8]) for r in contents[folder].values()} - seen
+            if new:
+                kept.append(folder)
+                seen |= {int(r[8]) for r in contents[folder].values()}
+        selection: list[tuple[tuple[Any, ...], str]] = []
+        taken: set[int] = set()
+        for folder in kept:
+            _root_id, directory = folder
+            sub = f"{_component(directory.rpartition('/')[2])}/" if len(kept) > 1 else ""
+            start = len(directory) + 1
+            for r in contents[folder].values():
+                relative = str(r[10])[start:]
+                selection.append(
+                    (r, prefix + sub + "/".join(_component(p) for p in relative.split("/")))
+                )
+                taken.add(int(r[0]))
+        _name, items = self._family_selection(family_id, prefix)
+        selection.extend(item for item in items if int(item[0][0]) not in taken)
+        return selection
 
     def _family_name(self, family_id: int) -> str:
         row = self._conn.execute(
@@ -722,43 +773,70 @@ class OrganizeService:
             )
         ]
 
-    def source_layout(self, source_ids: list[int]) -> dict[int, tuple[str, str]]:
-        """Pour chaque source : (« dossier », chemin du dossier propre au robot) si elle est
-        rangée dans un dossier qui ne contient qu'elle (et ses versions, compilés, SET,
-        images…), sinon (« seul », "") : le fichier est copié seul."""
-        rows = (
-            self._conn.execute(
-                "SELECT id, root_id, rel_path, name FROM file_record WHERE presence = 'present'"
-                f" AND id IN ({','.join('?' * len(source_ids))})",
-                source_ids,
-            ).fetchall()
-            if source_ids
-            else []
-        )
-        layout: dict[int, tuple[str, str]] = {}
-        for file_id, root_id, rel_path, name in rows:
-            directory = str(rel_path).rpartition("/")[0]
-            last = directory.rpartition("/")[2].casefold()
-            if not directory or last in STANDARD_CONTAINERS:
-                layout[int(file_id)] = ("seul", "")
-                continue
-            prefix = directory + "/"
-            inside = self._conn.execute(
-                "SELECT count(*) FROM file_record WHERE root_id = ? AND presence = 'present'"
-                " AND substr(rel_path, 1, ?) = ?",
+    def own_folder(self, file_id: int) -> tuple[int, str] | None:
+        """Dossier propre à l'outil du fichier ``file_id`` (robot, indicateur…), ou ``None``.
+
+        On part du dossier du fichier ; les dossiers « standard » (Experts, Indicators,
+        MQL4, MQL5, Presets, Téléchargements…) sont traversés sans s'y arrêter : pour
+        ``Gold/MQL4/Experts/Gold.ex4``, le dossier du robot est ``Gold``. Le dossier retenu
+        doit être à son nom, ou ne contenir que cet outil (ses versions, compilés, SET,
+        images…), et au plus :data:`MAX_FOLDER_FILES` fichiers."""
+        row = self._conn.execute(
+            "SELECT root_id, rel_path, name FROM file_record WHERE id = ? AND presence = 'present'",
+            (file_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        root_id, rel_path, name = int(row[0]), str(row[1]), str(row[2])
+        key = logical_key(name)
+        directory = rel_path.rpartition("/")[0]
+        while directory and directory.rpartition("/")[2].casefold() in STANDARD_CONTAINERS:
+            directory = directory.rpartition("/")[0]
+        if not directory:
+            return None
+        prefix = directory + "/"
+        inside = self._conn.execute(
+            "SELECT count(*) FROM file_record WHERE root_id = ? AND presence = 'present'"
+            " AND substr(rel_path, 1, ?) = ?",
+            (root_id, len(prefix), prefix),
+        ).fetchone()[0]
+        if int(inside) > MAX_FOLDER_FILES:
+            return None
+        folder_key = logical_key(directory.rpartition("/")[2] + ".x")
+        named = len(key) >= 3 and len(folder_key) >= 3 and (key in folder_key or folder_key in key)
+        if named:
+            return root_id, directory
+        tools = {
+            logical_key(str(n))
+            for (n,) in self._conn.execute(
+                "SELECT name FROM file_record WHERE root_id = ? AND presence = 'present'"
+                " AND substr(rel_path, 1, ?) = ? AND ext IN ('mq4', 'mq5', 'ex4', 'ex5')",
                 (root_id, len(prefix), prefix),
-            ).fetchone()[0]
-            tools = {
-                logical_key(str(n))
-                for (n,) in self._conn.execute(
-                    "SELECT name FROM file_record WHERE root_id = ? AND presence = 'present'"
-                    " AND substr(rel_path, 1, ?) = ? AND ext IN ('mq4', 'mq5', 'ex4', 'ex5')",
-                    (root_id, len(prefix), prefix),
-                )
-            }
-            own = tools == {logical_key(str(name))} and int(inside) <= MAX_FOLDER_FILES
-            layout[int(file_id)] = ("dossier", directory) if own else ("seul", "")
+            )
+        }
+        return (root_id, directory) if tools == {key} else None
+
+    def source_layout(self, source_ids: list[int]) -> dict[int, tuple[str, str]]:
+        """Pour chaque source : (« dossier », chemin du dossier propre à l'outil) si elle a
+        son propre dossier (voir :meth:`own_folder`), sinon (« seul », "")."""
+        layout: dict[int, tuple[str, str]] = {}
+        for file_id in source_ids:
+            found = self.own_folder(file_id)
+            layout[int(file_id)] = ("dossier", found[1]) if found else ("seul", "")
         return layout
+
+    def _folder_members(self, root_id: int, directory: str) -> list[int]:
+        prefix = directory + "/"
+        return [
+            int(f)
+            for (f,) in self._conn.execute(
+                "SELECT f.id FROM file_record f LEFT JOIN duplicate_member dm"
+                " ON dm.file_id = f.id WHERE f.root_id = ? AND f.presence = 'present'"
+                " AND f.file_type = 'file' AND substr(f.rel_path, 1, ?) = ?"
+                " ORDER BY coalesce(dm.is_reference, 0) DESC, f.rel_path",
+                (root_id, len(prefix), prefix),
+            )
+        ]
 
     def isolation_candidates(self, source_ids: list[int]) -> list[IsolationCandidate]:
         """Fichiers qui peuvent aller avec chaque source (SET associés, fichiers liés,
@@ -873,15 +951,7 @@ class OrganizeService:
                     name = _component(directory.rpartition("/")[2])
                     copied_folders[key] = f"{platform}/{name}"
                     prefix = directory + "/"
-                    members = [
-                        int(f)
-                        for (f,) in self._conn.execute(
-                            "SELECT id FROM file_record WHERE root_id = ? AND presence = 'present'"
-                            " AND file_type = 'file' AND substr(rel_path, 1, ?) = ?"
-                            " ORDER BY rel_path",
-                            (root_id, len(prefix), prefix),
-                        )
-                    ]
+                    members = self._folder_members(root_id, directory)
                     for member in self._files(members).values():
                         relative = str(member[10])[len(prefix) :]
                         selection.append(
@@ -903,7 +973,8 @@ class OrganizeService:
             for r in self._files([file_id]).values():
                 selection.append((r, f"{folder_of[source_id]}/{_component(str(r[9]))}"))
                 added += 1
-        planned, collisions, excluded_q, excluded_d = self._place(selection, by_content=False)
+        # 1.6.0 : jamais de doublon dans le dossier créé (une copie par contenu identique).
+        planned, collisions, excluded_q, excluded_d = self._place(selection)
         if not planned:
             raise OrganizeError("Aucune source MQ4/MQ5 analysée.")
         return self._record_plan(
