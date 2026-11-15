@@ -229,4 +229,10 @@ l'utilise (un fichier n'apparaît qu'une fois par copie). Les dossiers standards
   MQ4/MQ5 ») : deux écrans dédiés, fondés sur les familles de type principal `ea` ou
   `indicator` (sources et compilés). Destination « Robots isolés <date> » ou « Indicateurs
   isolés <date> » ; groupes nommés par l'utilisateur (gardés le temps de la session) ; un
-  dossier par outil ou un seul grand dossier. L'écran « Sources MQ4/MQ5 » reste inchangé.
+  dossier par outil ou un seul grand dossier.
+* **Reconnaissance** : pour un MQ4 ancien (`start()`), les fonctions utilisées priment sur
+  le dossier (ordres = robot, tampons = indicateur) ; si les deux ou aucun, le dossier
+  tranche. Contenu des archives reconnu en mémoire par un classificateur fourni par la
+  couche application (la couche « formats » reste indépendante de MetaTrader) ; migration
+  0010 ; moteur 1.6.0 (les archives et sources sont relues une fois, sans recalcul des
+  empreintes).

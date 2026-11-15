@@ -22,7 +22,7 @@ import os
 import stat
 import zipfile
 import zlib
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from typing import BinaryIO
 
@@ -54,6 +54,20 @@ class EntryReport:
     status: str
     reason: str | None = None
     sha256: bytes | None = None
+    #: Type reconnu (robot, indicateur…) d'une source MQ4/MQ5 lue en mémoire (1.6.0).
+    tool_type: str | None = None
+    type_basis: str | None = None
+
+
+#: Reconnaissance d'une source lue en mémoire : (nom, octets) → (type, raison). Fournie par
+#: la couche application (la couche « formats » ne connaît pas MetaTrader).
+SourceClassifier = Callable[[str, bytes], tuple[str | None, str | None]]
+SOURCE_EXTS = (".mq4", ".mq5")
+MAX_SOURCE_BYTES = 4 * 1024 * 1024
+
+
+def wants_bytes(name: str, classifier: SourceClassifier | None) -> bool:
+    return classifier is not None and name.casefold().endswith(SOURCE_EXTS)
 
 
 @dataclass
@@ -71,8 +85,9 @@ class ArchiveReport:
 
 
 class _Budget:
-    def __init__(self, limits: ArchiveLimits) -> None:
+    def __init__(self, limits: ArchiveLimits, classifier: SourceClassifier | None = None) -> None:
         self.limits = limits
+        self.classifier = classifier
         self.total = 0
         self.entries = 0
 
@@ -176,8 +191,11 @@ def _inspect_zip(
                 report.status = "partial"
                 continue
             nested = name.lower().endswith(".zip")
+            is_source = wants_bytes(name, budget.classifier)
             try:
-                digest, size, data, over = _hash_entry(archive, info, budget, keep_bytes=nested)
+                digest, size, data, over = _hash_entry(
+                    archive, info, budget, keep_bytes=nested or is_source
+                )
             except (
                 zipfile.BadZipFile,
                 zlib.error,
@@ -195,6 +213,8 @@ def _inspect_zip(
                 report.status = "partial"
                 continue
             entry.sha256, entry.size = digest, size
+            if is_source and data is not None and budget.classifier and size <= MAX_SOURCE_BYTES:
+                entry.tool_type, entry.type_basis = budget.classifier(name, data)
             if nested:
                 if depth >= limits.max_depth:
                     entry.reason = "archive imbriquée non ouverte (profondeur maximale)"
@@ -220,7 +240,10 @@ def open_readonly_stream(path: bytes) -> BinaryIO:
 
 
 def inspect_archive(
-    path: bytes, signature_kind: str, limits: ArchiveLimits | None = None
+    path: bytes,
+    signature_kind: str,
+    limits: ArchiveLimits | None = None,
+    classifier: SourceClassifier | None = None,
 ) -> ArchiveReport:
     """Inspecte l'archive ``path`` (lecture seule). ``signature_kind`` vient de
     :func:`mtlm.formats.signatures.sniff`."""
@@ -228,11 +251,13 @@ def inspect_archive(
         from mtlm.formats import libarchive
 
         stored = signature_kind if signature_kind in ("rar", "7z", "gzip") else "other"
-        return libarchive.inspect(path, stored, limits or ArchiveLimits(), signature_kind)
+        return libarchive.inspect(
+            path, stored, limits or ArchiveLimits(), signature_kind, classifier
+        )
     if signature_kind != "zip":
         return ArchiveReport("other", "rejected", reason="pas une archive ZIP")
     report = ArchiveReport("zip", "ok")
-    budget = _Budget(limits or ArchiveLimits())
+    budget = _Budget(limits or ArchiveLimits(), classifier)
     try:
         with open_readonly_stream(path) as stream:
             _inspect_zip(stream, 1, "", budget, report)

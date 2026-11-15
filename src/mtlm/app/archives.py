@@ -48,6 +48,27 @@ ENTRY_TYPES = {
     "pdf": "document",
     "txt": "document",
 }
+TOOL_LABELS = {
+    "ea": "Robot",
+    "indicator": "Indicateur",
+    "script": "Script",
+    "library": "Bibliothèque",
+    "service": "Service",
+}
+#: Outils d'un type donné dans l'archive : type lu dans l'archive, sinon celui du même
+#: fichier sur le disque. Compte par nom (source et compilé du même outil = 1).
+_TOOL_COUNT = (
+    "SELECT count(DISTINCT lower(substr(e.inner_path, 1, length(e.inner_path) - 4)))"
+    " FROM archive_entry e WHERE e.archive_file_id = f.id AND e.is_dir = 0"
+    " AND coalesce(coalesce(e.detected_type, (SELECT a.detected_type FROM file_record d"
+    "  JOIN file_analysis a ON a.file_id = d.id WHERE d.content_id = e.content_id"
+    "  AND d.presence = 'present' LIMIT 1)), '') {test}"
+    " AND (lower(e.inner_path) LIKE '%.mq4' OR lower(e.inner_path) LIKE '%.mq5'"
+    "  OR lower(e.inner_path) LIKE '%.ex4' OR lower(e.inner_path) LIKE '%.ex5')"
+)
+_ROBOT_COUNT = _TOOL_COUNT.format(test="= 'ea'")
+_INDICATOR_COUNT = _TOOL_COUNT.format(test="= 'indicator'")
+_OTHER_COUNT = _TOOL_COUNT.format(test="NOT IN ('ea', 'indicator')")
 _DOUBLE_EXTS = (".tar.gz", ".tar.bz2", ".tar.xz")
 
 
@@ -66,6 +87,21 @@ class ArchiveRow:
     tools: int
     sets: int
     reason: str | None
+    robots: int = 0
+    indicators: int = 0
+    other_tools: int = 0
+
+    @property
+    def contents(self) -> str:
+        """Ce que contient l'archive, en mots : « 2 robots, 1 indicateur »."""
+        parts = []
+        if self.robots:
+            parts.append(f"{self.robots} robot{'s' if self.robots > 1 else ''}")
+        if self.indicators:
+            parts.append(f"{self.indicators} indicateur{'s' if self.indicators > 1 else ''}")
+        if self.other_tools:
+            parts.append(f"{self.other_tools} autre(s) (script ou non reconnu)")
+        return ", ".join(parts) or "—"
 
     @property
     def unique(self) -> int:
@@ -128,13 +164,25 @@ class ArchiveService:
             "  LIKE '%.mq5' OR lower(e.inner_path) LIKE '%.ex4' OR lower(e.inner_path)"
             "  LIKE '%.ex5')),"
             " (SELECT count(*) FROM archive_entry e WHERE e.archive_file_id = f.id"
-            "  AND e.is_dir = 0 AND lower(e.inner_path) LIKE '%.set')"
+            "  AND e.is_dir = 0 AND lower(e.inner_path) LIKE '%.set'),"
+            f" ({_ROBOT_COUNT}), ({_INDICATOR_COUNT}), ({_OTHER_COUNT})"
             " FROM archive_scan a JOIN file_record f ON f.id = a.file_id"
             " WHERE f.presence = 'present' ORDER BY f.rel_path"
         ).fetchall()
         result = [
             ArchiveRow(
-                int(r[0]), r[1], r[2], r[3], int(r[5]), int(r[6]), int(r[7]), int(r[8]), r[4]
+                int(r[0]),
+                r[1],
+                r[2],
+                r[3],
+                int(r[5]),
+                int(r[6]),
+                int(r[7]),
+                int(r[8]),
+                r[4],
+                int(r[9]),
+                int(r[10]),
+                int(r[11]),
             )
             for r in rows
         ]
@@ -145,13 +193,27 @@ class ArchiveService:
     def entries(self, archive_id: int) -> list[tuple[str, str, int | None, str, str]]:
         """(chemin dans l'archive, type, taille, état, présent sur le disque où ?)."""
         result = []
-        for inner, size, status, reason, content_id, is_dir in self._conn.execute(
-            "SELECT inner_path, size, status, reason, content_id, is_dir FROM archive_entry"
-            " WHERE archive_file_id = ? ORDER BY inner_path",
+        for (
+            inner,
+            size,
+            status,
+            reason,
+            content_id,
+            is_dir,
+            tool_type,
+            disk_type,
+        ) in self._conn.execute(
+            "SELECT e.inner_path, e.size, e.status, e.reason, e.content_id, e.is_dir,"
+            " e.detected_type, (SELECT a.detected_type FROM file_record d"
+            "  JOIN file_analysis a ON a.file_id = d.id WHERE d.content_id = e.content_id"
+            "  AND d.presence = 'present' AND a.detected_type IN"
+            "  ('ea', 'indicator', 'script', 'library', 'service') LIMIT 1)"
+            " FROM archive_entry e WHERE e.archive_file_id = ? ORDER BY e.inner_path",
             (archive_id,),
         ):
             if is_dir:
                 continue
+            kind = tool_type or disk_type
             where = "—"
             if content_id is not None:
                 found = self._conn.execute(
@@ -161,7 +223,10 @@ class ArchiveService:
                 ).fetchone()
                 where = f"oui : {found[0]}" if found else "non (absent du disque)"
             state = "lu" if status == "inspected" else f"{status} : {reason or ''}"
-            result.append((inner, _type_of(inner), size, state, where))
+            label = _type_of(inner)
+            if kind in TOOL_LABELS:
+                label = f"{TOOL_LABELS[kind]} ({label})"
+            result.append((inner, label, size, state, where))
         return result
 
     # ---- décompression ----------------------------------------------------------------

@@ -79,6 +79,19 @@ class MqSourceRow:
     sets: int
     linked: int
     dependencies: int
+    certainty: str = ""
+    basis: tuple[str, ...] = ()
+
+    @property
+    def how(self) -> str:
+        """Comment le type a été reconnu, en mots (contenu du fichier d'abord)."""
+        shown = [b for b in self.basis if not b.startswith("extension .")]
+        return "; ".join(shown) or "—"
+
+    @property
+    def misplaced(self) -> bool:
+        """Rangé dans le dossier d'un autre type (ex. indicateur dans « Experts »)."""
+        return any(b.startswith("contradiction") for b in self.basis)
 
 
 @dataclass(frozen=True)
@@ -652,7 +665,13 @@ class OrganizeService:
         return str(row[0])
 
     def mq_sources(
-        self, *, text: str | None = None, ext: str | None = None, tool_type: str | None = None
+        self,
+        *,
+        text: str | None = None,
+        ext: str | None = None,
+        tool_type: str | None = None,
+        tool_types: list[str] | None = None,
+        others: bool = False,
     ) -> list[MqSourceRow]:
         """Sources MQ4/MQ5 présentes, avec ce qui les accompagne (écran « Sources MQ4/MQ5 »)."""
         clauses = ["f.presence = 'present'", "f.ext IN ('mq4', 'mq5')", "f.in_quarantine = 0"]
@@ -666,8 +685,28 @@ class OrganizeService:
         if tool_type:
             clauses.append("a.detected_type = ?")
             params.append(tool_type)
+        if tool_types is not None:
+            # Cases à cocher : types choisis, et/ou « autres » (scripts, non reconnus…).
+            wanted = [t for t in tool_types if t in ("ea", "indicator")]
+            parts = []
+            if wanted:
+                parts.append(f"a.detected_type IN ({','.join('?' * len(wanted))})")
+                params.extend(wanted)
+            if others:
+                parts.append("coalesce(a.detected_type, '') NOT IN ('ea', 'indicator')")
+            clauses.append(f"({' OR '.join(parts)})" if parts else "0")
         return [
-            MqSourceRow(int(r[0]), r[1], r[2] or "", r[3], int(r[4]), int(r[5]), int(r[6]))
+            MqSourceRow(
+                int(r[0]),
+                r[1],
+                r[2] or "",
+                r[3],
+                int(r[4]),
+                int(r[5]),
+                int(r[6]),
+                r[7] or "",
+                tuple(json.loads(r[8])) if r[8] else (),
+            )
             for r in self._conn.execute(
                 "SELECT f.id, f.rel_path, a.detected_type, f.ext,"
                 " (SELECT count(DISTINCT x.set_file_id) FROM association x"
@@ -675,7 +714,8 @@ class OrganizeService:
                 "  OR (x.level = 'forte' AND x.user_decision = 'none'))),"
                 " (SELECT count(*) FROM companion_link l WHERE l.tool_file_id = f.id"
                 "  AND l.confidence IN ('certain', 'probable')),"
-                " (SELECT count(*) FROM tool_dependency d WHERE d.user_file_id = f.id)"
+                " (SELECT count(*) FROM tool_dependency d WHERE d.user_file_id = f.id),"
+                " a.certainty, a.basis_json"
                 " FROM file_record f LEFT JOIN file_analysis a ON a.file_id = f.id"
                 f" WHERE {' AND '.join(clauses)} ORDER BY f.rel_path LIMIT 20000",
                 params,

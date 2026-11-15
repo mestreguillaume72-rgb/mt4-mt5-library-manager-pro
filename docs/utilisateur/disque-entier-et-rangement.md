@@ -19,6 +19,19 @@ Pendant le calcul, la progression indique les Go lus, la vitesse et le **temps r
 estimé**. Sur un disque dur classique, régler « Calculs d'empreintes en parallèle » à 1 ou 2
 est souvent plus rapide.
 
+## Robot ou indicateur ? L'application le dit
+
+L'écran **Sources MQ4/MQ5** affiche pour chaque fichier « C'est un… » (Robot, Indicateur,
+Script…) et « Reconnu par » (ce qui a été lu dans le code). Le type est trouvé en lisant le
+code, même si le fichier est rangé n'importe où. S'il est rangé dans le dossier d'un autre
+type (un indicateur dans « Experts »), c'est écrit « peut-être mal rangé ».
+
+Cases **« Robots MQ4 / MQ5 »** et **« Indicateurs MQ4 / MQ5 »** : décochez l'une pour ne
+voir que l'autre, vérifiez, puis créez les dossiers si besoin.
+
+L'écran **Archives** dit aussi ce que contient chaque archive (« 2 robots, 3 indicateurs »)
+et le type de chaque fichier, sans rien extraire.
+
 ## Robots isolés, indicateurs isolés
 
 Deux écrans à part (menu **Actions**), séparés de l'écran « Sources MQ4/MQ5 » :

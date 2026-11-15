@@ -91,3 +91,35 @@ def test_groupe_sans_selection_et_annulation(
     click(window, qtbot, "robots_isoles.isoler_tout")
     assert len(dialogs.infos) == 3
     click(window, qtbot, "robots_isoles.degrouper")
+
+
+def test_sources_mq_cases_robots_et_indicateurs(
+    window: MainWindow, qtbot: object, dialogs: FakeDialogs, tmp_path: Path
+) -> None:
+    """Le type est dit pour chaque source, même rangée n'importe où ; deux cases filtrent."""
+    lib = tmp_path / "lib"
+    build_dependencies(lib)
+    (lib / "Telechargements" / "Tendance.mq4").write_text(
+        "int init(){SetIndexBuffer(0,B);return 0;}\nint start(){return 0;}\n", encoding="utf-8"
+    )
+    (lib / "MQL4" / "Experts" / "Faux robot.mq4").write_text(
+        "int start(){SetIndexBuffer(0,B);return 0;}\n", encoding="utf-8"
+    )
+    analysed(window, qtbot, dialogs, lib)
+    window.navigate("sources_mq")
+    page: Any = window.pages["sources_mq"]
+    page.refresh()
+    kinds = {
+        page.sources.item(r, 1).text(): page.sources.item(r, 2).text()
+        for r in range(page.sources.rowCount())
+    }
+    assert kinds["Telechargements/Tendance.mq4"] == "Indicateur"
+    assert kinds["MQL4/Experts/Faux robot.mq4"] == ("Indicateur (probable) — peut-être mal rangé")
+    assert kinds["MQL4/Experts/Gold/Gold Robot.mq4"] == "Robot"
+    page.show_indicators.setChecked(False)
+    page.show_others.setChecked(False)
+    shown = {page.sources.item(r, 1).text() for r in range(page.sources.rowCount())}
+    assert shown == {"MQL4/Experts/Gold/Gold Robot.mq4"}
+    assert page.counts.text().startswith("1 robot(s), 0 indicateur(s)")
+    page.show_robots.setChecked(False)
+    assert page.sources.rowCount() == 0

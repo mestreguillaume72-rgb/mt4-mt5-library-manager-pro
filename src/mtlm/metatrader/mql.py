@@ -62,6 +62,10 @@ class MqlSource:
     custom_calls: list[tuple[str, int]] = field(default_factory=list)
     inputs: list[MqlInput] = field(default_factory=list)
     entry_points: list[str] = field(default_factory=list)
+    #: Fonctions MQL révélatrices du type (1.6.0) : passage d'ordres (robot) ou tampons
+    #: d'affichage (indicateur). Cherchées dans le code, hors commentaires et chaînes.
+    trade_calls: list[str] = field(default_factory=list)
+    indicator_calls: list[str] = field(default_factory=list)
     line_count: int = 0
     normalized_sha256: bytes = b""
     warnings: list[str] = field(default_factory=list)
@@ -69,6 +73,37 @@ class MqlSource:
     @property
     def is_indicator(self) -> bool:
         return any(f.startswith("indicator_") for f in self.property_flags)
+
+
+#: Fonctions qui passent ou gèrent des ordres : typiques d'un robot (Expert Advisor).
+TRADE_FUNCTIONS = frozenset(
+    {
+        "OrderSend",
+        "OrderClose",
+        "OrderModify",
+        "OrderDelete",
+        "OrderSendAsync",
+        "PositionOpen",
+        "PositionClose",
+        "PositionModify",
+        "CTrade",
+    }
+)
+#: Fonctions de tampons d'affichage : typiques d'un indicateur.
+INDICATOR_FUNCTIONS = frozenset(
+    {
+        "SetIndexBuffer",
+        "IndicatorBuffers",
+        "IndicatorCounted",
+        "SetIndexStyle",
+        "SetIndexLabel",
+        "IndicatorShortName",
+        "IndicatorSetString",
+        "IndicatorSetInteger",
+        "PlotIndexSetInteger",
+    }
+)
+_WORD_RE = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]*\b")
 
 
 def _neutralize(text: str) -> tuple[str, str]:
@@ -305,6 +340,9 @@ def parse_mql(text: str) -> MqlSource:
             )
 
     result.entry_points = sorted({m.group(1) for m in _ENTRY_RE.finditer(code)})
+    words = set(_WORD_RE.findall(code))
+    result.trade_calls = sorted(words & TRADE_FUNCTIONS)
+    result.indicator_calls = sorted(words & INDICATOR_FUNCTIONS)
     return result
 
 

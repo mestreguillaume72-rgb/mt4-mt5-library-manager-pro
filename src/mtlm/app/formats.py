@@ -26,6 +26,7 @@ from mtlm.core.control import TaskControl
 from mtlm.formats.archives import ArchiveLimits, ArchiveReport, inspect_archive
 from mtlm.formats.signatures import HEAD_SIZE, sniff
 from mtlm.fs.reader import ReadOnlyFile
+from mtlm.metatrader.inner import classify_compiled, classify_source
 from mtlm.store.database import transaction
 
 log = logging.getLogger("mtlm.formats")
@@ -124,7 +125,9 @@ class FormatService:
             if done_content == content_id and done_engine == ENGINE_VERSION:
                 summary.archives_ok += 1
                 continue
-            report = inspect_archive(_abs(root, bytes(rel)), magic or "other", self._limits)
+            report = inspect_archive(
+                _abs(root, bytes(rel)), magic or "other", self._limits, classify_source
+            )
             self._save_archive(int(file_id), content_id, report)
             summary.archive_entries += len(report.entries)
             if report.status == "ok":
@@ -165,6 +168,12 @@ class FormatService:
 
     def _save_archive(self, file_id: int, content_id: int | None, report: ArchiveReport) -> None:
         now = iso_utc(self._clock.now())
+        compiled = classify_compiled(
+            {e.inner_path: e.tool_type for e in report.entries if not e.is_dir}
+        )
+        for entry in report.entries:
+            if entry.tool_type is None and entry.inner_path in compiled:
+                entry.tool_type, entry.type_basis = compiled[entry.inner_path]
         with transaction(self._conn):
             self._conn.execute("DELETE FROM archive_entry WHERE archive_file_id = ?", (file_id,))
             for entry in report.entries:
@@ -179,8 +188,8 @@ class FormatService:
                     ).fetchone()[0]
                 self._conn.execute(
                     "INSERT INTO archive_entry(archive_file_id, inner_path, depth, size,"
-                    " compressed_size, is_encrypted, is_dir, content_id, status, reason)"
-                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    " compressed_size, is_encrypted, is_dir, content_id, status, reason,"
+                    " detected_type, type_basis) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         file_id,
                         entry.inner_path,
@@ -192,6 +201,8 @@ class FormatService:
                         entry_content,
                         entry.status,
                         entry.reason,
+                        entry.tool_type,
+                        entry.type_basis,
                     ),
                 )
             self._conn.execute(

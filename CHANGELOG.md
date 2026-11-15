@@ -13,6 +13,15 @@
 - **Accueil** : nombre de fichiers lus dans les archives (dont robots, indicateurs et SET).
 
 ### Ajouté
+- **L'application dit ce qu'est chaque source**, même rangée n'importe où : robot,
+  indicateur, script… reconnu en lisant le code (OnTick, OnCalculate, `#property
+  indicator_…`, et pour les vieux MQ4 avec `start()` : passage d'ordres = robot, tampons
+  `SetIndexBuffer` = indicateur). « Peut-être mal rangé » si le dossier dit le contraire.
+- Écran **Sources MQ4/MQ5** : cases **« Robots MQ4 / MQ5 »**, **« Indicateurs MQ4 / MQ5 »**
+  et « Autres », colonnes « C'est un… » et « Reconnu par », compteur robots / indicateurs.
+- **Archives** : les sources MQ4/MQ5 contenues sont lues en mémoire (rien n'est extrait) et
+  reconnues ; les compilés prennent le type de leur source ou de leur dossier. Colonne
+  « Contient » (« 2 robots, 3 indicateurs ») et type de chaque fichier contenu.
 - Deux écrans à part, **sans mélange avec « Sources MQ4/MQ5 »** : **Robots isolés** et
   **Indicateurs isolés**. Chaque robot ou indicateur (MQ4, MQ5, EX4, EX5) vient avec tout ce
   qui va avec (versions, compilés, SET, indicateurs utilisés, DLL, modèles, images).

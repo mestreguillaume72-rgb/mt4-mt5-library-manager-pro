@@ -93,11 +93,24 @@ def source_program_type(
         return "ea", ["fonction OnTick()"]
     if "OnStart" in entries:
         return "script", ["fonction OnStart()"]
-    if "start" in entries:
-        # MQL4 historique : start() sert aux EA, scripts et indicateurs. Le dossier tranche.
+    if "start" in entries or "init" in entries:
+        # MQL4 historique : start() sert aux EA, scripts et indicateurs. Les fonctions
+        # utilisées tranchent (tampons d'affichage = indicateur, ordres = robot), sinon le
+        # dossier.
+        trade, drawing = source.trade_calls, source.indicator_calls
+        if drawing and not trade:
+            return "indicator", [
+                "fonction start() (MQL4 ancien)",
+                f"tampons d'indicateur : {', '.join(drawing[:3])}",
+            ]
+        if trade and not drawing:
+            return "ea", [
+                "fonction start() (MQL4 ancien)",
+                f"passe des ordres : {', '.join(trade[:3])}",
+            ]
         if folder_type in ("ea", "script", "indicator"):
             return folder_type, ["fonction start() (MQL4 ancien)", f"dossier « {folder_type} »"]
-        return None, ["fonction start() (MQL4 ancien) sans dossier explicite"]
+        return None, ["fonction start() (MQL4 ancien) sans dossier ni indice clair"]
     return None, ["aucune fonction d'entrée reconnue"]
 
 

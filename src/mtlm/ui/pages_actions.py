@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
 
 from mtlm import APP_NAME, ENGINE_VERSION, __version__
 from mtlm.app.deletion import DeletionService
-from mtlm.app.organize import OrganizeService, Preview
+from mtlm.app.organize import MqSourceRow, OrganizeService, Preview
 from mtlm.app.presenters import human_size
 from mtlm.app.quarantine import QuarantineService, Simulation
 from mtlm.app.reports import KINDS, ReportService
@@ -474,23 +474,35 @@ class SourcesMqPage(Page):
         ):
             self.platform.addItem(label, value)
         self.platform.currentIndexChanged.connect(lambda _i: self.refresh())
-        self.tool_type = QComboBox()
-        self.tool_type.setAccessibleName("Type d'outil")
-        for label, value in (
-            ("Tous les types", None),
-            ("Robots", "ea"),
-            ("Indicateurs", "indicator"),
-            ("Scripts", "script"),
-            ("Bibliothèques", "library"),
-        ):
-            self.tool_type.addItem(label, value)
-        self.tool_type.currentIndexChanged.connect(lambda _i: self.refresh())
         filters.addWidget(self.search, 1)
         filters.addWidget(self.platform)
-        filters.addWidget(self.tool_type)
         self.layout_.addLayout(filters)
+        # 1.6.0 : deux cases, robots et indicateurs (MQ4 et MQ5), reconnus automatiquement.
+        boxes = QHBoxLayout()
+        self.show_robots = QCheckBox("🤖 Robots MQ4 / MQ5")
+        self.show_indicators = QCheckBox("📈 Indicateurs MQ4 / MQ5")
+        self.show_others = QCheckBox("Autres (scripts, bibliothèques, non reconnus)")
+        for box in (self.show_robots, self.show_indicators, self.show_others):
+            box.setChecked(True)
+            box.toggled.connect(lambda _c: self.refresh())
+            boxes.addWidget(box)
+        self.counts = QLabel("")
+        self.counts.setObjectName("cardHint")
+        boxes.addStretch(1)
+        boxes.addWidget(self.counts)
+        self.layout_.addLayout(boxes)
         self.sources = make_table(
-            ["N°", "Source", "Type", "Plateforme", "SET liés", "Fichiers liés", "Utilise"],
+            [
+                "N°",
+                "Source",
+                "C'est un…",
+                "Reconnu par",
+                "Plateforme",
+                "SET liés",
+                "Fichiers liés",
+                "Utilise",
+            ],
+            badge_columns=(2,),
             multi=True,
         )
         self.layout_.addWidget(self.sources, 1)
@@ -511,25 +523,50 @@ class SourcesMqPage(Page):
             "indicator": "Indicateur",
             "script": "Script",
             "library": "Bibliothèque",
+            "service": "Service",
+            "include": "Include",
         }
+        chosen = [
+            t
+            for t, box in (("ea", self.show_robots), ("indicator", self.show_indicators))
+            if box.isChecked()
+        ]
+        rows = self._service().mq_sources(
+            text=self.search.text().strip() or None,
+            ext=self.platform.currentData(),
+            tool_types=chosen,
+            others=self.show_others.isChecked(),
+        )
+
+        def kind(r: MqSourceRow) -> str:
+            label = types.get(r.detected_type, "Non reconnu")
+            if r.certainty in ("probable", "possible") and r.detected_type in types:
+                label += f" ({r.certainty})"
+            if r.misplaced:
+                label += " — peut-être mal rangé"
+            return label
+
         fill_table(
             self.sources,
             [
                 (
                     r.file_id,
                     r.rel_path,
-                    types.get(r.detected_type, r.detected_type or "?"),
+                    kind(r),
+                    r.how,
                     r.ext.upper(),
                     r.sets,
                     r.linked,
                     r.dependencies,
                 )
-                for r in self._service().mq_sources(
-                    text=self.search.text().strip() or None,
-                    ext=self.platform.currentData(),
-                    tool_type=self.tool_type.currentData(),
-                )
+                for r in rows
             ],
+        )
+        robots = sum(1 for r in rows if r.detected_type == "ea")
+        indicators = sum(1 for r in rows if r.detected_type == "indicator")
+        self.counts.setText(
+            f"{robots} robot(s), {indicators} indicateur(s), "
+            f"{len(rows) - robots - indicators} autre(s)"
         )
 
     def isolate_selected(self) -> None:

@@ -829,7 +829,7 @@ class ArchivesPage(Page):
             "banner",
         )
         self.archives = make_table(
-            ["N°", "Archive", "Format", "Fichiers", "Robots / indicateurs", "SET", "État"],
+            ["N°", "Archive", "Format", "Fichiers", "Contient", "SET", "État"],
             badge_columns=(6,),
             multi=True,
         )
@@ -874,7 +874,7 @@ class ArchivesPage(Page):
                     r.rel_path,
                     formats.get(r.format, r.format),
                     r.files,
-                    r.tools,
+                    r.contents,
                     r.sets,
                     r.verdict,
                 )

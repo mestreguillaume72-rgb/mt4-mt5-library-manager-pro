@@ -19,12 +19,15 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 
 from mtlm.formats.archives import (
+    MAX_SOURCE_BYTES,
     READ_CHUNK,
     ArchiveLimits,
     ArchiveReport,
     EntryReport,
+    SourceClassifier,
     open_readonly_stream,
     unsafe_name_reason,
+    wants_bytes,
 )
 
 #: Seules bibliothèques chargées : libarchive de macOS, et celle du système Linux (tests).
@@ -172,7 +175,11 @@ def iter_entries(path: bytes, kind: str = "") -> Iterator[Entry]:
 
 
 def inspect(
-    path: bytes, archive_format: str, limits: ArchiveLimits, kind: str = ""
+    path: bytes,
+    archive_format: str,
+    limits: ArchiveLimits,
+    kind: str = "",
+    classifier: SourceClassifier | None = None,
 ) -> ArchiveReport:
     """Empreinte SHA-256 de chaque fichier de l'archive, en mémoire, avec les limites."""
     report = ArchiveReport(archive_format, "ok")
@@ -223,6 +230,7 @@ def inspect(
             digest = hashlib.sha256()
             read = 0
             exceeded: str | None = None
+            kept: bytearray | None = bytearray() if wants_bytes(name, classifier) else None
             for chunk in entry.chunks():
                 read += len(chunk)
                 total += len(chunk)
@@ -233,6 +241,10 @@ def inspect(
                     exceeded = "taille totale décompressée au-delà de la limite"
                     break
                 digest.update(chunk)
+                if kept is not None:
+                    kept.extend(chunk)
+                    if len(kept) > MAX_SOURCE_BYTES:
+                        kept = None
             report.bytes_read = total
             if exceeded:
                 report.entries.append(
@@ -243,8 +255,24 @@ def inspect(
                     report.reason = exceeded
                     break
                 continue
+            tool_type, basis = (
+                classifier(name, bytes(kept))
+                if classifier is not None and kept is not None
+                else (None, None)
+            )
             report.entries.append(
-                EntryReport(name, 1, read, None, False, False, "inspected", sha256=digest.digest())
+                EntryReport(
+                    name,
+                    1,
+                    read,
+                    None,
+                    False,
+                    False,
+                    "inspected",
+                    sha256=digest.digest(),
+                    tool_type=tool_type,
+                    type_basis=basis,
+                )
             )
     except LibArchiveError as exc:
         message = str(exc)

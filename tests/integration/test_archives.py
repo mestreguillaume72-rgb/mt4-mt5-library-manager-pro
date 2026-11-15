@@ -133,3 +133,42 @@ def test_option_dans_l_analyse(tmp_path: Path, ctx: AppContext) -> None:
         " WHERE f.rel_path LIKE 'Telechargements/Scalper pack/%'"
     ).fetchone()[0]
     assert sets == 1
+
+
+INDICATOR_OLD = (
+    b"#property indicator_chart_window\nint init(){SetIndexBuffer(0, Buf);return 0;}\n"
+    b"int start(){return 0;}\n"
+)
+EA_OLD = b"extern double Lots = 0.1;\nint start(){OrderSend(Symbol(),0,Lots,Ask,3,0,0);return 0;}\n"
+
+
+def test_archive_dit_robots_et_indicateurs(tmp_path: Path, ctx: AppContext) -> None:
+    """1.6.0 : le contenu d'une archive est reconnu (robot, indicateur), sans extraction,
+    même rangé hors des dossiers « Experts » / « Indicators »."""
+    lib = tmp_path / "lib"
+    (lib / "Telechargements").mkdir(parents=True)
+    with zipfile.ZipFile(lib / "Telechargements" / "pack trading.zip", "w") as z:
+        z.writestr("Pack/Tendance.mq4", INDICATOR_OLD)
+        z.writestr("Pack/Tendance.ex4", b"EX4 fictif")
+        z.writestr("Pack/Robot Or.mq4", EA_OLD)
+        z.writestr("Pack/Robot Or.ex4", b"EX4 fictif robot")
+        z.writestr("MQL4/Indicators/Seul.ex4", b"EX4 fictif seul")
+    if libarchive.available():
+        with tarfile.open(lib / "Telechargements" / "robots.tar.gz", "w:gz") as t:
+            info = tarfile.TarInfo("Grille.mq4")
+            info.size = len(EA_OLD)
+            t.addfile(info, io.BytesIO(EA_OLD))
+    analyse(ctx, lib)
+    found = rows(ctx)
+    pack = found["pack trading.zip"]
+    assert (pack.robots, pack.indicators) == (1, 2)  # type: ignore[attr-defined]
+    assert pack.contents == "1 robot, 2 indicateurs"  # type: ignore[attr-defined]
+    entries = {
+        e[0]: e[1]
+        for e in ArchiveService(ctx.conn, ctx.clock, ctx.journal).entries(pack.file_id)  # type: ignore[attr-defined]
+    }
+    assert entries["Pack/Tendance.mq4"] == "Indicateur (source MQ4)"
+    assert entries["Pack/Robot Or.ex4"] == "Robot (compilé EX4)"
+    assert entries["MQL4/Indicators/Seul.ex4"] == "Indicateur (compilé EX4)"
+    if libarchive.available():
+        assert found["robots.tar.gz"].robots == 1  # type: ignore[attr-defined]

@@ -236,7 +236,14 @@ WIDGET_TIPS.update(
     {
         ("sources_mq", "search"): "Tapez une partie du nom ou du dossier, puis Entrée.",
         ("sources_mq", "platform"): "N'afficher que les sources MQ4 ou MQ5.",
-        ("sources_mq", "tool_type"): "N'afficher qu'un type : robots, indicateurs, scripts…",
+        ("sources_mq", "show_robots"): "Affiche les robots (Expert Advisors) MQ4 et MQ5. Le "
+        "type est reconnu en lisant le code (OnTick, passage d'ordres…), même si le fichier "
+        "n'est pas rangé dans « Experts ».",
+        ("sources_mq", "show_indicators"): "Affiche les indicateurs MQ4 et MQ5. Le type est "
+        "reconnu en lisant le code (OnCalculate, #property indicator_…, SetIndexBuffer…), même "
+        "si le fichier n'est pas rangé dans « Indicators ».",
+        ("sources_mq", "show_others"): "Affiche aussi les scripts, bibliothèques et les "
+        "sources dont le type n'a pas pu être reconnu.",
         ("sources_mq", "sources"): _CLIC + "Colonnes : SET associés, fichiers liés (images, "
         "sons, modèles, DLL…) et indicateurs ou bibliothèques que la source utilise.",
         ("familles", "families"): _CLIC + "Chaque ligne est un robot, un indicateur ou un "
