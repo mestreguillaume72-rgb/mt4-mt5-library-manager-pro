@@ -90,6 +90,12 @@ class ArchiveRow:
     robots: int = 0
     indicators: int = 0
     other_tools: int = 0
+    encrypted_entries: int = 0
+
+    @property
+    def protected(self) -> bool:
+        """Protégée par mot de passe, en entier ou en partie."""
+        return self.status == "encrypted" or self.encrypted_entries > 0
 
     @property
     def contents(self) -> str:
@@ -111,6 +117,11 @@ class ArchiveRow:
     def verdict(self) -> str:
         if self.status == "encrypted":
             return "Protégée par mot de passe : non lue"
+        if self.encrypted_entries:
+            return (
+                f"Partiellement protégée par mot de passe : {self.encrypted_entries} "
+                "fichier(s) non lu(s)"
+            )
         if self.status in ("corrupt", "rejected"):
             return "Abîmée ou illisible"
         if self.status == "not_supported":
@@ -150,7 +161,9 @@ class ArchiveService:
         self._journal = journal
 
     # ---- consultation ------------------------------------------------------------------
-    def rows(self, *, only_problems: bool = False) -> list[ArchiveRow]:
+    def rows(
+        self, *, only_problems: bool = False, only_protected: bool = False
+    ) -> list[ArchiveRow]:
         rows = self._conn.execute(
             "SELECT f.id, f.rel_path, a.format, a.status, a.reason,"
             " (SELECT count(*) FROM archive_entry e WHERE e.archive_file_id = f.id"
@@ -165,7 +178,9 @@ class ArchiveService:
             "  LIKE '%.ex5')),"
             " (SELECT count(*) FROM archive_entry e WHERE e.archive_file_id = f.id"
             "  AND e.is_dir = 0 AND lower(e.inner_path) LIKE '%.set'),"
-            f" ({_ROBOT_COUNT}), ({_INDICATOR_COUNT}), ({_OTHER_COUNT})"
+            f" ({_ROBOT_COUNT}), ({_INDICATOR_COUNT}), ({_OTHER_COUNT}),"
+            " (SELECT count(*) FROM archive_entry e WHERE e.archive_file_id = f.id"
+            "  AND (e.status = 'encrypted' OR e.is_encrypted = 1))"
             " FROM archive_scan a JOIN file_record f ON f.id = a.file_id"
             " WHERE f.presence = 'present' ORDER BY f.rel_path"
         ).fetchall()
@@ -183,11 +198,14 @@ class ArchiveService:
                 int(r[9]),
                 int(r[10]),
                 int(r[11]),
+                int(r[12]),
             )
             for r in rows
         ]
         if only_problems:
-            result = [r for r in result if r.status != "ok"]
+            result = [r for r in result if r.status != "ok" or r.protected]
+        if only_protected:
+            result = [r for r in result if r.protected]
         return result
 
     def entries(self, archive_id: int) -> list[tuple[str, str, int | None, str, str]]:
@@ -329,7 +347,8 @@ class ArchiveService:
             "SELECT s.path, f.rel_path_bytes, f.name, a.format, a.status, c.sha256, f.size,"
             " f.mtime_ns, f.inode, f.device, f.magic FROM archive_scan a"
             " JOIN file_record f ON f.id = a.file_id JOIN source_root s ON s.id = f.root_id"
-            " JOIN content c ON c.id = f.content_id WHERE a.file_id = ? AND f.presence = 'present'",
+            " LEFT JOIN content c ON c.id = f.content_id"
+            " WHERE a.file_id = ? AND f.presence = 'present'",
             (archive_id,),
         ).fetchone()
         if row is None:
@@ -339,7 +358,9 @@ class ArchiveService:
         path = os.path.join(os.fsencode(row[0]), bytes(row[1]))  # noqa: PTH118
         identity = FileIdentity(int(row[6]), int(row[7]), int(row[8]), int(row[9]))
         try:
-            if path_identity(path) != identity or hash_file(path).sha256 != bytes(row[5]):
+            if path_identity(path) != identity:
+                raise ArchiveError("archive modifiée depuis l'analyse : relancez-la")
+            if row[5] is not None and hash_file(path).sha256 != bytes(row[5]):
                 raise ArchiveError("archive modifiée depuis l'analyse : relancez-la")
         except (OSError, UnstableFileError) as exc:
             raise ArchiveError(f"archive illisible : {exc}") from exc

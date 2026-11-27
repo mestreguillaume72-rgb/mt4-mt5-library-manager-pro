@@ -40,7 +40,7 @@ from mtlm.app.presenters import (
 from mtlm.app.scan import ScanService
 from mtlm.app.sets import AssociationService
 from mtlm.app.sources import SourceService
-from mtlm.ui.base import fill_table, make_table, selected_value
+from mtlm.ui.base import fill_table, make_table, selected_value, selected_values
 from mtlm.ui.theme import glow
 from mtlm.ui.window import MainWindow, UiApp
 
@@ -128,9 +128,18 @@ class Page(QWidget):
 
     # ---- actions partagées (1.3.0) ------------------------------------------------------------
     def trash_with_confirmation(
-        self, file_ids: list[int], origin: str, intro: str, *, allow_unique: bool = False
+        self,
+        file_ids: list[int],
+        origin: str,
+        intro: str,
+        *,
+        allow_unique: bool | None = None,
     ) -> None:
-        """Corbeille du Mac après confirmation ; chaque fichier est revérifié avant."""
+        """Corbeille du Mac après confirmation ; chaque fichier est revérifié avant.
+
+        ``allow_unique`` : ``None`` (par défaut) = les fichiers qui seraient le **seul
+        exemplaire** de leur contenu sont signalés et l'utilisateur décide (deuxième
+        confirmation) ; ``False`` = jamais d'exemplaire unique ; ``True`` = accord déjà donné."""
         backend = self.app.ctx.trash
         if backend is None:
             self.app.dialogs.info(
@@ -140,16 +149,35 @@ class Page(QWidget):
         if not file_ids:
             self.app.dialogs.info(self.win, "Corbeille", "Aucun fichier à mettre à la Corbeille.")
             return
+        ctx = self.app.ctx
+        unique: list[int] = []
+        if allow_unique is None:
+            unique = DeletionService(ctx.conn, ctx.clock, ctx.journal, backend).unique_among(
+                list(file_ids)
+            )
         safety = (
             "ATTENTION : exemplaire unique, aucune copie identique n'est conservée ailleurs."
             if allow_unique
             else "Avant chaque fichier, l'application vérifie qu'il n'a pas changé depuis "
-            "l'analyse et qu'une copie identique est conservée (comparaison octet par octet) ; "
-            "sinon il n'est pas touché."
+            "l'analyse et qu'une copie identique est conservée (comparaison octet par octet)."
         )
+        if unique:
+            names = [
+                str(r[0])
+                for r in ctx.conn.execute(
+                    f"SELECT name FROM file_record WHERE id IN ({','.join('?' * len(unique[:5]))})",
+                    unique[:5],
+                )
+            ]
+            safety += (
+                f"\n\n⚠️ {len(unique)} fichier(s) sont le SEUL exemplaire de leur contenu "
+                "(aucune copie identique ne restera) : "
+                + ", ".join(names)
+                + (" …" if len(unique) > 5 else "")
+                + ". Vous pourrez choisir de les supprimer aussi juste après."
+            )
         from mtlm.app.companions import CompanionService
 
-        ctx = self.app.ctx
         needed = CompanionService(ctx.conn, ctx.clock, ctx.journal).needed_by(list(file_ids))
         if needed:
             lines = [
@@ -172,10 +200,26 @@ class Page(QWidget):
             self.app.status("Rien n'a été mis à la Corbeille.")
             return
         ids = list(file_ids)
+        accept_unique = bool(allow_unique)
+        if unique:
+            accept_unique = self.app.dialogs.confirm(
+                self,
+                "Exemplaires uniques",
+                f"Supprimer AUSSI les {len(unique)} exemplaire(s) unique(s) ? Ils iront dans la "
+                "Corbeille du Mac (récupérables tant qu'elle n'est pas vidée), mais aucune autre "
+                "copie n'existe.\n\nOui : tout ce que vous avez choisi part à la Corbeille.\n"
+                "Non : seuls les fichiers qui ont une copie identique ailleurs partent.",
+            )
+            if not accept_unique:
+                left = set(unique)
+                ids = [f for f in ids if f not in left]
+                if not ids:
+                    self.app.status("Rien n'a été mis à la Corbeille.")
+                    return
 
         def work(ctx: Any, _control: Any, _report: Any) -> Any:
             return DeletionService(ctx.conn, ctx.clock, ctx.journal, backend).trash(
-                ids, origin, allow_unique=allow_unique
+                ids, origin, allow_unique=accept_unique
             )
 
         def done(result: Any) -> None:
@@ -190,6 +234,26 @@ class Page(QWidget):
             self.refresh()
 
         self.app.run_task("Corbeille", work, done)
+
+    def trash_selected(self, table: Any, origin: str, what: str = "fichier(s)") -> None:
+        """Bouton « Mettre à la Corbeille » d'un écran : les lignes choisies (colonne N°)."""
+        chosen = [int(v) for v in selected_values(table) if v.isdigit()]
+        if not chosen:
+            self.app.dialogs.info(
+                self.win, "Corbeille", f"Cliquez d'abord sur les {what} à mettre à la Corbeille."
+            )
+            return
+        names = [
+            str(r[0])
+            for r in self.conn.execute(
+                f"SELECT rel_path FROM file_record WHERE id IN ({','.join('?' * len(chosen[:5]))})",
+                chosen[:5],
+            )
+        ]
+        intro = f"{len(chosen)} {what} choisi(s) : " + ", ".join(names)
+        if len(chosen) > 5:
+            intro += " …"
+        self.trash_with_confirmation(chosen, origin, intro)
 
     def propose_folder(
         self,
@@ -430,6 +494,7 @@ class DashboardPage(Page):
             "hash_todo",
             "in_archives",
             "in_archives_tools",
+            "protected",
             "assoc_ok",
             "orphans",
             "quarantined",
@@ -545,6 +610,12 @@ class DashboardPage(Page):
                 "SELECT count(*) FROM duplicate_member WHERE admissible_for_quarantine = 1"
             ),
             "quarantined": self._count("SELECT count(*) FROM file_record WHERE in_quarantine = 1"),
+            "protected": self._count(
+                "SELECT count(*) FROM archive_scan a JOIN file_record f ON f.id = a.file_id"
+                " WHERE f.presence = 'present' AND (a.status = 'encrypted' OR EXISTS"
+                " (SELECT 1 FROM archive_entry e WHERE e.archive_file_id = a.file_id"
+                "  AND (e.status = 'encrypted' OR e.is_encrypted = 1)))"
+            ),
             "in_archives": self._count(
                 "SELECT count(*) FROM archive_entry e JOIN file_record f"
                 " ON f.id = e.archive_file_id WHERE f.presence = 'present' AND e.is_dir = 0"
@@ -611,12 +682,16 @@ class DashboardPage(Page):
     @staticmethod
     def _archives_sentence(values: dict[str, Any]) -> str:
         inside = int(values["in_archives"])
-        if not inside:
-            return ""
-        return (
-            f" + <b>{fmt(inside)}</b> fichier(s) lu(s) dans les archives (dont "
-            f"{fmt(int(values['in_archives_tools']))} robots, indicateurs ou SET)"
-        )
+        text = ""
+        if inside:
+            text = (
+                f" + <b>{fmt(inside)}</b> fichier(s) lu(s) dans les archives (dont "
+                f"{fmt(int(values['in_archives_tools']))} robots, indicateurs ou SET)"
+            )
+        protected = int(values.get("protected", 0))
+        if protected:
+            text += f" ; 🔒 <b>{fmt(protected)}</b> archive(s) protégée(s) par mot de passe"
+        return text
 
     def _placement_sentence(self) -> str:
         from mtlm.app.sets import AssociationService
@@ -666,7 +741,9 @@ class SourcesPage(Page):
             "bannerSafe",
         )
         self.table = make_table(
-            ["N°", "Nom", "Chemin", "État", "Dernier inventaire"], badge_columns=(3,)
+            ["N°", "Nom", "Chemin", "État", "Dernier inventaire"],
+            badge_columns=(3,),
+            noun="dossier",
         )
         self.layout_.addWidget(self.table, 1)
         self.button_row(
@@ -790,11 +867,14 @@ class AnalysisPage(Page):
         self.log.setObjectName("analyse.journal")
         self.layout_.addWidget(self.log, 1)
         self.jobs = make_table(
-            ["Tâche", "Type", "État", "Traités", "Erreurs", "Créée le"], badge_columns=(2,)
+            ["Tâche", "Type", "État", "Traités", "Erreurs", "Créée le"],
+            badge_columns=(2,),
+            noun="tâche",
         )
         self.layout_.addWidget(self.jobs, 1)
         self.button_row(
-            self.btn("erreurs", "Voir les erreurs de la tâche choisie", self.show_errors)
+            self.btn("erreurs", "Voir les erreurs de la tâche choisie", self.show_errors),
+            self.btn("zero", "Recommencer l'analyse à zéro…", self.reset_all),
         )
 
     def _decompress_setting(self) -> bool:
@@ -849,6 +929,39 @@ class AnalysisPage(Page):
         if not self.app.busy:
             self.progress.setRange(0, 1)
             self.progress.setValue(0)
+
+    def reset_all(self) -> None:
+        """Efface les résultats d'analyse (jamais les fichiers), puis propose de relancer."""
+        if self.app.busy:
+            self.app.dialogs.info(
+                self.win, "Recommencer à zéro", "Une tâche est en cours : attendez qu'elle finisse."
+            )
+            return
+        if not self.app.dialogs.confirm(
+            self,
+            "Recommencer l'analyse à zéro",
+            "Les résultats de l'analyse précédente seront effacés : empreintes, archives lues, "
+            "robots et indicateurs reconnus, SET et vos décisions d'association, familles, "
+            "doublons.\n\nRIEN n'est touché sur le disque. Restent conservés : vos dossiers "
+            "ajoutés, les paramètres, le journal, la quarantaine, la Corbeille (« Remettre en "
+            "place » reste possible) et les dossiers créés.\n\nEffacer les résultats ?",
+        ):
+            self.app.status("Rien n'a été effacé.")
+            return
+        from mtlm.app.reset import ResetService
+
+        summary = ResetService(self.conn, self.app.ctx.journal).reset()
+        self.log.appendPlainText(
+            f"Résultats d'analyse effacés ({summary.files_to_reread} fichier(s) à relire, "
+            f"{summary.files_forgotten} fichier(s) disparu(s) oublié(s))."
+        )
+        self.refresh()
+        if self.app.dialogs.confirm(
+            self,
+            "Recommencer l'analyse à zéro",
+            "Les résultats sont effacés. Lancer « Tout analyser » maintenant ?",
+        ):
+            self.start_all()
 
     def start_all(self) -> None:
         for check in self.checks.values():
@@ -951,10 +1064,21 @@ class ExplorerPage(Page):
         self.counter = QLabel()
         self.layout_.addWidget(self.counter)
         self.table = make_table(
-            ["N°", "Nom", "Type", "Plateforme", "Taille", "Dossier"], badge_columns=(2,)
+            ["N°", "Nom", "Type", "Plateforme", "Taille", "Dossier"],
+            badge_columns=(2,),
+            multi=True,
+            noun="fichier",
         )
         self.table.doubleClicked.connect(lambda _i: self.open_detail())
         self.layout_.addWidget(self.table, 1)
+        self.button_row(
+            *self.select_buttons("fichiers", self.table),
+            self.btn(
+                "corbeille",
+                "Mettre les fichiers choisis à la Corbeille",
+                lambda: self.trash_selected(self.table, "explorateur"),
+            ),
+        )
         self._cursors: list[int] = [0]
 
     def _filter(self) -> FileFilter:
@@ -1076,10 +1200,31 @@ class DetailPage(Page):
         self.win.navigate("sets", file_id=self.file_id.value())
 
 
+def with_count(table: QWidget) -> QWidget:
+    """Une liste et son nombre d'éléments en dessous (pour un onglet)."""
+    page = QWidget()
+    box = QVBoxLayout(page)
+    box.setContentsMargins(0, 0, 0, 0)
+    box.addWidget(table, 1)
+    label = getattr(table, "count_label", None)
+    if label is not None:
+        box.addWidget(label)
+    return page
+
+
 def two_columns(left: QWidget, right: QWidget) -> QWidget:
     container = QWidget()
     layout = QHBoxLayout(container)
     layout.setContentsMargins(0, 0, 0, 0)
-    layout.addWidget(left, 1)
-    layout.addWidget(right, 1)
+    for side in (left, right):
+        label = getattr(side, "count_label", None)
+        if label is None:
+            layout.addWidget(side, 1)
+            continue
+        column = QWidget()
+        box = QVBoxLayout(column)
+        box.setContentsMargins(0, 0, 0, 0)
+        box.addWidget(side, 1)
+        box.addWidget(label)
+        layout.addWidget(column, 1)
     return container

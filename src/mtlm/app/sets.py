@@ -31,6 +31,7 @@ from mtlm.matching.associations import (
     Candidate,
     RobotInfo,
     SetInfo,
+    enrich_inputs,
     rank_candidates,
 )
 from mtlm.matching.names import logical_key
@@ -400,8 +401,8 @@ class AssociationService:
         ctl = control or TaskControl()
         job_id = self._jobs.create("match", {"method": METHOD_VERSION})
         batches = self._batches()
-        robots = self._robots(batches)
         sets = self._sets(batches)
+        robots = enrich_inputs(self._robots(batches), sets)
         summary = AssociationSummary(
             job_id=job_id, state="running", sets=len(sets), robots=len(robots)
         )
@@ -511,6 +512,40 @@ class AssociationService:
         return kept_decisions
 
     # ---- consultation et décisions -------------------------------------------------------
+    def why_orphan(self, set_file_id: int) -> str:
+        """Explication en mots d'un SET relié à aucun robot (1.6.0)."""
+        params = [
+            str(r[0])
+            for r in self._conn.execute(
+                "SELECT name FROM set_parameter WHERE file_id = ? ORDER BY ordinal",
+                (set_file_id,),
+            )
+        ]
+        if not params:
+            return "• Le SET ne contient aucun paramètre lisible : rien à comparer."
+        sets = self._sets()
+        robots = enrich_inputs(self._robots(), sets)
+        if not robots:
+            return "• Aucun robot (MQ4, MQ5, EX4, EX5) n'a été trouvé dans vos dossiers."
+        wanted = set(params)
+        sharing = [r for r in robots if wanted & set(r.inputs)]
+        compiled = [r for r in robots if not r.inputs]
+        lines = [
+            f"• Ses {len(params)} paramètre(s) ({', '.join(params[:6])}"
+            f"{' …' if len(params) > 6 else ''}) ne correspondent assez à aucun robot "
+            "dont les paramètres sont connus."
+            if not sharing
+            else f"• {len(sharing)} robot(s) partagent une partie de ses paramètres, mais trop "
+            "peu pour proposer un lien (score inférieur au minimum)."
+        ]
+        if compiled:
+            lines.append(
+                f"• {len(compiled)} robot(s) n'existent qu'en EX4/EX5 : leurs paramètres ne "
+                "sont pas lisibles. Pour aider : rangez un SET de ce robot dans son dossier "
+                "(l'application en apprend les paramètres), ou ajoutez son MQ4/MQ5."
+            )
+        return "\n".join(lines)
+
     def find(
         self,
         *,

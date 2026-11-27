@@ -276,7 +276,10 @@ def inspect(
             )
     except LibArchiveError as exc:
         message = str(exc)
-        encrypted = any(word in message.casefold() for word in ("encrypt", "password", "chiffr"))
+        encrypted = any(
+            word in message.casefold()
+            for word in ("encrypt", "password", "passphrase", "chiffr", "mot de passe")
+        )
         if encrypted:
             report.status, report.reason = "encrypted", "archive protégée par mot de passe"
         elif report.entries:

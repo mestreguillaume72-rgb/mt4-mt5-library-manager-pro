@@ -69,12 +69,30 @@ def extract_verified(
     except OSError as exc:
         raise ExtractError(f"dossier de destination impossible : {exc.strerror or exc}") from exc
     written: dict[str, bool] = {}
+    # Le disque du Mac ne distingue pas majuscules et minuscules : « Lot.set » et « lot.set »
+    # seraient le même fichier. Contenu identique : écrit une fois ; différent : « (2) ».
+    placed: dict[str, bytes] = {}
     total = 0
     try:
         for name, chunks in _entries(archive_path, kind):
             if name not in expected or name in written or unsafe_name_reason(name):
                 continue
-            relative = os.fsencode(name.replace("\\", "/"))
+            clean = name.replace("\\", "/")
+            key = clean.casefold()
+            if key in placed:
+                if placed[key] == expected[name]:
+                    written[name] = True  # même contenu déjà extrait sous l'autre nom
+                    continue
+                stem, dot, ext = clean.rpartition(".")
+                n = 2
+                while True:
+                    candidate = f"{stem} ({n}).{ext}" if dot and stem else f"{clean} ({n})"
+                    if candidate.casefold() not in placed:
+                        break
+                    n += 1
+                clean, key = candidate, candidate.casefold()
+            placed[key] = expected[name]
+            relative = os.fsencode(clean)
             target = os.path.join(destination, relative)
             parent = os.path.dirname(target)
             os.makedirs(parent, exist_ok=True)

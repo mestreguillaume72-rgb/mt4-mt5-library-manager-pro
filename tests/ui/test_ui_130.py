@@ -87,7 +87,7 @@ def test_corbeille_indisponible_hors_mac(
     assert (lib / "Copies" / "Scalper.mq4").exists()
 
 
-def test_reference_protegee_et_version_unique_signalee(
+def test_reference_supprimable_et_version_unique_signalee(
     window: MainWindow, qtbot: object, dialogs: FakeDialogs, tmp_path: Path
 ) -> None:
     lib = analysed(window, qtbot, dialogs, tmp_path)
@@ -100,8 +100,13 @@ def test_reference_protegee_et_version_unique_signalee(
     for row in range(page.members.rowCount()):
         if page.members.item(row, 0).text() == reference:
             page.members.selectRow(row)
+    # 1.6.0 : la référence peut être supprimée (une autre copie identique reste).
+    dialogs.confirm_answer = True
     click(window, qtbot, "doublons.corbeille_fichier")
-    assert "RÉFÉRENCE" in dialogs.infos[-1][1]
+    wait_idle(window, qtbot)
+    assert "1 fichier(s) mis à la Corbeille" in dialogs.infos[-1][1]
+    page.refresh()
+    assert all(page.groups.item(r, 4).text() != reference for r in range(page.groups.rowCount()))
     # Familles : le fichier compilé est un exemplaire unique, signalé avant confirmation.
     window.navigate("familles")
     families: Any = window.pages["familles"]

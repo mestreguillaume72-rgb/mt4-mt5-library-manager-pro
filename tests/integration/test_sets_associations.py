@@ -154,3 +154,44 @@ def test_cli_sets_associations(tmp_path: Path, environ: dict[str, str], clock: F
     code, out = run(["orphelins"])
     assert "0 SET orphelin(s)" in out
     assert run(["set", "1"])[0] == EXIT_ERROR
+
+
+def test_set_en_vrac_relie_a_un_robot_seulement_compile(tmp_path: Path, ctx: AppContext) -> None:
+    """1.6.0 : un robot sans MQ4/MQ5 (EX4 seul) prend les noms de paramètres des SET rangés
+    avec lui ; un SET en vrac au nom quelconque est alors relié par ses paramètres."""
+    root = tmp_path / "disque"
+    robot_dir = root / "Robots" / "Gold Hunter"
+    robot_dir.mkdir(parents=True)
+    (robot_dir / "Gold Hunter.ex4").write_bytes(b"EX4 fictif")
+    params = "Lots=0.1\nTakeProfit=50\nStopLoss=30\nMagicNumber=777\nTrailing=1\n"
+    (robot_dir / "Gold Hunter defaut.set").write_text(params, encoding="utf-8")
+    (root / "Telechargements").mkdir()
+    loose = "Lots=0.5\nTakeProfit=80\nStopLoss=40\nMagicNumber=12\nTrailing=0\n"
+    (root / "Telechargements" / "EURUSD M15.set").write_text(loose, encoding="utf-8")
+    analyse(ctx, root)
+    service = AssociationService(ctx.conn, ctx.clock, ctx.journal)
+    service.compute()
+    found = {
+        (a.set_path, a.robot_path, a.level)
+        for a in service.find(limit=1000)
+        if a.set_path == "Telechargements/EURUSD M15.set"
+    }
+    robot = "Robots/Gold Hunter/Gold Hunter.ex4"
+    assert ("Telechargements/EURUSD M15.set", robot, "moyenne") in found
+
+
+def test_pourquoi_un_set_n_est_pas_relie(tmp_path: Path, ctx: AppContext) -> None:
+    root = tmp_path / "disque"
+    (root / "Experts").mkdir(parents=True)
+    (root / "Experts" / "Opaque.ex4").write_bytes(b"EX4 fictif")
+    (root / "Experts" / "Autre.ex4").write_bytes(b"EX4 fictif 2")
+    (root / "Vrac").mkdir()
+    (root / "Vrac" / "reglage.set").write_text("Alpha=1\nBeta=2\n", encoding="utf-8")
+    analyse(ctx, root)
+    service = AssociationService(ctx.conn, ctx.clock, ctx.journal)
+    service.compute()
+    set_id = int(
+        ctx.conn.execute("SELECT id FROM file_record WHERE name = 'reglage.set'").fetchone()[0]
+    )
+    text = service.why_orphan(set_id)
+    assert "Alpha" in text and "n'existent qu'en EX4/EX5" in text

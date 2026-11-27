@@ -172,3 +172,52 @@ def test_archive_dit_robots_et_indicateurs(tmp_path: Path, ctx: AppContext) -> N
     assert entries["MQL4/Indicators/Seul.ex4"] == "Indicateur (compilé EX4)"
     if libarchive.available():
         assert found["robots.tar.gz"].robots == 1  # type: ignore[attr-defined]
+
+
+def test_decompression_noms_qui_ne_different_que_par_la_casse(
+    tmp_path: Path, ctx: AppContext
+) -> None:
+    """Le disque du Mac ne distingue pas « Lot.set » et « lot.set » : même contenu écrit une
+    fois, contenu différent écrit sous « (2) » ; l'archive part quand même à la Corbeille."""
+    lib = tmp_path / "lib"
+    (lib / "Telechargements").mkdir(parents=True)
+    with zipfile.ZipFile(lib / "Telechargements" / "casse.zip", "w") as z:
+        z.writestr("Pack/Lot.set", SET)
+        z.writestr("Pack/lot.set", SET)  # même contenu
+        z.writestr("Pack/Robot.mq4", ROBOT)
+        z.writestr("Pack/ROBOT.mq4", b"autre contenu\n")  # contenu différent
+    analyse(ctx, lib)
+    trash = FakeTrash(tmp_path / "Corbeille")
+    service = ArchiveService(ctx.conn, ctx.clock, ctx.journal)
+    archive = rows(ctx)["casse.zip"].file_id  # type: ignore[attr-defined]
+    summary = service.extract([archive], trash, trash_archive=True)
+    assert (summary.extracted, summary.trashed, summary.refused) == (1, 1, [])
+    folder = lib / "Telechargements" / "casse" / "Pack"
+    names = sorted(p.name for p in folder.iterdir())
+    assert len(names) == 3 and any("(2)" in n for n in names)
+
+
+def test_archives_protegees_par_mot_de_passe(tmp_path: Path, ctx: AppContext) -> None:
+    """ZIP dont un fichier est protégé : signalé « partiellement protégée », filtrable."""
+    lib = tmp_path / "lib"
+    (lib / "Telechargements").mkdir(parents=True)
+    path = lib / "Telechargements" / "secret.zip"
+    with zipfile.ZipFile(path, "w") as z:
+        z.writestr("Pack/Lisez-moi.txt", b"bonjour")
+        z.writestr("Pack/Robot.ex4", b"EX4 chiffre fictif")
+    # Bit « chiffré » du format ZIP posé sur la 2e entrée (en-tête local et répertoire).
+    data = bytearray(path.read_bytes())
+    name = b"Pack/Robot.ex4"
+    local = data.index(name) - 30  # en-tête local : 30 octets avant le nom
+    assert data[local : local + 4] == b"PK\x03\x04"
+    data[local + 6] |= 0x1
+    central = data.index(b"PK\x01\x02", data.index(b"PK\x01\x02") + 1)
+    data[central + 8] |= 0x1
+    path.write_bytes(bytes(data))
+    analyse(ctx, lib)
+    service = ArchiveService(ctx.conn, ctx.clock, ctx.journal)
+    row = rows(ctx)["secret.zip"]
+    assert row.protected  # type: ignore[attr-defined]
+    assert row.verdict.startswith("Partiellement protégée")  # type: ignore[attr-defined]
+    assert [r.rel_path for r in service.rows(only_protected=True)] == ["Telechargements/secret.zip"]
+    assert row.file_id not in service.eligible()  # type: ignore[attr-defined]

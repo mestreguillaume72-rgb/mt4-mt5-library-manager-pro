@@ -7,6 +7,7 @@ et accepte pause, reprise et annulation. Les paramètres utilisateur sont appliq
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -15,7 +16,7 @@ from mtlm.app.companions import CompanionService
 from mtlm.app.context import AppContext
 from mtlm.app.duplicates import DuplicateService
 from mtlm.app.families import FamilyService
-from mtlm.app.formats import FormatService
+from mtlm.app.formats import FormatService, FormatSummary
 from mtlm.app.hashing import HashService, HashSummary
 from mtlm.app.recognize import RecognitionService
 from mtlm.app.scan import ScanService
@@ -104,13 +105,31 @@ def hash_progress_text(summary: HashSummary) -> str:
     return text + "…"
 
 
+def eta_text(done: int, total: int, seconds: float) -> str:
+    """« (12 %, reste environ 5 min) » d'après la vitesse mesurée ; vide si inconnu."""
+    if total <= 0:
+        return ""
+    text = f" ({min(100, done * 100 // total)} %"
+    if done > 0 and seconds >= 2 and done < total:
+        text += f", reste environ {duration_text(seconds / done * (total - done))}"
+    return text + ")"
+
+
+def _formats_progress(summary: FormatSummary, started: float) -> str:
+    elapsed = time.perf_counter() - started
+    if summary.phase == "signatures":
+        done, total = summary.signatures + summary.signature_errors, summary.to_sign
+        return f"Formats : {done}/{total} fichier(s){eta_text(done, total, elapsed)}…"
+    done, total = summary.archives, summary.archives_total
+    return f"Archives : {done}/{total} lue(s){eta_text(done, total, elapsed)}…"
+
+
 def _formats(ctx: AppContext, control: TaskControl, report: Report) -> str:
+    started = time.perf_counter()
     settings = SettingsService(ctx.conn, ctx.journal)
     limits = settings.archive_limits()
     service = FormatService(ctx.conn, ctx.clock, ctx.journal, limits)
-    summary = service.run(
-        control=control, progress=lambda s: report(f"Formats : {s.signatures} signature(s)…")
-    )
+    summary = service.run(control=control, progress=lambda s: report(_formats_progress(s, started)))
     text = (
         f"{summary.signatures} signature(s), {summary.misleading} extension(s) trompeuse(s), "
         f"{summary.archives} archive(s) dont {summary.archives_problem} avec problème"
@@ -125,6 +144,8 @@ def _formats(ctx: AppContext, control: TaskControl, report: Report) -> str:
                 f" ; {done.extracted} archive(s) décompressée(s) ({done.files} fichier(s)), "
                 f"{done.trashed} mise(s) à la Corbeille, {len(done.refused)} laissée(s) intacte(s)"
             )
+            if done.refused:
+                text += " (" + " ; ".join(why for _a, why in done.refused[:3]) + ")"
             if done.extracted:
                 # Les fichiers extraits rejoignent l'analyse : inventaire, empreintes, formats.
                 _scan(ctx, control, report)
@@ -134,8 +155,13 @@ def _formats(ctx: AppContext, control: TaskControl, report: Report) -> str:
 
 
 def _recognize(ctx: AppContext, control: TaskControl, report: Report) -> str:
+    started = time.perf_counter()
     summary = RecognitionService(ctx.conn, ctx.clock, ctx.journal).run(
-        control=control, progress=lambda s: report(f"Reconnaissance : {s.classified}…")
+        control=control,
+        progress=lambda s: report(
+            f"Reconnaissance : {s.done}/{s.total} fichier(s)"
+            f"{eta_text(s.done, s.total, time.perf_counter() - started)}…"
+        ),
     )
     return (
         f"{summary.classified} fichier(s) classé(s), {summary.sources_parsed} source(s) "
@@ -194,10 +220,14 @@ def run_steps(
 ) -> list[tuple[str, str]]:
     """Exécute les étapes demandées dans l'ordre ; retourne (libellé, résumé) par étape."""
     results = []
-    for step in STEPS:
-        if step.key not in keys:
-            continue
+    chosen = [step for step in STEPS if step.key in keys]
+    for number, step in enumerate(chosen, start=1):
         control.checkpoint()
-        report(f"{step.label}…")
-        results.append((step.label, step.run(ctx, control, report)))
+        prefix = f"Étape {number}/{len(chosen)} — "
+
+        def prefixed(text: str, prefix: str = prefix) -> None:
+            report(prefix + text)
+
+        prefixed(f"{step.label}…")
+        results.append((step.label, step.run(ctx, control, prefixed)))
     return results

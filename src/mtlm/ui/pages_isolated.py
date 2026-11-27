@@ -43,13 +43,16 @@ class IsolatedToolsPage(Page):
         filters.addWidget(self.search, 1)
         self.layout_.addLayout(filters)
         self.tools = make_table(
-            ["N°", "Nom", "Plateforme", "Fichiers", "Versions", "Groupe"], multi=True
+            ["N°", "Nom", "Plateforme", "Fichiers", "Versions", "Groupe"],
+            multi=True,
+            noun=self.singular,
         )
         self.layout_.addWidget(self.tools, 1)
         self.button_row(
             *self.select_buttons("outils", self.tools),
             self.btn("grouper", "Mettre dans un groupe…", self.group_selected),
             self.btn("degrouper", "Retirer du groupe", self.ungroup_selected),
+            self.btn("corbeille", f"Mettre les {self.plural} choisis à la Corbeille", self.trash),
         )
         self.mode = QComboBox()
         self.mode.setAccessibleName("Rangement")
@@ -122,6 +125,37 @@ class IsolatedToolsPage(Page):
             self.groups.pop(family_id, None)
         self.refresh()
         self.app.status(f"{len(chosen)} {self.singular}(s) retiré(s) de leur groupe.")
+
+    def trash(self) -> None:
+        """Tous les fichiers des outils choisis (versions MQ4/MQ5, compilés EX4/EX5, SET de
+        la famille) partent à la Corbeille, après confirmation."""
+        chosen = self._chosen()
+        if not chosen:
+            self.app.dialogs.info(
+                self.win, "Corbeille", f"Cliquez d'abord sur les {self.plural} à supprimer."
+            )
+            return
+        marks = ",".join("?" * len(chosen))
+        files = [
+            int(r[0])
+            for r in self.conn.execute(
+                "SELECT fm.file_id FROM family_member fm JOIN file_record f ON f.id = fm.file_id"
+                f" WHERE fm.family_id IN ({marks}) AND f.presence = 'present' ORDER BY f.rel_path",
+                chosen,
+            )
+        ]
+        names = [
+            item.text()
+            for r in self.tools.selectionModel().selectedRows()[:5]
+            if (item := self.tools.item(r.row(), 1)) is not None
+        ]
+        self.trash_with_confirmation(
+            files,
+            "outils",
+            f"{len(chosen)} {self.singular}(s) choisi(s) ({', '.join(names)}"
+            f"{' …' if len(chosen) > 5 else ''}) : leurs {len(files)} fichier(s) (versions, "
+            "compilés, SET de la famille) partent à la Corbeille.",
+        )
 
     def isolate_selected(self) -> None:
         chosen = self._chosen()

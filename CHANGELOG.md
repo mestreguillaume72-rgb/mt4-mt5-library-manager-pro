@@ -1,5 +1,36 @@
 # Changelog
 
+## [1.7.0] — Supprimer où je veux, analyse à zéro, progression, SET en vrac
+
+### Corrigé
+- **« check constraint failed: member_count >= 2 »** à l'étape « Doublons et similarités » :
+  une copie rangée dans un dossier devenu indisponible ne crée plus de groupe d'un seul
+  fichier. Les doublons et les similarités sont de nouveau calculés.
+- **Décompression des archives** : deux noms qui ne diffèrent que par les majuscules
+  (« Lot.set » / « lot.set ») bloquaient tout sur le disque du Mac ; même contenu = écrit une
+  fois, contenu différent = « (2) ». Une archive pas encore lue en entier peut être
+  décompressée et mise à la Corbeille ; les motifs de refus sont affichés.
+
+### Ajouté
+- **Supprimer où je veux** : bouton « Mettre à la Corbeille » dans l'Explorateur, les SET,
+  les sources MQ4/MQ5, les robots isolés et les indicateurs isolés (en plus de Doublons,
+  Familles, Quarantaine, Archives, Fichiers à risque). Dans **Doublons**, les fichiers choisis
+  partent tels quels, **références comprises** (une autre copie devient la référence).
+  Un fichier qui serait le **seul exemplaire** de son contenu est signalé et **vous
+  décidez** (deuxième confirmation). Un fichier pas encore lu en entier est vérifié au moment
+  de partir. Toujours récupérable avec « Remettre en place ».
+- **Recommencer l'analyse à zéro** (écran Analyse) : efface les résultats d'analyse, jamais
+  les fichiers ; dossiers ajoutés, quarantaine et Corbeille conservés.
+- **Progression de chaque étape** : « Étape 3/8 — Archives : 120/450 lue(s) (26 %, reste
+  environ 12 min) », aussi pour les formats et la reconnaissance.
+- **Nombre d'éléments sous chaque liste** et nombre sélectionné : « 1 234 fichiers — 3
+  sélectionnés ».
+- **Archives protégées par mot de passe** : filtre « Protégées par mot de passe », ZIP
+  partiellement protégés signalés, nombre affiché sur l'Accueil.
+- **SET en vrac** : un robot qui n'existe qu'en EX4/EX5 apprend ses noms de paramètres des
+  SET rangés avec lui ; les SET en vrac qui ont les mêmes paramètres lui sont proposés
+  (« probable », à valider). Pour un SET sans robot, l'écran explique **pourquoi**.
+
 ## [1.6.0] — Analyse d'un disque entier plus rapide, rangement Robots / Indicateurs
 
 ### Modifié

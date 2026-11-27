@@ -25,6 +25,7 @@ class FakeDialogs:
         self.directories: list[Path | None] = []
         self.save_paths: list[Path | None] = []
         self.confirm_answer = True
+        self.answers: list[bool] = []  # réponses successives (sinon ``confirm_answer``)
         self.infos: list[tuple[str, str]] = []
         self.errors: list[tuple[str, str]] = []
         self.confirms: list[str] = []
@@ -40,7 +41,7 @@ class FakeDialogs:
 
     def confirm(self, parent: QWidget, title: str, text: str) -> bool:
         self.confirms.append(text)
-        return self.confirm_answer
+        return self.answers.pop(0) if self.answers else self.confirm_answer
 
     def info(self, parent: QWidget, title: str, text: str) -> None:
         self.infos.append((title, text))

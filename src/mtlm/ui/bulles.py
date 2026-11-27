@@ -335,3 +335,40 @@ for _page, _one, _many in (
             "sous-dossiers (dans chaque groupe s'il y en a).",
         }
     )
+
+# ---- 1.6.0 : supprimer où je veux ------------------------------------------------------------
+_CORBEILLE = (
+    "Met les {what} cliqués à la Corbeille du Mac, après confirmation (récupérables avec "
+    "« Remettre en place » dans l'écran Quarantaine). Chaque fichier est revérifié avant. Si "
+    "un fichier est le SEUL exemplaire de son contenu, c'est signalé et vous décidez."
+)
+ACTION_TIPS.update(
+    {
+        "explorateur.tout_fichiers": _CLIC + "Ce bouton les sélectionne tous (page affichée).",
+        "explorateur.aucun_fichiers": _AUCUN,
+        "explorateur.corbeille": _CORBEILLE.format(what="fichiers"),
+        "sets.corbeille": _CORBEILLE.format(what="SET"),
+        "sources_mq.corbeille": _CORBEILLE.format(what="fichiers sources"),
+        "robots_isoles.corbeille": "Met à la Corbeille tous les fichiers des robots cliqués "
+        "(versions MQ4/MQ5, compilés EX4/EX5, SET de la famille), après confirmation ; "
+        "récupérables avec « Remettre en place ». Les exemplaires uniques sont signalés.",
+        "indicateurs_isoles.corbeille": "Met à la Corbeille tous les fichiers des indicateurs "
+        "cliqués (versions MQ4/MQ5, compilés EX4/EX5), après confirmation ; récupérables avec "
+        "« Remettre en place ». Les exemplaires uniques sont signalés.",
+        "doublons.corbeille_fichier": "Met à la Corbeille exactement les fichiers cliqués, "
+        "références comprises (un autre exemplaire devient la référence). Si tous les "
+        "exemplaires d'un contenu sont choisis, le dernier est signalé « exemplaire unique » et "
+        "vous décidez.",
+    }
+)
+ACTION_TIPS["analyse.zero"] = (
+    "Efface les résultats de l'analyse précédente (empreintes, archives lues, reconnaissance, "
+    "SET, associations, familles, doublons) pour repartir de rien, au lieu d'analyser "
+    "« par-dessus ». Rien n'est touché sur le disque ; vos dossiers ajoutés, la quarantaine "
+    "et la Corbeille sont conservés. Confirmation demandée."
+)
+WIDGET_TIPS[("archives", "archive_filter")] = (
+    "Filtrer : toutes les archives, seulement celles protégées par mot de passe (en entier ou "
+    "en partie : leur contenu ne peut pas être lu), ou celles qui ont un problème. Une "
+    "archive protégée n'est jamais décompressée ni mise à la Corbeille automatiquement."
+)

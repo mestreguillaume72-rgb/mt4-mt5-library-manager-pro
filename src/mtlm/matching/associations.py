@@ -30,7 +30,7 @@ from dataclasses import dataclass, field
 
 from mtlm.matching.names import logical_key
 
-METHOD_VERSION = "associations-v2"
+METHOD_VERSION = "associations-v3"
 WEIGHTS = {
     "coverage": 40.0,
     "types": 15.0,
@@ -58,6 +58,9 @@ class RobotInfo:
     has_source: bool
     inputs: dict[str, tuple[str, str | None]]  # nom → (type MQL, défaut brut)
     batch: tuple[int, int] | None = None  # petit lot « créés ensemble » : (numéro, taille)
+    #: D'où viennent les noms de paramètres (1.6.0) : « source » (le MQ4/MQ5 lui-même) ou
+    #: « set_range » (les SET rangés avec ce robot, pour un EX4/EX5 sans source).
+    inputs_origin: str = "source"
 
 
 @dataclass(frozen=True)
@@ -151,7 +154,7 @@ def score_pair(robot: RobotInfo, set_info: SetInfo) -> Candidate:
     total = 0.0
     coverage = 0.0
     keys = set(set_info.params)
-    if robot.has_source and robot.inputs:
+    if robot.inputs:
         inputs = set(robot.inputs)
         common = keys & inputs
         cov_set = len(common) / len(keys) if keys else 0.0
@@ -170,6 +173,7 @@ def score_pair(robot: RobotInfo, set_info: SetInfo) -> Candidate:
                     "parametres_set": len(keys),
                     "parametres_robot": len(inputs),
                     "exemples": sorted(common)[:8],
+                    "parametres_lus_dans": ORIGIN_LABELS.get(robot.inputs_origin, "la source"),
                 },
             )
         )
@@ -303,10 +307,14 @@ def score_pair(robot: RobotInfo, set_info: SetInfo) -> Candidate:
         )
     )
     score = max(0.0, min(100.0, round(total, 1)))
-    return Candidate(robot, score, level_for(score, robot.has_source, coverage), evidence, coverage)
+    level = level_for(score, bool(robot.inputs), coverage)
+    if level == "forte" and robot.inputs_origin == "set_range":
+        level = "moyenne"  # paramètres déduits de SET, pas du code : jamais « certain »
+    return Candidate(robot, score, level, evidence, coverage)
 
 
 def level_for(score: float, has_source: bool, coverage: float) -> str:
+    """``has_source`` : les noms de paramètres du robot sont connus (source, ou déduits)."""
     if score < MIN_SCORE:
         return "none"
     if not has_source:
@@ -316,6 +324,58 @@ def level_for(score: float, has_source: bool, coverage: float) -> str:
     if score >= 50:
         return "moyenne"
     return "faible"
+
+
+ORIGIN_LABELS = {
+    "source": "le code source du robot",
+    "set_range": "les SET déjà rangés avec ce robot",
+}
+
+
+def enrich_inputs(robots: list[RobotInfo], sets: list[SetInfo]) -> list[RobotInfo]:
+    """Robots **seulement compilés** (EX4/EX5, aucun MQ4/MQ5 du même nom nulle part) : on
+    emprunte les noms de paramètres aux SET déjà rangés avec ce robot (même dossier ou juste
+    en dessous, quand le dossier ne contient que ce robot ou que le SET porte son nom). Un
+    SET en vrac peut alors être relié par ses paramètres, même sans code source."""
+    from dataclasses import replace
+
+    sources: dict[tuple[str, str], dict[str, tuple[str, str | None]]] = {}
+    for robot in robots:
+        if robot.has_source and robot.inputs:
+            sources.setdefault(identity_of(robot), robot.inputs)
+    by_dir: dict[tuple[int, str], set[str]] = {}
+    for robot in robots:
+        by_dir.setdefault((robot.root_id, robot.directory), set()).add(logical_key(robot.name))
+    result = []
+    for robot in robots:
+        if robot.inputs:
+            result.append(robot)
+            continue
+        if identity_of(robot) in sources:
+            # Le MQ4/MQ5 de ce robot existe ailleurs : c'est lui qui reçoit les SET (sinon
+            # chaque copie compilée doublerait les propositions).
+            result.append(robot)
+            continue
+        key = logical_key(robot.name)
+        alone = by_dir.get((robot.root_id, robot.directory), set()) == {key}
+        names: dict[str, tuple[str, str | None]] = {}
+        for set_info in sets:
+            if set_info.root_id != robot.root_id or not set_info.params:
+                continue
+            inside = set_info.directory == robot.directory or (
+                set_info.directory.startswith(robot.directory + "/")
+                and set_info.directory.count("/") - robot.directory.count("/") <= 2
+            )
+            if not inside or not robot.directory:
+                continue
+            if alone or name_similarity(robot.name, set_info.name) >= 1.0:
+                for param in set_info.params:
+                    names.setdefault(param, ("", None))
+        if len(names) >= 3:
+            result.append(replace(robot, inputs=names, inputs_origin="set_range"))
+        else:
+            result.append(robot)
+    return result
 
 
 def identity_of(robot: RobotInfo) -> tuple[str, str]:

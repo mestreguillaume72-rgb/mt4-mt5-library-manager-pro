@@ -58,6 +58,8 @@ class RecognitionSummary:
     sources_parsed: int = 0
     waiting_for_hash: int = 0
     warnings: int = 0
+    total: int = 0
+    done: int = 0
     by_type: dict[str, int] = field(default_factory=dict)
     by_certainty: dict[str, int] = field(default_factory=dict)
 
@@ -150,6 +152,7 @@ class RecognitionService:
         job_id = self._jobs.create("recognize", {"source_id": source_id})
         summary = RecognitionSummary(job_id=job_id, state="running")
         files = self._pending(source_id)
+        summary.total = len(files)
         # Sources d'abord, binaires compilés ensuite (appariement), le reste entre les deux.
         files.sort(
             key=lambda f: (2 if f.ext in ("ex4", "ex5") else 0 if f.ext in SOURCE_EXTS else 1, f.id)
@@ -184,6 +187,9 @@ class RecognitionService:
         progress: Callable[[RecognitionSummary], None] | None,
     ) -> None:
         for index, item in enumerate(files, start=1):
+            summary.done = index
+            if progress is not None and index % BATCH == 0:
+                progress(summary)
             if ctl.paused or ctl.cancelled:
                 self._commit_batch()  # ne jamais garder la base verrouillée pendant une pause
             ctl.checkpoint()
@@ -222,8 +228,6 @@ class RecognitionService:
             summary.warnings += len(warnings)
             types[result.detected_type] += 1
             certainties[result.certainty] += 1
-            if progress is not None and index % BATCH == 0:
-                progress(summary)
 
     # ------------------------------------------------------------------------------------
     def _read(self, item: _File) -> bytes:

@@ -241,3 +241,20 @@ l'utilise (un fichier n'apparaît qu'une fois par copie). Les dossiers standards
   couche application (la couche « formats » reste indépendante de MetaTrader) ; migration
   0010 ; moteur 1.6.0 (les archives et sources sont relues une fois, sans recalcul des
   empreintes).
+
+## D-022 — Supprimer où je veux, analyse à zéro (1.7.0)
+
+* **Suppression** (demande du propriétaire : « je dois pouvoir supprimer où je veux ») :
+  Corbeille possible depuis tous les écrans qui listent des fichiers ; la référence d'un
+  groupe de doublons peut partir (une autre copie identique devient la référence). Le
+  garde-fou « exemplaire unique » devient un **choix** : signalé, puis deuxième confirmation.
+  La Quarantaine garde son refus strict (les originaux y ont une copie vérifiée). Migration
+  0011 : nouvelles origines de suppression.
+* **Analyse à zéro** : seuls les résultats d'analyse sont effacés ; l'historique (quarantaine,
+  Corbeille, plans, décompressions, journal) et les tâches d'inventaire sont gardés.
+* **SET et robots seulement compilés** : les noms de paramètres sont empruntés aux SET rangés
+  avec le robot (dossier qui ne contient que lui, ou SET à son nom) ; niveau plafonné à
+  « moyenne » (probable), jamais validé automatiquement. Pas d'emprunt à une source de même
+  nom ailleurs : elle reçoit déjà les SET (sinon propositions en double).
+* **Doublons** : les deux recherches appliquent les mêmes filtres (sources disponibles) ;
+  jamais de groupe d'un seul fichier.

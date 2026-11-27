@@ -75,9 +75,12 @@ class QuarantinePage(Page):
             ["Lot", "État", "Fichiers", "Vérifiés", "Volume", "Destination", "Créé le"],
             badge_columns=(1,),
             multi=True,
+            noun="lot",
         )
         self.batches.itemSelectionChanged.connect(self.load_entries)
-        self.entries = make_table(["Fichier", "État", "Original", "Erreur"], badge_columns=(1,))
+        self.entries = make_table(
+            ["Fichier", "État", "Original", "Erreur"], badge_columns=(1,), noun="fichier"
+        )
         tabs = QTabWidget()
         lots = QWidget()
         lots_layout = QVBoxLayout(lots)
@@ -119,6 +122,7 @@ class QuarantinePage(Page):
             ["N°", "Fichier", "Origine", "Copie conservée", "État", "Chemin d'origine", "Le"],
             badge_columns=(4,),
             multi=True,
+            noun="fichier",
         )
         bin_layout.addWidget(self.trashed, 1)
         bin_layout.addLayout(
@@ -166,6 +170,7 @@ class QuarantinePage(Page):
             f"{len(batches)} lot(s) choisi(s) : les {len(originals)} original(aux) en trop, déjà "
             "copiés et vérifiés en quarantaine, partent à la Corbeille. La référence de chaque "
             "groupe et la copie de quarantaine sont conservées.",
+            allow_unique=False,
         )
 
     def put_back(self) -> None:
@@ -366,10 +371,14 @@ class OrganizePage(Page):
             self.btn("actualiser", "Actualiser", self.refresh),
         )
         self.plans = make_table(
-            ["Plan", "Destination", "État", "Fichiers", "Copiés", "Collisions"], badge_columns=(2,)
+            ["Plan", "Destination", "État", "Fichiers", "Copiés", "Collisions"],
+            badge_columns=(2,),
+            noun="plan",
         )
         self.plans.itemSelectionChanged.connect(self.load_items)
-        self.items = make_table(["Fichier", "Cible", "État", "Collision avec"], badge_columns=(2,))
+        self.items = make_table(
+            ["Fichier", "Cible", "État", "Collision avec"], badge_columns=(2,), noun="fichier"
+        )
         self.layout_.addWidget(two_columns(self.plans, self.items), 1)
 
     def _service(self) -> OrganizeService:
@@ -504,9 +513,17 @@ class SourcesMqPage(Page):
             ],
             badge_columns=(2,),
             multi=True,
+            noun="source",
         )
         self.layout_.addWidget(self.sources, 1)
-        self.button_row(*self.select_buttons("sources", self.sources))
+        self.button_row(
+            *self.select_buttons("sources", self.sources),
+            self.btn(
+                "corbeille",
+                "Mettre les sources choisies à la Corbeille",
+                lambda: self.trash_selected(self.sources, "sources", "source(s)"),
+            ),
+        )
         self.button_row(
             self.btn("isoler", "Isoler les sources choisies…", self.isolate_selected),
             self.btn("isoler_tout", "Isoler toutes les sources…", self.isolate_all),
@@ -651,7 +668,9 @@ class ReportsPage(Page):
             self.btn("actualiser", "Actualiser", self.refresh),
         )
         self.audit = make_table(
-            ["N°", "Date (UTC)", "Acteur", "Action", "Objet", "Résultat"], badge_columns=(5,)
+            ["N°", "Date (UTC)", "Acteur", "Action", "Objet", "Résultat"],
+            badge_columns=(5,),
+            noun="action",
         )
         self.layout_.addWidget(QLabel("Journal d'audit (200 derniers événements, non modifiable)"))
         self.layout_.addWidget(self.audit, 1)

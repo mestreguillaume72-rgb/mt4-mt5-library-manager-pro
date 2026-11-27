@@ -46,6 +46,9 @@ class FormatSummary:
     archives_ok: int = 0
     archives_problem: int = 0
     archive_entries: int = 0
+    to_sign: int = 0
+    archives_total: int = 0
+    phase: str = "signatures"
 
 
 def _abs(root: str, rel: bytes) -> bytes:
@@ -88,6 +91,7 @@ class FormatService:
             params,
         ).fetchall()
         updates: list[tuple[str, int]] = []
+        summary.to_sign = len(rows)
         for file_id, root, rel, _ext in rows:
             ctl.checkpoint()
             try:
@@ -119,6 +123,9 @@ class FormatService:
             + " ORDER BY f.id",
             (*sorted(ARCHIVE_KINDS), *sorted(ARCHIVE_EXTS), *params),
         ).fetchall()
+        summary.phase, summary.archives_total = "archives", len(archives)
+        if progress is not None:
+            progress(summary)
         for file_id, root, rel, magic, content_id, done_content, done_engine in archives:
             ctl.checkpoint()
             summary.archives += 1

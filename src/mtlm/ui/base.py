@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
     QHeaderView,
+    QLabel,
     QMessageBox,
     QPushButton,
     QStyle,
@@ -433,12 +434,44 @@ class BadgeDelegate(QStyledItemDelegate):
         return QSize(hint.width() + 24, max(hint.height(), 30))
 
 
+def _plural(count: int, noun: str) -> str:
+    if count < 2 or noun.endswith(("s", "x")):
+        return noun
+    return noun + "s"
+
+
+def update_count(table: QTableWidget) -> None:
+    """« 1 234 fichiers — 3 sélectionnés » sous la liste (1.6.0)."""
+    label = getattr(table, "count_label", None)
+    if label is None:
+        return
+    noun = str(getattr(table, "count_noun", "élément"))
+    total = table.rowCount()
+    text = f"{total:,} {_plural(total, noun)}".replace(",", " ")
+    model = table.selectionModel()
+    chosen = len(model.selectedRows()) if model is not None else 0
+    if chosen:
+        text += f" — {chosen:,} {_plural(chosen, 'sélectionné')}".replace(",", " ")
+    label.setText(text)
+
+
 def make_table(
-    headers: Sequence[str], badge_columns: Sequence[int] = (), *, multi: bool = False
+    headers: Sequence[str],
+    badge_columns: Sequence[int] = (),
+    *,
+    multi: bool = False,
+    noun: str = "élément",
 ) -> QTableWidget:
     """``multi`` : sélection de plusieurs lignes **au simple clic** (chaque clic ajoute ou
-    retire la ligne, sans clavier) ; Cmd+A sélectionne tout."""
+    retire la ligne, sans clavier) ; Cmd+A sélectionne tout. ``noun`` : ce que compte la
+    liste (« fichier », « groupe »…), affiché sous elle avec le nombre sélectionné."""
     table = QTableWidget(0, len(headers))
+    count = QLabel(f"0 {noun}")
+    count.setObjectName("cardHint")
+    count.setAccessibleName("Nombre d'éléments de la liste")
+    table.count_label = count  # type: ignore[attr-defined]
+    table.count_noun = noun  # type: ignore[attr-defined]
+    table.itemSelectionChanged.connect(lambda: update_count(table))
     table.setHorizontalHeaderLabels([h.upper() for h in headers])
     table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
     table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -476,6 +509,7 @@ def fill_table(table: QTableWidget, rows: Sequence[Sequence[Any]]) -> None:
                 item.setData(Qt.ItemDataRole.EditRole, value)
             table.setItem(r, c, item)
     table.resizeColumnsToContents()
+    update_count(table)
 
 
 def selected_value(table: QTableWidget, column: int = 0) -> str | None:

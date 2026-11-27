@@ -34,7 +34,7 @@ from mtlm.app.sets import (
     certainty_label,
 )
 from mtlm.ui.base import fill_table, make_table, selected_value, selected_values
-from mtlm.ui.pages_main import Page, two_columns
+from mtlm.ui.pages_main import Page, two_columns, with_count
 from mtlm.ui.window import UiApp
 
 DECISIONS = {"none": "non décidée", "accepted": "ACCEPTÉE", "rejected": "rejetée"}
@@ -88,16 +88,18 @@ class SetsPage(Page):
             ["N°", "SET", "Format", "Paramètres", "Associations", "Placement"],
             badge_columns=(5,),
             multi=True,
+            noun="SET",
         )
         self.sets.itemSelectionChanged.connect(self.load_selected)
         self.params = make_table(
-            ["Paramètre", "Valeur brute", "Normalisée", "Type", "Optimisation"]
+            ["Paramètre", "Valeur brute", "Normalisée", "Type", "Optimisation"], noun="paramètre"
         )
         self.layout_.addWidget(two_columns(self.sets, self.params), 2)
         self.assoc = make_table(
             ["N°", "Score", "Certitude", "Décision", "Placement", "Outil (robot, indicateur…)"],
             badge_columns=(2, 3, 4),
             multi=True,
+            noun="association",
         )
         self.assoc.itemSelectionChanged.connect(self.load_evidence)
         self.evidence = QPlainTextEdit()
@@ -118,6 +120,11 @@ class SetsPage(Page):
                 "accepter_meilleure",
                 "Accepter la meilleure proposition des SET choisis",
                 self.accept_best,
+            ),
+            self.btn(
+                "corbeille",
+                "Mettre les SET choisis à la Corbeille",
+                lambda: self.trash_selected(self.sets, "sets", "SET"),
             ),
         )
         self.button_row(
@@ -229,7 +236,8 @@ class SetsPage(Page):
         self.evidence.setPlainText(
             "Sélectionnez une association pour voir ses preuves."
             if rows
-            else "Aucun robot correspondant trouvé (SET orphelin)."
+            else "Aucun robot correspondant trouvé (SET orphelin).\n\nPourquoi ?\n"
+            + self._assoc().why_orphan(set_id)
         )
 
     def _assoc_id(self) -> int | None:
@@ -373,6 +381,7 @@ class FamiliesPage(Page):
             ["N°", "Famille", "Plateforme", "Membres", "Versions", "Confiance", "Type"],
             badge_columns=(5,),
             multi=True,
+            noun="famille",
         )
         self.families.itemSelectionChanged.connect(self.load_members)
         self.button_row(*self.select_buttons("familles", self.families))
@@ -382,19 +391,23 @@ class FamiliesPage(Page):
             ["Fichier", "Relation", "Version estimée", "Base", "Chemin"],
             badge_columns=(1,),
             multi=True,
+            noun="fichier",
         )
         self.linked = make_table(
             ["Fichier", "Type", "Lien", "Placement", "Outil", "Indices", "Chemin"],
             badge_columns=(2, 3),
             multi=True,
+            noun="fichier",
         )
-        self.deps = make_table(["Outil", "A besoin de", "Comment", "Fichier utilisé"])
+        self.deps = make_table(
+            ["Outil", "A besoin de", "Comment", "Fichier utilisé"], noun="dépendance"
+        )
         self.layout_.addWidget(self.families, 2)
         self.layout_.addWidget(self.reasons, 1)
         tabs = QTabWidget()
-        tabs.addTab(self.members, "Fichiers de la famille")
-        tabs.addTab(self.linked, "Fichiers liés (images, sons, modèles, DLL…)")
-        tabs.addTab(self.deps, "Dépendances (indicateurs utilisés, bibliothèques)")
+        tabs.addTab(with_count(self.members), "Fichiers de la famille")
+        tabs.addTab(with_count(self.linked), "Fichiers liés (images, sons, modèles, DLL…)")
+        tabs.addTab(with_count(self.deps), "Dépendances (indicateurs utilisés, bibliothèques)")
         self.tabs = tabs
         self.layout_.addWidget(tabs, 2)
         self.button_row(
@@ -443,28 +456,11 @@ class FamiliesPage(Page):
                 "« Fichiers liés ».",
             )
             return
-        unique = [
-            file_id
-            for file_id in file_ids
-            if not int(
-                self.conn.execute(
-                    "SELECT count(*) FROM file_record o JOIN file_record f ON f.id = ?"
-                    " WHERE o.content_id = f.content_id AND o.id <> f.id"
-                    " AND o.presence = 'present'",
-                    (file_id,),
-                ).fetchone()[0]
-            )
-        ]
         paths = selected_values(table, path_column)
         intro = f"{len(file_ids)} fichier(s) choisi(s) : " + ", ".join(paths[:5])
         if len(paths) > 5:
             intro += " …"
-        if unique:
-            intro += (
-                f"\n{len(unique)} d'entre eux sont le SEUL exemplaire de leur contenu "
-                "(version unique) : aucune autre copie ne sera conservée."
-            )
-        self.trash_with_confirmation(file_ids, "familles", intro, allow_unique=bool(unique))
+        self.trash_with_confirmation(file_ids, "familles", intro)
 
     def _service(self) -> FamilyService:
         ctx = self.app.ctx
@@ -607,10 +603,11 @@ class DuplicatesPage(Page):
             ["Groupe", "Fichiers", "Taille", "SHA-256", "Référence", "Choisie par vous"],
             badge_columns=(5,),
             multi=True,
+            noun="groupe",
         )
         self.groups.itemSelectionChanged.connect(self.load_members)
         self.members = make_table(
-            ["Fichier", "Rôle", "Chemin", "Groupe"], badge_columns=(1,), multi=True
+            ["Fichier", "Rôle", "Chemin", "Groupe"], badge_columns=(1,), multi=True, noun="fichier"
         )
         exact_layout.addWidget(self.groups, 1)
         group_buttons = QHBoxLayout()
@@ -637,7 +634,7 @@ class DuplicatesPage(Page):
             self.kind.addItem(label, value)
         self.kind.currentIndexChanged.connect(lambda _i: self.refresh())
         self.similar = make_table(
-            ["Score", "Type", "Fichier A", "Fichier B", "Méthode"], badge_columns=(1,)
+            ["Score", "Type", "Fichier A", "Fichier B", "Méthode"], badge_columns=(1,), noun="paire"
         )
         similar_layout.addWidget(self.kind)
         similar_layout.addWidget(self.similar, 1)
@@ -691,31 +688,11 @@ class DuplicatesPage(Page):
                 "Sélectionnez un ou plusieurs groupes, puis les fichiers à supprimer.",
             )
             return
-        marks = ",".join("?" * len(members))
-        references = {
-            int(r[0])
-            for r in self.conn.execute(
-                "SELECT reference_file_id FROM duplicate_group"
-                f" WHERE reference_file_id IN ({marks})",
-                members,
-            )
-        }
-        kept = [m for m in members if m not in references]
-        if not kept:
-            self.app.dialogs.info(
-                self.win,
-                "Corbeille",
-                "Les fichiers choisis sont des RÉFÉRENCES conservées. Choisissez d'abord une "
-                "autre référence (« Conserver ce fichier comme référence »).",
-            )
-            return
-        note = (
-            f"\n{len(references)} référence(s) sélectionnée(s) ignorée(s) : elles restent en place."
-            if references
-            else ""
-        )
+        # 1.6.0 : vous supprimez exactement ce que vous choisissez, références comprises ;
+        # un autre exemplaire du groupe devient alors la référence. Si tous les exemplaires
+        # d'un contenu sont choisis, le dernier est signalé « exemplaire unique ».
         self.trash_with_confirmation(
-            kept, "doublons", f"{len(kept)} fichier(s) choisi(s) dans les doublons.{note}"
+            members, "doublons", f"{len(members)} fichier(s) choisi(s) dans les doublons."
         )
 
     def _service(self) -> DuplicateService:
@@ -828,16 +805,34 @@ class ArchivesPage(Page):
             "à la Corbeille seulement si tout est vérifié.",
             "banner",
         )
+        filters = QHBoxLayout()
+        self.archive_filter = QComboBox()
+        self.archive_filter.setAccessibleName("Archives affichées")
+        for label, value in (
+            ("Toutes les archives", "toutes"),
+            ("🔒 Protégées par mot de passe", "protegees"),
+            ("Avec un problème (protégées, abîmées, incomplètes)", "problemes"),
+        ):
+            self.archive_filter.addItem(label, value)
+        self.archive_filter.currentIndexChanged.connect(lambda _i: self.refresh())
+        self.protected_count = QLabel("")
+        self.protected_count.setObjectName("cardHint")
+        filters.addWidget(self.archive_filter)
+        filters.addWidget(self.protected_count)
+        filters.addStretch(1)
+        self.layout_.addLayout(filters)
         self.archives = make_table(
             ["N°", "Archive", "Format", "Fichiers", "Contient", "SET", "État"],
             badge_columns=(6,),
             multi=True,
+            noun="archive",
         )
         self.archives.itemSelectionChanged.connect(self.load_entries)
         self.layout_.addWidget(self.archives, 2)
         self.button_row(*self.select_buttons("archives", self.archives))
         self.entries = make_table(
-            ["Fichier dans l'archive", "Type", "Taille", "Lecture", "Déjà sur le disque ?"]
+            ["Fichier dans l'archive", "Type", "Taille", "Lecture", "Déjà sur le disque ?"],
+            noun="fichier",
         )
         self.layout_.addWidget(self.entries, 2)
         self.button_row(
@@ -866,6 +861,20 @@ class ArchivesPage(Page):
             "gzip": "GZ / TAR.GZ",
             "other": "TAR / BZ2 / XZ",
         }
+        service = self._service()
+        every = service.rows()
+        mode = self.archive_filter.currentData()
+        rows = (
+            [r for r in every if r.protected]
+            if mode == "protegees"
+            else [r for r in every if r.status != "ok" or r.protected]
+            if mode == "problemes"
+            else every
+        )
+        protected = sum(1 for r in every if r.protected)
+        self.protected_count.setText(
+            f"🔒 {protected} archive(s) protégée(s) par mot de passe" if protected else ""
+        )
         fill_table(
             self.archives,
             [
@@ -878,7 +887,7 @@ class ArchivesPage(Page):
                     r.sets,
                     r.verdict,
                 )
-                for r in self._service().rows()
+                for r in rows
             ],
         )
         self.load_entries()
@@ -987,6 +996,7 @@ class RiskPage(Page):
             ["N°", "Niveau", "Fichier", "Ce qu'il pourrait faire"],
             badge_columns=(1,),
             multi=True,
+            noun="fichier",
         )
         self.layout_.addWidget(self.findings, 1)
         self.summary = QLabel("Cliquez sur « Rechercher les fichiers à risque ».")
@@ -1034,11 +1044,7 @@ class RiskPage(Page):
             self.app.dialogs.info(self.win, "Corbeille", "Cliquez sur les fichiers concernés.")
             return
         self.trash_with_confirmation(
-            chosen,
-            "familles",
-            f"{len(chosen)} fichier(s) signalé(s) à risque. Ils peuvent être les seuls "
-            "exemplaires : ils iront quand même dans la Corbeille du Mac, récupérables.",
-            allow_unique=True,
+            chosen, "risques", f"{len(chosen)} fichier(s) signalé(s) à risque."
         )
 
     def refresh(self) -> None:

@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMainWindow,
     QStackedWidget,
+    QTableWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -149,6 +150,7 @@ class MainWindow(QMainWindow):
             self.pages[page.key] = page
             self.stack.addWidget(page)
         self._apply_tips()
+        self._place_counts()
         self.sidebar = QListWidget()
         self.sidebar.setObjectName("navigation")
         self.sidebar.setAccessibleName("Navigation entre les écrans")
@@ -206,6 +208,19 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(
             "Prêt. Rien n'est modifié dans vos dossiers sans votre confirmation."
         )
+
+    def _place_counts(self) -> None:
+        """Sous chaque liste, son nombre d'éléments et le nombre sélectionné (1.6.0)."""
+        for page in self.pages.values():
+            for table in page.findChildren(QTableWidget):
+                label = getattr(table, "count_label", None)
+                parent = table.parentWidget()
+                layout = parent.layout() if parent is not None else None
+                if label is None or layout is None or label.parent() is not None:
+                    continue
+                index = layout.indexOf(table)
+                if index >= 0 and isinstance(layout, QVBoxLayout):
+                    layout.insertWidget(index + 1, label)
 
     def _apply_tips(self) -> None:
         """Bulles d'aide des zones (listes, filtres) ; celles des boutons sont posées par le

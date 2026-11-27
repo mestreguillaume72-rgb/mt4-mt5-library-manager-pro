@@ -33,7 +33,17 @@ from mtlm.hashing.sha256 import UnstableFileError, hash_file
 from mtlm.store.database import transaction
 from mtlm.transfer.trash import TrashBackend, TrashError, put_back
 
-ORIGINS = ("doublons", "quarantaine", "familles", "archives")
+ORIGINS = (
+    "doublons",
+    "quarantaine",
+    "familles",
+    "archives",
+    "explorateur",
+    "sets",
+    "sources",
+    "outils",
+    "risques",
+)
 
 
 class DeletionError(MtlmError):
@@ -141,6 +151,40 @@ class DeletionService:
             int(row[7]),
         )
 
+    def _hash_now(self, file_id: int) -> None:
+        """Fichier présent mais **pas encore lu en entier** (analyse ciblée) : son empreinte
+        est calculée maintenant, pour pouvoir le vérifier avant la Corbeille."""
+        row = self._conn.execute(
+            "SELECT s.path, f.rel_path_bytes, f.size, f.mtime_ns, f.inode, f.device"
+            " FROM file_record f JOIN source_root s ON s.id = f.root_id WHERE f.id = ?"
+            " AND f.presence = 'present' AND f.file_type = 'file' AND f.is_symlink = 0"
+            " AND f.is_dataless = 0 AND f.hash_state <> 'validated' AND s.status = 'ok'",
+            (file_id,),
+        ).fetchone()
+        if row is None:
+            return
+        path = os.path.join(os.fsencode(row[0]), bytes(row[1]))  # noqa: PTH118
+        identity = FileIdentity(int(row[2]), int(row[3]), int(row[4]), int(row[5]))
+        try:
+            if path_identity(path) != identity:
+                return
+            result = hash_file(path, expected=identity)
+        except (OSError, UnstableFileError):
+            return
+        with transaction(self._conn):
+            self._conn.execute(
+                "INSERT OR IGNORE INTO content(sha256, size) VALUES (?, ?)",
+                (result.sha256, result.size),
+            )
+            content_id = self._conn.execute(
+                "SELECT id FROM content WHERE sha256 = ?", (result.sha256,)
+            ).fetchone()[0]
+            self._conn.execute(
+                "UPDATE file_record SET hash_state = 'validated', content_id = ?,"
+                " hash_error = NULL WHERE id = ?",
+                (content_id, file_id),
+            )
+
     def _unchanged(self, item: _File) -> bool:
         try:
             if path_identity(item.path) != item.identity:
@@ -175,6 +219,45 @@ class DeletionService:
                 return "quarantaine", None, bytes(copy)
         return None
 
+    def unique_among(self, file_ids: list[int]) -> list[int]:
+        """Fichiers choisis qui seront des **exemplaires uniques** au moment de partir : aucune
+        copie identique ne reste ailleurs (d'après l'analyse ; la vérification octet par octet
+        a lieu au moment de la Corbeille). Si plusieurs copies identiques sont toutes choisies,
+        seule la dernière est unique. Un fichier sans empreinte compte comme unique."""
+        chosen = list(dict.fromkeys(file_ids))
+        content_of: dict[int, int | None] = {}
+        for start in range(0, len(chosen), 500):
+            chunk = chosen[start : start + 500]
+            for file_id, content_id in self._conn.execute(
+                "SELECT id, CASE WHEN hash_state = 'validated' THEN content_id END"
+                f" FROM file_record WHERE id IN ({','.join('?' * len(chunk))})",
+                chunk,
+            ):
+                content_of[int(file_id)] = int(content_id) if content_id is not None else None
+        chosen_set = set(chosen)
+        outside: dict[int, bool] = {}
+        for content_id in {c for c in content_of.values() if c is not None}:
+            outside[content_id] = any(
+                int(other) not in chosen_set
+                for (other,) in self._conn.execute(
+                    "SELECT f.id FROM file_record f JOIN source_root s ON s.id = f.root_id"
+                    " WHERE f.content_id = ? AND f.presence = 'present' AND s.status = 'ok'"
+                    " AND f.hash_state = 'validated'",
+                    (content_id,),
+                )
+            )
+        last: dict[int, int] = {}
+        for file_id in chosen:
+            content_id = content_of.get(file_id)
+            if content_id is not None:
+                last[content_id] = file_id
+        return [
+            f
+            for f in chosen
+            if content_of.get(f) is None
+            or (not outside[content_of[f]] and last[content_of[f]] == f)  # type: ignore[index]
+        ]
+
     def trash(
         self, file_ids: list[int], origin: str, *, allow_unique: bool = False
     ) -> DeletionResult:
@@ -186,6 +269,9 @@ class DeletionService:
         removed: set[int] = set()
         for file_id in dict.fromkeys(file_ids):
             item = self._file(file_id)
+            if item is None:
+                self._hash_now(file_id)
+                item = self._file(file_id)
             if item is None:
                 result.refused.append((file_id, "fichier absent, non analysé ou non ordinaire"))
                 continue
@@ -263,6 +349,9 @@ class DeletionService:
         if self._backend is None or origin not in ORIGINS:
             return False
         item = self._file(file_id)
+        if item is None:
+            self._hash_now(file_id)
+            item = self._file(file_id)
         if item is None or not self._unchanged(item):
             return False
         try:
@@ -331,6 +420,20 @@ class DeletionService:
         else:
             self._conn.execute(
                 "UPDATE duplicate_group SET member_count = ? WHERE id = ?", (left, group_id)
+            )
+            # La référence est partie à la Corbeille (choix de l'utilisateur) : un autre
+            # exemplaire du groupe devient la référence.
+            self._conn.execute(
+                "UPDATE duplicate_group SET reference_chosen_by_user = 0,"
+                " reference_file_id = (SELECT min(file_id) FROM duplicate_member"
+                "  WHERE group_id = ?) WHERE id = ? AND reference_file_id NOT IN"
+                " (SELECT file_id FROM duplicate_member WHERE group_id = ?)",
+                (group_id, group_id, group_id),
+            )
+            self._conn.execute(
+                "UPDATE duplicate_member SET is_reference = (file_id = (SELECT"
+                " reference_file_id FROM duplicate_group WHERE id = ?)) WHERE group_id = ?",
+                (group_id, group_id),
             )
 
     # ---- remise en place -------------------------------------------------------------------

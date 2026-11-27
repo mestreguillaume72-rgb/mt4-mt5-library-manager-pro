@@ -156,8 +156,10 @@ class DuplicateService:
             "SELECT f.content_id, f.id, f.rel_path, f.mtime_ns, f.in_quarantine, f.is_dataless,"
             " f.file_type, f.size FROM file_record f JOIN source_root s ON s.id = f.root_id"
             " WHERE s.status = 'ok' AND f.presence = 'present' AND f.hash_state = 'validated'"
-            " AND f.content_id IN (SELECT content_id FROM file_record WHERE presence = 'present'"
-            "   AND hash_state = 'validated' GROUP BY content_id HAVING count(*) > 1)"
+            " AND f.content_id IN (SELECT g.content_id FROM file_record g"
+            "   JOIN source_root gs ON gs.id = g.root_id WHERE gs.status = 'ok'"
+            "   AND g.presence = 'present' AND g.hash_state = 'validated'"
+            "   GROUP BY g.content_id HAVING count(*) > 1)"
             " ORDER BY f.content_id, f.id"
         ):
             members[int(row[0])].append(
@@ -178,6 +180,8 @@ class DuplicateService:
             ).fetchall()
         )
         for content_id, files in members.items():
+            if len(files) < 2:
+                continue  # jamais de « groupe » d'un seul fichier
             sha = bytes(shas[content_id])
             size = files[0][5]
             ids = {f[0] for f in files}

@@ -56,3 +56,15 @@ n'est copié qu'une fois.
 Résultat : un nouveau dossier « Robots isolés <date> » (ou « Indicateurs isolés <date> »),
 par exemple `Or/Gold Robot/…`, `Scalpers/…`, `Autre robot/…`. C'est une **copie vérifiée** :
 vos fichiers d'origine ne bougent pas.
+
+## Supprimer, recommencer à zéro (1.7.0)
+
+- **Mettre à la Corbeille** : dans l'Explorateur, les SET, Sources MQ4/MQ5, Robots isolés,
+  Indicateurs isolés, Doublons, Familles, Archives, Fichiers à risque. Cliquez sur les
+  lignes voulues, puis le bouton. Si un fichier est le **seul exemplaire** de son contenu,
+  l'application le dit et vous demande si vous le supprimez aussi. Tout reste récupérable
+  avec « Remettre en place » (écran Quarantaine, onglet Corbeille) tant que la Corbeille du Mac
+  n'est pas vidée.
+- **Recommencer l'analyse à zéro** (écran Analyse) : efface les résultats de l'analyse
+  précédente pour repartir de rien. Rien n'est touché sur le disque.
+- Sous chaque liste : le **nombre d'éléments** et le nombre sélectionné.
