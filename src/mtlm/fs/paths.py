@@ -10,13 +10,15 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from mtlm.fs.reader import stored_id
+
 
 def identity(path: Path) -> tuple[int, int] | None:
     try:
         st = os.stat(path)
     except OSError:
         return None
-    return (st.st_dev, st.st_ino)
+    return (stored_id(st.st_dev), stored_id(st.st_ino))
 
 
 def is_within(child: Path, ancestor: Path) -> bool:
