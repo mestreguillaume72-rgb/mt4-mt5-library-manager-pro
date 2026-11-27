@@ -106,7 +106,7 @@ def autotest(source: Path, report: Path | None = None) -> int:
 
     qt_app = QApplication.instance() or QApplication([])
     apply_theme(qt_app)  # type: ignore[arg-type]
-    from mtlm.audit.logs import shutdown_logging
+    from mtlm.app.context import close_logs
 
     # Windows : un fichier ouvert (journal) ne peut pas être effacé ; le journal est fermé
     # avant le nettoyage, et un reste éventuel n'interrompt jamais l'auto-diagnostic.
@@ -145,7 +145,7 @@ def autotest(source: Path, report: Path | None = None) -> int:
         files = int(window.pages["tableau"].values["files"].text())
         log = window.pages["analyse"].log.toPlainText()
         window.app.ctx.close()
-        shutdown_logging()
+        close_logs()
     ok = len(pages) == len(PAGES) and files > 0 and not dialogs.errors and log.count("✔") == 8
     lines = [
         f"Auto-diagnostic : {'RÉUSSI' if ok else 'ÉCHEC'} — {len(pages)} écran(s), "

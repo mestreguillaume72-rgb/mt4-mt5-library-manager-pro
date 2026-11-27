@@ -15,7 +15,7 @@ from mtlm import ENGINE_VERSION, __version__
 from mtlm.app.jobs import JobStore
 from mtlm.app.quarantine import QuarantineService
 from mtlm.audit.journal import ACTOR_SYSTEM, AuditJournal
-from mtlm.audit.logs import setup_logging
+from mtlm.audit.logs import setup_logging, shutdown_logging
 from mtlm.core.clock import Clock, SystemClock
 from mtlm.core.paths import AppPaths
 from mtlm.store.backup import backup_database
@@ -112,3 +112,9 @@ def open_app(paths: AppPaths, clock: Clock | None = None, *, recover: bool = Tru
         conn.close()
         raise
     return AppContext(paths, used_clock, conn, journal, migrator, log_file, applied)
+
+
+def close_logs() -> None:
+    """Ferme le fichier journal de l'application (Windows : sinon il ne peut pas être
+    effacé ni déplacé tant que l'application tourne)."""
+    shutdown_logging()
