@@ -49,15 +49,27 @@ jobs:
           uv run python -c "import sys; from mtlm.ui.main import main; sys.exit(main(['x', '--autotest', 'src', '--rapport', 'source.log']))" || true
           cat source.log
       - name: Auto-diagnostic (application construite)
-        timeout-minutes: 25
+        timeout-minutes: 15
+        shell: pwsh
         run: |
-          APP="dist/MT4-MT5-Library-Manager-PRO"
-          find "$APP" -type f -exec sha256sum {} + | sort > avant.txt
-          "$APP/MT4-MT5-Library-Manager-PRO.exe" --autotest "$APP" --rapport autotest.log || true
-          cat autotest.log
-          grep -q "RÉUSSI" autotest.log
-          find "$APP" -type f -exec sha256sum {} + | sort > apres.txt
-          diff avant.txt apres.txt && echo "Contenu de l'application inchangé après analyse."
+          $app = "dist\MT4-MT5-Library-Manager-PRO"
+          Write-Host "Modules d'affichage Qt embarqués :"
+          Get-ChildItem -Recurse $app -Filter "q*.dll" | Where-Object { $_.Directory.Name -eq "platforms" } | ForEach-Object { $_.Name }
+          $before = Get-ChildItem -Recurse -File $app | Get-FileHash | Sort-Object Path | ForEach-Object { "$($_.Hash) $($_.Path)" }
+          $report = Join-Path $PWD "autotest.log"
+          # Affichage réel de Windows (la session de la machine de test a un bureau).
+          $env:QT_QPA_PLATFORM = "windows"
+          $p = Start-Process "$app\MT4-MT5-Library-Manager-PRO.exe" -ArgumentList "--autotest", "$app", "--rapport", "`"$report`"" -PassThru
+          if (-not $p.WaitForExit(300000)) {
+            Write-Host "Délai dépassé : application arrêtée. Fenêtres ouvertes :"
+            Get-Process | Where-Object { $_.MainWindowTitle } | Format-Table ProcessName, MainWindowTitle -AutoSize
+            $p.Kill()
+          }
+          if (Test-Path $report) { Get-Content $report } else { Write-Host "Aucun rapport écrit." }
+          if (-not (Test-Path $report) -or -not (Select-String -Path $report -Pattern "RÉUSSI")) { throw "auto-diagnostic en échec" }
+          $after = Get-ChildItem -Recurse -File $app | Get-FileHash | Sort-Object Path | ForEach-Object { "$($_.Hash) $($_.Path)" }
+          if (Compare-Object $before $after) { throw "le contenu de l'application a changé" }
+          Write-Host "Contenu de l'application inchangé après analyse."
       - name: Installateur (Inno Setup)
         shell: pwsh
         run: |
@@ -72,7 +84,10 @@ jobs:
           Start-Process $setup.FullName -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/CURRENTUSER" -Wait
           $exe = Get-ChildItem "$env:LOCALAPPDATA\Programs" -Recurse -Filter "MT4-MT5-Library-Manager-PRO.exe" | Select-Object -First 1
           if (-not $exe) { throw "application installée introuvable" }
-          Start-Process $exe.FullName -ArgumentList "--autotest",$exe.DirectoryName,"--rapport","installe.log" -Wait
+          $env:QT_QPA_PLATFORM = "windows"
+          $report = Join-Path $PWD "installe.log"
+          $p = Start-Process $exe.FullName -ArgumentList "--autotest",$exe.DirectoryName,"--rapport","`"$report`"" -PassThru
+          if (-not $p.WaitForExit(300000)) { $p.Kill(); Write-Host "Délai dépassé" }
           Get-Content installe.log
           if (-not (Select-String -Path installe.log -Pattern "RÉUSSI")) { throw "auto-diagnostic en échec" }
       - name: Dossier d'installation (installateur + guide)
