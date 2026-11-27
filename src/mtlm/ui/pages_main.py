@@ -1048,7 +1048,28 @@ class AnalysisPage(Page):
         if value is None:
             self.app.dialogs.info(self.win, "Erreurs", "Sélectionnez une tâche.")
             return
-        errors = InventoryService(self.conn).errors(int(value))
+        service = InventoryService(self.conn)
+        kind = self.conn.execute("SELECT kind FROM job WHERE id = ?", (int(value),)).fetchone()
+        if kind is not None and kind[0] == "hash":
+            groups = service.hash_error_summary()
+            text = "\n\n".join(
+                f"{count} fichier(s) : {message}\n   exemple : {example}"
+                for message, count, example in groups
+            )
+            if any(
+                "not permitted" in m.casefold() or "permission" in m.casefold()
+                for m, _c, _e in groups
+            ):
+                text += (
+                    "\n\nmacOS refuse la lecture : donnez à l'application l'« Accès complet au "
+                    "disque » (Réglages Système → Confidentialité et sécurité → Accès complet au "
+                    "disque → + → l'application), puis relancez l'analyse."
+                )
+            self.app.dialogs.info(
+                self.win, f"Erreurs de la tâche {value}", text or "Aucune erreur d'empreinte."
+            )
+            return
+        errors = service.errors(int(value))
         text = "\n".join(f"{e.rel_path or '(racine)'} : {e.message}" for e in errors)
         self.app.dialogs.info(
             self.win,

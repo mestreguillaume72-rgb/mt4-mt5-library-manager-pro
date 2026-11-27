@@ -226,6 +226,18 @@ class InventoryService:
             and row[20] not in EXPECTED[base.ext],
         )
 
+    def hash_error_summary(self, limit: int = 12) -> list[tuple[str, int, str]]:
+        """Erreurs d'empreinte regroupées : (message, nombre, exemple de fichier)."""
+        return [
+            (str(r[0]), int(r[1]), str(r[2]))
+            for r in self._conn.execute(
+                "SELECT hash_error, count(*), min(rel_path) FROM file_record"
+                " WHERE hash_state = 'error' AND presence = 'present'"
+                " GROUP BY hash_error ORDER BY count(*) DESC LIMIT ?",
+                (limit,),
+            )
+        ]
+
     def errors(self, job_id: int, limit: int = 1000) -> list[ScanErrorRow]:
         rows = self._conn.execute(
             "SELECT job_id, root_id, rel_path_bytes, errno, message, at FROM scan_error"
