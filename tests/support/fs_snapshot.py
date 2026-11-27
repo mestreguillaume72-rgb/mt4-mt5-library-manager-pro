@@ -115,12 +115,15 @@ def take_snapshot(root: Path) -> Snapshot:
                     digest = _hash_file(entry.path) if st.st_mode & stat.S_IRUSR else None
                 else:
                     kind, digest = "other", None
+                # Windows (NTFS) met à jour la date d'un DOSSIER en différé, après coup : elle
+                # n'est pas comparée (le contenu et les dates des fichiers le sont).
+                lazy_dir = kind == "dir" and sys.platform == "win32"
                 result[rel] = EntryState(
                     kind,
                     st.st_size,
                     digest,
-                    st.st_mtime_ns,
-                    st.st_ctime_ns,
+                    0 if lazy_dir else st.st_mtime_ns,
+                    0 if lazy_dir else st.st_ctime_ns,
                     st.st_mode,
                     st.st_uid,
                     st.st_gid,

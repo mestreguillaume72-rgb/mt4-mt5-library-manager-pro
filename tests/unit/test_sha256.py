@@ -6,6 +6,7 @@ import hashlib
 import os
 import shutil
 import subprocess
+import sys
 import tracemalloc
 from pathlib import Path
 
@@ -51,7 +52,8 @@ def test_identique_a_l_outil_systeme(tmp_path: Path) -> None:
     tool = shutil.which("sha256sum")
     cmd = [tool, str(f)] if tool else [str(shutil.which("shasum")), "-a", "256", str(f)]
     output = subprocess.run(cmd, capture_output=True, check=True, text=True).stdout
-    assert hash_file(b(f)).sha256.hex() == output.split()[0]
+    # Windows : sha256sum préfixe « \\ » quand le chemin contient « \\ ».
+    assert hash_file(b(f)).sha256.hex() == output.split()[0].lstrip("\\")
 
 
 def test_memoire_constante_gros_fichier(tmp_path: Path) -> None:
@@ -84,6 +86,9 @@ def test_modifie_pendant_la_lecture(tmp_path: Path) -> None:
         hash_file(b(f), chunk_size=65536, on_chunk=grow)
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="Windows interdit de remplacer un fichier ouvert"
+)
 def test_remplace_pendant_la_lecture(tmp_path: Path) -> None:
     f = tmp_path / "f"
     f.write_bytes(b"a" * 200_000)

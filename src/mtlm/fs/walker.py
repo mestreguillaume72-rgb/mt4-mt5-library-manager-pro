@@ -20,6 +20,8 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
+from mtlm.fs.reader import stored_id
+
 # Drapeau macOS des fichiers iCloud non téléchargés (sys/stat.h : SF_DATALESS).
 SF_DATALESS = 0x40000000
 # Windows : fichiers OneDrive (ou autres nuages) non téléchargés — les lire les téléchargerait.
@@ -102,8 +104,8 @@ def _entry_from_stat(rel: bytes, st: os.stat_result) -> WalkEntry:
         mtime_ns=st.st_mtime_ns,
         ctime_ns=st.st_ctime_ns,
         birthtime_ns=int(birth * 1_000_000_000) if birth is not None else None,
-        inode=st.st_ino,
-        device=st.st_dev,
+        inode=stored_id(st.st_ino),
+        device=stored_id(st.st_dev),
         mode=st.st_mode,
         is_dataless=bool(flags & SF_DATALESS) or bool(attributes & _WINDOWS_CLOUD),
     )

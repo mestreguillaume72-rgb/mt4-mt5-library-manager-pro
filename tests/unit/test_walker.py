@@ -72,6 +72,9 @@ def test_liens_symboliques_cycliques_non_suivis(tmp_path: Path) -> None:
     assert stats.directories == 3
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="simulation de scandir (Windows relit l'état complet)"
+)
 def test_meme_dossier_atteint_deux_fois_ignore(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -165,6 +168,9 @@ class _Scandir:
             yield _BrokenEntry(entry) if entry.name == self.broken else entry
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="simulation de scandir (Windows relit l'état complet)"
+)
 def test_fichier_inaccessible_n_arrete_pas(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = tmp_path / "src"
     root.mkdir()
@@ -177,7 +183,9 @@ def test_fichier_inaccessible_n_arrete_pas(tmp_path: Path, monkeypatch: pytest.M
     assert [i.rel_path for i in items if isinstance(i, WalkError)] == ["b.mq4"]
 
 
-@pytest.mark.skipif(sys.platform == "darwin", reason="APFS refuse les noms non UTF-8")
+@pytest.mark.skipif(
+    sys.platform in ("darwin", "win32"), reason="APFS et NTFS refusent les noms non UTF-8"
+)
 def test_nom_non_utf8_conserve_en_octets(tmp_path: Path) -> None:
     root = tmp_path / "src"
     root.mkdir()

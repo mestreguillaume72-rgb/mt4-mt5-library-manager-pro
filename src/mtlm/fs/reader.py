@@ -26,6 +26,18 @@ class NotRegularFileError(OSError):
     """Le chemin ne désigne pas un fichier ordinaire : il ne sera pas lu."""
 
 
+_MASK64 = (1 << 64) - 1
+
+
+def stored_id(value: int) -> int:
+    """Numéro de fichier ou de disque ramené à un entier SQLite (64 bits signé). Sous
+    Windows (NTFS, ReFS), ces numéros peuvent dépasser 2⁶³, voire tenir sur 128 bits."""
+    folded = value
+    while folded > _MASK64:
+        folded = (folded & _MASK64) ^ (folded >> 64)
+    return folded - (1 << 64) if folded >= 1 << 63 else folded
+
+
 @dataclass(frozen=True)
 class FileIdentity:
     size: int
@@ -35,7 +47,7 @@ class FileIdentity:
 
     @classmethod
     def of(cls, st: os.stat_result) -> FileIdentity:
-        return cls(st.st_size, st.st_mtime_ns, st.st_ino, st.st_dev)
+        return cls(st.st_size, st.st_mtime_ns, stored_id(st.st_ino), stored_id(st.st_dev))
 
 
 class ReadOnlyFile:

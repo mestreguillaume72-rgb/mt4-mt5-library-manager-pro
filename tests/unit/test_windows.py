@@ -45,3 +45,16 @@ def test_dossiers_metatrader_pour_mac(tmp_path: Path) -> None:
     found = metatrader_folders({}, "darwin", tmp_path)
     assert found == [drive / "Program Files (x86)" / "MetaTrader 4" / "MQL4"]
     assert metatrader_folders({}, "linux", tmp_path) == []
+
+
+def test_numeros_de_fichier_geants_de_windows() -> None:
+    """NTFS/ReFS : numéros de fichier jusqu'à 128 bits, ramenés à un entier SQLite stable."""
+    from mtlm.fs.reader import stored_id
+
+    for value in (0, 42, 2**63 - 1, 2**63, 2**64 - 1, 2**100 + 7, 2**128 - 1):
+        folded = stored_id(value)
+        assert -(2**63) <= folded < 2**63
+        assert folded == stored_id(value)
+    assert stored_id(42) == 42
+    assert stored_id(2**64 - 1) == -1
+    assert stored_id(2**100 + 7) != stored_id(2**100 + 8)

@@ -132,7 +132,11 @@ def copy_verified(
             raise CopyError("Le contenu lu ne correspond pas à l'empreinte attendue")
         if _sha_of(temp) != expected_sha256:
             raise CopyError("Copie corrompue : l'empreinte relue est différente")
-        os.utime(temp, ns=(before.mtime_ns, before.mtime_ns), follow_symlinks=False)
+        # Windows : « follow_symlinks » n'existe pas pour utime (le fichier n'est pas un lien).
+        if os.utime in os.supports_follow_symlinks:
+            os.utime(temp, ns=(before.mtime_ns, before.mtime_ns), follow_symlinks=False)
+        else:
+            os.utime(temp, ns=(before.mtime_ns, before.mtime_ns))
         _place_without_overwrite(temp, destination)
         _fsync_dir(parent)
     except OSError as exc:
