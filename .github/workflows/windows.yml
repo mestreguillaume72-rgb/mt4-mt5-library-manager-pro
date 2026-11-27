@@ -86,7 +86,7 @@ jobs:
           if (-not $exe) { throw "application installée introuvable" }
           $env:QT_QPA_PLATFORM = "windows"
           $report = Join-Path $PWD "installe.log"
-          $p = Start-Process $exe.FullName -ArgumentList "--autotest",$exe.DirectoryName,"--rapport","`"$report`"" -PassThru
+          $p = Start-Process $exe.FullName -ArgumentList "--autotest","`"$($exe.DirectoryName)`"","--rapport","`"$report`"" -PassThru
           if (-not $p.WaitForExit(300000)) { $p.Kill(); Write-Host "Délai dépassé" }
           Get-Content installe.log
           if (-not (Select-String -Path installe.log -Pattern "RÉUSSI")) { throw "auto-diagnostic en échec" }

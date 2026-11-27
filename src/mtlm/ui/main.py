@@ -171,7 +171,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         report = None
         if "--rapport" in args and len(args) > args.index("--rapport") + 1:
             report = Path(args[args.index("--rapport") + 1])
-        return autotest(target, report)
+        try:
+            return autotest(target, report)
+        except Exception as exc:  # jamais de fenêtre d'erreur bloquante : un rapport d'échec
+            text = f"Auto-diagnostic : ÉCHEC — {type(exc).__name__} : {exc}"
+            if report is not None:
+                with report.open("a", encoding="utf-8") as handle:
+                    handle.write(text + "\n")
+            if sys.stdout is not None:
+                print(text)
+            return 1
     qt_app = QApplication.instance() or QApplication(args)
     qt_app.setApplicationName(APP_NAME)
     apply_theme(qt_app)  # type: ignore[arg-type]
