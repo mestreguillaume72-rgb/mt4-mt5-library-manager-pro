@@ -57,6 +57,7 @@ def test_ordre_deterministe(tmp_path: Path) -> None:
     ]
 
 
+@pytest.mark.skipif(os.name != "posix", reason="liens symboliques, tubes et droits POSIX")
 def test_liens_symboliques_cycliques_non_suivis(tmp_path: Path) -> None:
     root = tmp_path / "src"
     (root / "a" / "b").mkdir(parents=True)
@@ -126,6 +127,7 @@ def test_dossier_illisible_simule(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
 @pytest.mark.skipif(
     os.name != "posix" or os.geteuid() == 0, reason="l'administrateur ignore les permissions"
 )
+@pytest.mark.skipif(os.name != "posix", reason="liens symboliques, tubes et droits POSIX")
 def test_dossier_illisible_reel(tmp_path: Path) -> None:
     root = tmp_path / "src"
     (root / "ferme").mkdir(parents=True)
@@ -188,6 +190,7 @@ def test_nom_non_utf8_conserve_en_octets(tmp_path: Path) -> None:
     assert entry.ext == "mq4"
 
 
+@pytest.mark.skipif(os.name != "posix", reason="liens symboliques, tubes et droits POSIX")
 def test_tube_inventorie_sans_etre_lu(tmp_path: Path) -> None:
     root = tmp_path / "src"
     root.mkdir()

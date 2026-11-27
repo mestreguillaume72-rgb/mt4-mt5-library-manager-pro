@@ -8,7 +8,6 @@ changé et qu'aucun fichier n'y a été créé. Étendu à chaque phase avec les
 from __future__ import annotations
 
 import io
-import resource
 import sys
 import time
 from pathlib import Path
@@ -129,8 +128,13 @@ def test_charge_corpus_et_invariant(
     durations = run_all_commands(environ, clock, corpus, tmp_path)
     after = take_snapshot(corpus)
     files = sum(1 for state in after.values() if state.kind == "file")
-    rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-    rss_mib = rss / (1024 * 1024) if sys.platform == "darwin" else rss / 1024  # octets / Kio
+    if sys.platform == "win32":
+        rss_mib = 0.0  # mesure non disponible sous Windows (module « resource » absent)
+    else:
+        import resource
+
+        rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        rss_mib = rss / (1024 * 1024) if sys.platform == "darwin" else rss / 1024
     print(
         f"\n[charge {n_files}] génération {generated - started:.1f}s ; "
         f"instantané {snap - generated:.1f}s ; fichiers {files} ; "

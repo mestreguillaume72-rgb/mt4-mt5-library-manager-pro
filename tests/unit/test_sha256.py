@@ -128,6 +128,7 @@ def test_lecture_interrompue_propage_l_erreur(tmp_path: Path) -> None:
     assert f.read_bytes() == b"x" * 200_000  # rien n'a été écrit
 
 
+@pytest.mark.skipif(os.name != "posix", reason="liens symboliques, tubes et droits POSIX")
 def test_lien_symbolique_jamais_suivi(tmp_path: Path) -> None:
     target = tmp_path / "cible"
     target.write_bytes(b"x")
@@ -137,6 +138,7 @@ def test_lien_symbolique_jamais_suivi(tmp_path: Path) -> None:
         hash_file(b(link))
 
 
+@pytest.mark.skipif(os.name != "posix", reason="liens symboliques, tubes et droits POSIX")
 def test_tube_jamais_lu(tmp_path: Path) -> None:
     fifo = tmp_path / "tube"
     os.mkfifo(fifo)

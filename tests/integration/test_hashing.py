@@ -139,6 +139,7 @@ def test_reprise_apres_fermeture_brutale(
         assert InventoryService(ctx.conn).stats().by_hash_state == {"validated": 60}
 
 
+@pytest.mark.skipif(os.name != "posix", reason="liens symboliques, tubes et droits POSIX")
 def test_fichiers_non_lus(tmp_path: Path, ctx: AppContext) -> None:
     root = tmp_path / "lib"
     root.mkdir()
