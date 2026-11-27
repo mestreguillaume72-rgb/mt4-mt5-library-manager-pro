@@ -782,7 +782,7 @@ class ReportsPage(Page):
         form = QFormLayout()
         self.kind = QComboBox()
         for key, spec in KINDS.items():
-            self.kind.addItem(spec.label, key)
+            self.kind.addItem(tr(spec.label), key)
         form.addRow(tr("Export"), self.kind)
         self.layout_.addLayout(form)
         self.button_row(
@@ -885,10 +885,10 @@ class SettingsPage(Page):
                 field.setSingleStep(0.05)
                 field.setRange(spec.minimum, spec.maximum)
             field.setObjectName(f"parametres.{key}")
-            field.setToolTip(spec.help)
-            field.setAccessibleName(spec.label)
+            field.setToolTip(tr(spec.help))
+            field.setAccessibleName(tr(spec.label))
             self.fields[key] = field
-            form.addRow(spec.label, field)
+            form.addRow(tr(spec.label), field)
         self.layout_.addLayout(form)
         self.button_row(
             self.btn("enregistrer", tr("Enregistrer"), self.save),

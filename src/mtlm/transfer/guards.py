@@ -9,6 +9,7 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from mtlm.core.errors import MtlmError
+from mtlm.core.i18n import tr
 from mtlm.fs.paths import is_within
 
 
@@ -31,15 +32,22 @@ def check_destination(
         # Un disque externe débranché laisse son point de montage parent (/Volumes) : sans ce
         # contrôle, l'arborescence serait recréée sur le disque interne.
         raise DestinationError(
-            f"Destination indisponible : {destination} n'existe pas (disque débranché ?)"
+            tr(
+                "Destination indisponible : {destination} n'existe pas (disque débranché ?)",
+                destination=destination,
+            )
         )
     existing = target
     while not existing.exists():
         if existing.parent == existing:
-            raise DestinationError(f"Destination inaccessible : {destination}")
+            raise DestinationError(
+                tr("Destination inaccessible : {destination}", destination=destination)
+            )
         existing = existing.parent
     if not existing.is_dir():
-        raise DestinationError(f"La destination n'est pas un dossier : {existing}")
+        raise DestinationError(
+            tr("La destination n'est pas un dossier : {existing}", existing=existing)
+        )
 
     def conflicts(protected: Path) -> bool:
         # La destination (ou son premier dossier existant) est dans la zone protégée…
@@ -51,16 +59,24 @@ def check_destination(
     for root in source_roots:
         if conflicts(root):
             raise DestinationError(
-                f"Destination refusée : {target} chevauche la source {root}. La quarantaine et "
-                "la bibliothèque organisée doivent être distinctes des sources."
+                tr(
+                    "Destination refusée : {target} chevauche la source {root}. La "
+                    "quarantaine et la bibliothèque organisée doivent être distinctes des "
+                    "sources.",
+                    target=target,
+                    root=root,
+                )
             )
     for app_dir in app_dirs:
         if conflicts(app_dir):
             raise DestinationError(
-                f"Destination refusée : {target} chevauche les dossiers de l'application."
+                tr(
+                    "Destination refusée : {target} chevauche les dossiers de l'application.",
+                    target=target,
+                )
             )
     if not os.access(existing, os.W_OK | os.X_OK):
-        raise DestinationError(f"Pas de droit d'écriture sur {existing}")
+        raise DestinationError(tr("Pas de droit d'écriture sur {existing}", existing=existing))
     return target
 
 
@@ -70,14 +86,18 @@ def check_file_target(path: Path, source_roots: Iterable[Path]) -> Path:
     fichier ne modifie pas la source."""
     parent = Path(os.path.realpath(path.expanduser().parent))
     if not parent.is_dir():
-        raise DestinationError(f"Dossier de destination introuvable : {parent}")
+        raise DestinationError(tr("Dossier de destination introuvable : {parent}", parent=parent))
     for root in source_roots:
         if is_within(parent, root):
             raise DestinationError(
-                f"Export refusé : {path} serait écrit dans la source {root} (lecture seule)."
+                tr(
+                    "Export refusé : {path} serait écrit dans la source {root} (lecture seule).",
+                    path=path,
+                    root=root,
+                )
             )
     if not os.access(parent, os.W_OK | os.X_OK):
-        raise DestinationError(f"Pas de droit d'écriture sur {parent}")
+        raise DestinationError(tr("Pas de droit d'écriture sur {parent}", parent=parent))
     return parent / path.name
 
 
@@ -92,6 +112,11 @@ def check_space(path: Path, needed: int, margin: int = 64 * 1024 * 1024) -> None
     available = free_space(path)
     if available < needed + margin:
         raise DestinationError(
-            f"Espace insuffisant : {needed} octets nécessaires (+ marge {margin}), "
-            f"{available} disponibles sur la destination."
+            tr(
+                "Espace insuffisant : {needed} octets nécessaires (+ marge {margin}), "
+                "{available} disponibles sur la destination.",
+                needed=needed,
+                margin=margin,
+                available=available,
+            )
         )

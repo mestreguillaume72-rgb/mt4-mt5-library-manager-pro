@@ -21,6 +21,7 @@ from mtlm.app.deletion import DeletionService
 from mtlm.audit.journal import ACTOR_USER, AuditJournal
 from mtlm.core.clock import Clock, iso_utc
 from mtlm.core.errors import MtlmError
+from mtlm.core.i18n import tr
 from mtlm.fs.reader import FileIdentity, path_identity
 from mtlm.hashing.sha256 import UnstableFileError, hash_file
 from mtlm.store.database import transaction
@@ -106,7 +107,9 @@ class ArchiveRow:
         if self.indicators:
             parts.append(f"{self.indicators} indicateur{'s' if self.indicators > 1 else ''}")
         if self.other_tools:
-            parts.append(f"{self.other_tools} autre(s) (script ou non reconnu)")
+            parts.append(
+                tr("{other_tools} autre(s) (script ou non reconnu)", other_tools=self.other_tools)
+            )
         return ", ".join(parts) or "—"
 
     @property
@@ -116,21 +119,22 @@ class ArchiveRow:
     @property
     def verdict(self) -> str:
         if self.status == "encrypted":
-            return "Protégée par mot de passe : non lue"
+            return tr("Protégée par mot de passe : non lue")
         if self.encrypted_entries:
-            return (
-                f"Partiellement protégée par mot de passe : {self.encrypted_entries} "
-                "fichier(s) non lu(s)"
+            return tr(
+                "Partiellement protégée par mot de passe : {encrypted_entries} "
+                "fichier(s) non lu(s)",
+                encrypted_entries=self.encrypted_entries,
             )
         if self.status in ("corrupt", "rejected"):
-            return "Abîmée ou illisible"
+            return tr("Abîmée ou illisible")
         if self.status == "not_supported":
-            return "Format non pris en charge sur ce Mac"
+            return tr("Format non pris en charge sur ce Mac")
         if self.files == 0:
-            return "Vide"
+            return tr("Vide")
         if self.unique == 0:
-            return "Déjà décompressée : tout est sur le disque"
-        return f"Contient {self.unique} fichier(s) absent(s) du disque"
+            return tr("Déjà décompressée : tout est sur le disque")
+        return tr("Contient {unique} fichier(s) absent(s) du disque", unique=self.unique)
 
 
 @dataclass
@@ -239,7 +243,7 @@ class ArchiveService:
                     " AND presence = 'present' ORDER BY rel_path LIMIT 1",
                     (content_id, archive_id),
                 ).fetchone()
-                where = f"oui : {found[0]}" if found else "non (absent du disque)"
+                where = tr("oui : {v}", v=found[0]) if found else tr("non (absent du disque)")
             state = "lu" if status == "inspected" else f"{status} : {reason or ''}"
             label = _type_of(inner)
             if kind in TOOL_LABELS:
@@ -323,7 +327,10 @@ class ArchiveService:
         for archive_id in dict.fromkeys(archive_ids):
             if archive_id not in redundant:
                 summary.refused.append(
-                    (archive_id, "contient des fichiers absents du disque, ou n'est pas lisible")
+                    (
+                        archive_id,
+                        tr("contient des fichiers absents du disque, ou n'est pas lisible"),
+                    )
                 )
                 continue
             keeper = self._conn.execute(
@@ -338,7 +345,7 @@ class ArchiveService:
                 summary.trashed += 1
             else:
                 summary.refused.append(
-                    (archive_id, "archive modifiée, absente ou Corbeille refusée")
+                    (archive_id, tr("archive modifiée, absente ou Corbeille refusée"))
                 )
         return summary
 
@@ -352,18 +359,18 @@ class ArchiveService:
             (archive_id,),
         ).fetchone()
         if row is None:
-            raise ArchiveError("archive absente ou non analysée")
+            raise ArchiveError(tr("archive absente ou non analysée"))
         if row[4] != "ok":
-            raise ArchiveError("archive non lue entièrement (protégée, abîmée ou incomplète)")
+            raise ArchiveError(tr("archive non lue entièrement (protégée, abîmée ou incomplète)"))
         path = os.path.join(os.fsencode(row[0]), bytes(row[1]))  # noqa: PTH118
         identity = FileIdentity(int(row[6]), int(row[7]), int(row[8]), int(row[9]))
         try:
             if path_identity(path) != identity:
-                raise ArchiveError("archive modifiée depuis l'analyse : relancez-la")
+                raise ArchiveError(tr("archive modifiée depuis l'analyse : relancez-la"))
             if row[5] is not None and hash_file(path).sha256 != bytes(row[5]):
-                raise ArchiveError("archive modifiée depuis l'analyse : relancez-la")
+                raise ArchiveError(tr("archive modifiée depuis l'analyse : relancez-la"))
         except (OSError, UnstableFileError) as exc:
-            raise ArchiveError(f"archive illisible : {exc}") from exc
+            raise ArchiveError(tr("archive illisible : {exc}", exc=exc)) from exc
         expected = {
             str(inner): bytes(sha)
             for inner, sha in self._conn.execute(

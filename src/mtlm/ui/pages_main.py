@@ -59,11 +59,11 @@ class Page(QWidget):
         self.layout_ = QVBoxLayout(self)
         self.layout_.setContentsMargins(0, 0, 0, 0)
         self.layout_.setSpacing(14)
-        heading = QLabel(self.title)
+        heading = QLabel(tr(self.title))
         heading.setObjectName("pageTitle")
         self.layout_.addWidget(heading)
         if self.subtitle:
-            sub = QLabel(self.subtitle)
+            sub = QLabel(tr(self.subtitle))
             sub.setObjectName("pageSubtitle")
             sub.setWordWrap(True)
             self.layout_.addWidget(sub)
@@ -967,7 +967,7 @@ class AnalysisPage(Page):
         steps_layout = QVBoxLayout(box)
         self.checks: dict[str, QCheckBox] = {}
         for step in STEPS:
-            check = QCheckBox(step.label)
+            check = QCheckBox(tr(step.label))
             check.setChecked(True)
             check.setObjectName(f"analyse.etape.{step.key}")
             steps_layout.addWidget(check)
@@ -1208,7 +1208,7 @@ class ExplorerPage(Page):
         self.kind = QComboBox()
         self.kind.addItem(tr("Tous les types"), None)
         for key, label in TYPE_LABELS.items():
-            self.kind.addItem(label, key)
+            self.kind.addItem(tr(label), key)
         self.platform = QComboBox()
         for label, value in (
             (tr("Toutes plateformes"), None),
@@ -1279,7 +1279,7 @@ class ExplorerPage(Page):
                 (
                     r.id,
                     r.name,
-                    TYPE_LABELS.get(kinds.get(r.id, ("", ""))[0], tr("non analysé")),
+                    tr(TYPE_LABELS.get(kinds.get(r.id, ("", ""))[0], tr("non analysé"))),
                     {"mt4": "MT4", "mt5": "MT5"}.get(kinds.get(r.id, ("", ""))[1], "—"),
                     human_size(r.size),
                     r.rel_path.rpartition("/")[0] or "(racine)",

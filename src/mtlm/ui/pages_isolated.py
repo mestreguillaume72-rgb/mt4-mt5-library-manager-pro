@@ -23,6 +23,7 @@ class IsolatedToolsPage(Page):
     singular, plural = "robot", "robots"
 
     def __init__(self, app: UiApp) -> None:
+        self.singular, self.plural = tr(self.singular), tr(self.plural)
         super().__init__(app)
         self.groups: dict[int, str] = {}
         self.banner(

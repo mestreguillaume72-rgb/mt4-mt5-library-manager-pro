@@ -12,6 +12,7 @@ from typing import Any
 
 from mtlm.audit.journal import ACTOR_USER, AuditJournal
 from mtlm.core.errors import ExportError
+from mtlm.core.i18n import tr
 from mtlm.core.paths import AppPaths
 from mtlm.transfer.exports import write_csv, write_json
 from mtlm.transfer.guards import check_file_target
@@ -149,13 +150,15 @@ class ReportService:
     def rows(self, kind: str) -> Iterator[tuple[Any, ...]]:
         spec = KINDS.get(kind)
         if spec is None:
-            raise ExportError(f"Export inconnu : {kind}")
+            raise ExportError(tr("Export inconnu : {kind}", kind=kind))
         yield from self._conn.execute(spec.sql)
 
     def export(self, kind: str, destination: Path) -> int:
         spec = KINDS.get(kind)
         if spec is None:
-            raise ExportError(f"Export inconnu : {kind} (choix : {', '.join(KINDS)})")
+            raise ExportError(
+                tr("Export inconnu : {kind} (choix : {v})", kind=kind, v=", ".join(KINDS))
+            )
         sources = [
             Path(r[0])
             for r in self._conn.execute("SELECT path FROM source_root WHERE status <> 'removed'")
@@ -172,7 +175,7 @@ class ReportService:
         elif suffix == ".csv":
             count = write_csv(destination, spec.header, self.rows(kind))
         else:
-            raise ExportError("Format d'export non pris en charge : utilisez .csv ou .json")
+            raise ExportError(tr("Format d'export non pris en charge : utilisez .csv ou .json"))
         self._journal.append(
             ACTOR_USER, "report.export", str(destination), details={"export": kind, "lignes": count}
         )

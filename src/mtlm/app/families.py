@@ -16,6 +16,7 @@ from mtlm import ENGINE_VERSION
 from mtlm.app.jobs import JobStore
 from mtlm.audit.journal import ACTOR_USER, AuditJournal
 from mtlm.core.clock import Clock
+from mtlm.core.i18n import tr
 from mtlm.matching.families import METHOD_VERSION, FamilyInput, Member, build_families
 from mtlm.store.database import transaction
 
@@ -186,7 +187,7 @@ class FamilyService:
             clauses.append(f"{main_type} = ?")
             params.append(tool_type)
         if text:
-            clauses.append("(ff.display_name LIKE ? OR ff.logical_key LIKE ?)")
+            clauses.append(tr("(ff.display_name LIKE ? OR ff.logical_key LIKE ?)"))
             params += [f"%{text}%", f"%{text.casefold()}%"]
         rows = self._conn.execute(
             "SELECT ff.id, ff.display_name, ff.platform, ff.confidence, count(fm.file_id),"

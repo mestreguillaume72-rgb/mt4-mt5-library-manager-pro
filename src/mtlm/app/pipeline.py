@@ -24,6 +24,7 @@ from mtlm.app.sets import AssociationService, SetService
 from mtlm.app.settings import SettingsService
 from mtlm.app.sources import SourceService
 from mtlm.core.control import Cancelled, TaskControl
+from mtlm.core.i18n import tr
 
 Report = Callable[[str], None]
 
@@ -38,19 +39,26 @@ class Step:
 def _scan(ctx: AppContext, control: TaskControl, report: Report) -> str:
     sources = SourceService(ctx.conn, ctx.clock, ctx.journal, ctx.paths).list()
     if not sources:
-        return "Aucune source : ajoutez d'abord un dossier."
+        return tr("Aucune source : ajoutez d'abord un dossier.")
     service = ScanService(ctx.conn, ctx.clock, ctx.journal)
     parts = []
     for source in sources:
         summary = service.scan(
             source.id,
             control=control,
-            progress=lambda s: report(f"Inventaire : {s.seen} fichier(s) vu(s)…"),
+            progress=lambda s: report(tr("Inventaire : {seen} fichier(s) vu(s)…", seen=s.seen)),
         )
         parts.append(
-            f"{source.display_name} : {summary.seen} vus, {summary.new} nouveaux, "
-            f"{summary.changed} modifiés, {summary.missing} disparus, "
-            f"{summary.errors} erreur(s)"
+            tr(
+                "{display_name} : {seen} vus, {new} nouveaux, {changed} modifiés, "
+                "{missing} disparus, {errors} erreur(s)",
+                display_name=source.display_name,
+                seen=summary.seen,
+                new=summary.new,
+                changed=summary.changed,
+                missing=summary.missing,
+                errors=summary.errors,
+            )
         )
         if summary.state == "cancelled":
             raise Cancelled
@@ -68,14 +76,16 @@ def _hash(ctx: AppContext, control: TaskControl, report: Report) -> str:
     )
     if summary.state == "cancelled":
         raise Cancelled
-    text = (
-        f"{summary.hashed} empreinte(s) calculée(s), {summary.errors} erreur(s) "
-        f"({summary.mib_per_second:.1f} Mio/s)"
+    text = tr(
+        "{hashed} empreinte(s) calculée(s), {errors} erreur(s) ({mib_per_second:.1f} Mio/s)",
+        hashed=summary.hashed,
+        errors=summary.errors,
+        mib_per_second=summary.mib_per_second,
     )
     if summary.skipped_unrelated:
-        text += (
-            f" ; {summary.skipped_unrelated} fichier(s) sans rapport avec MetaTrader "
-            "seulement listé(s)"
+        text += tr(
+            " ; {skipped_unrelated} fichier(s) sans rapport avec MetaTrader seulement listé(s)",
+            skipped_unrelated=summary.skipped_unrelated,
         )
     return text
 
@@ -84,24 +94,26 @@ def duration_text(seconds: float) -> str:
     """Durée lisible en français : « 2 h 05 min », « 7 min », « moins d'une minute »."""
     minutes = int(seconds // 60)
     if minutes < 1:
-        return "moins d'une minute"
+        return tr("moins d'une minute")
     hours, minutes = divmod(minutes, 60)
     if hours:
-        return f"{hours} h {minutes:02d} min"
+        return tr("{hours} h {minutes:02d} min", hours=hours, minutes=minutes)
     return f"{minutes} min"
 
 
 def hash_progress_text(summary: HashSummary) -> str:
     done = summary.hashed + summary.errors
-    text = f"Empreintes : {done}/{summary.candidates}"
+    text = tr("Empreintes : {done}/{candidates}", done=done, candidates=summary.candidates)
     if summary.bytes_total:
-        text += f" ({summary.bytes_read / 2**30:.1f}/{summary.bytes_total / 2**30:.1f} Go"
+        text += tr(
+            " ({v:.1f}/{v2:.1f} Go", v=summary.bytes_read / 2**30, v2=summary.bytes_total / 2**30
+        )
         if summary.seconds >= 2:
-            text += f", {summary.mib_per_second:.1f} Mio/s"
+            text += tr(", {mib_per_second:.1f} Mio/s", mib_per_second=summary.mib_per_second)
         text += ")"
     remaining = summary.remaining_seconds
     if remaining is not None:
-        text += f" — reste environ {duration_text(remaining)}"
+        text += tr(" — reste environ {v}", v=duration_text(remaining))
     return text + "…"
 
 
@@ -111,7 +123,7 @@ def eta_text(done: int, total: int, seconds: float) -> str:
         return ""
     text = f" ({min(100, done * 100 // total)} %"
     if done > 0 and seconds >= 2 and done < total:
-        text += f", reste environ {duration_text(seconds / done * (total - done))}"
+        text += tr(", reste environ {v}", v=duration_text(seconds / done * (total - done)))
     return text + ")"
 
 
@@ -119,9 +131,19 @@ def _formats_progress(summary: FormatSummary, started: float) -> str:
     elapsed = time.perf_counter() - started
     if summary.phase == "signatures":
         done, total = summary.signatures + summary.signature_errors, summary.to_sign
-        return f"Formats : {done}/{total} fichier(s){eta_text(done, total, elapsed)}…"
+        return tr(
+            "Formats : {done}/{total} fichier(s){v}…",
+            done=done,
+            total=total,
+            v=eta_text(done, total, elapsed),
+        )
     done, total = summary.archives, summary.archives_total
-    return f"Archives : {done}/{total} lue(s){eta_text(done, total, elapsed)}…"
+    return tr(
+        "Archives : {done}/{total} lue(s){v}…",
+        done=done,
+        total=total,
+        v=eta_text(done, total, elapsed),
+    )
 
 
 def _formats(ctx: AppContext, control: TaskControl, report: Report) -> str:
@@ -130,19 +152,27 @@ def _formats(ctx: AppContext, control: TaskControl, report: Report) -> str:
     limits = settings.archive_limits()
     service = FormatService(ctx.conn, ctx.clock, ctx.journal, limits)
     summary = service.run(control=control, progress=lambda s: report(_formats_progress(s, started)))
-    text = (
-        f"{summary.signatures} signature(s), {summary.misleading} extension(s) trompeuse(s), "
-        f"{summary.archives} archive(s) dont {summary.archives_problem} avec problème"
+    text = tr(
+        "{signatures} signature(s), {misleading} extension(s) trompeuse(s), "
+        "{archives} archive(s) dont {archives_problem} avec problème",
+        signatures=summary.signatures,
+        misleading=summary.misleading,
+        archives=summary.archives,
+        archives_problem=summary.archives_problem,
     )
     if int(settings.get("archives.decompresser")):
         archives = ArchiveService(ctx.conn, ctx.clock, ctx.journal)
         eligible = archives.eligible()
         if eligible:
-            report(f"Décompression de {len(eligible)} archive(s)…")
+            report(tr("Décompression de {v} archive(s)…", v=len(eligible)))
             done = archives.extract(eligible, ctx.trash, trash_archive=True)
-            text += (
-                f" ; {done.extracted} archive(s) décompressée(s) ({done.files} fichier(s)), "
-                f"{done.trashed} mise(s) à la Corbeille, {len(done.refused)} laissée(s) intacte(s)"
+            text += tr(
+                " ; {extracted} archive(s) décompressée(s) ({files} fichier(s)), "
+                "{trashed} mise(s) à la Corbeille, {v} laissée(s) intacte(s)",
+                extracted=done.extracted,
+                files=done.files,
+                trashed=done.trashed,
+                v=len(done.refused),
             )
             if done.refused:
                 text += " (" + " ; ".join(why for _a, why in done.refused[:3]) + ")"
@@ -159,13 +189,20 @@ def _recognize(ctx: AppContext, control: TaskControl, report: Report) -> str:
     summary = RecognitionService(ctx.conn, ctx.clock, ctx.journal).run(
         control=control,
         progress=lambda s: report(
-            f"Reconnaissance : {s.done}/{s.total} fichier(s)"
-            f"{eta_text(s.done, s.total, time.perf_counter() - started)}…"
+            tr(
+                "Reconnaissance : {done}/{total} fichier(s){v}…",
+                done=s.done,
+                total=s.total,
+                v=eta_text(s.done, s.total, time.perf_counter() - started),
+            )
         ),
     )
-    return (
-        f"{summary.classified} fichier(s) classé(s), {summary.sources_parsed} source(s) "
-        f"analysée(s), {summary.warnings} avertissement(s)"
+    return tr(
+        "{classified} fichier(s) classé(s), {sources_parsed} source(s) "
+        "analysée(s), {warnings} avertissement(s)",
+        classified=summary.classified,
+        sources_parsed=summary.sources_parsed,
+        warnings=summary.warnings,
     )
 
 
@@ -176,9 +213,11 @@ def _sets(ctx: AppContext, control: TaskControl, _report: Report) -> str:
 
 def _associate(ctx: AppContext, control: TaskControl, _report: Report) -> str:
     summary = AssociationService(ctx.conn, ctx.clock, ctx.journal).compute(control=control)
-    return (
-        f"{summary.associations} association(s) proposée(s), {summary.orphans} SET "
-        "orphelin(s) — aucune validée automatiquement"
+    return tr(
+        "{associations} association(s) proposée(s), {orphans} SET orphelin(s) — "
+        "aucune validée automatiquement",
+        associations=summary.associations,
+        orphans=summary.orphans,
     )
 
 
@@ -186,9 +225,13 @@ def _families(ctx: AppContext, control: TaskControl, _report: Report) -> str:
     control.checkpoint()
     summary = FamilyService(ctx.conn, ctx.clock, ctx.journal).rebuild()
     linked = CompanionService(ctx.conn, ctx.clock, ctx.journal).rebuild()
-    return (
-        f"{summary.families} famille(s), {summary.homonym_groups} homonyme(s) séparé(s), "
-        f"{linked.linked} fichier(s) annexe(s) relié(s) à leur outil sur {linked.companions}"
+    return tr(
+        "{families} famille(s), {homonym_groups} homonyme(s) séparé(s), {linked} "
+        "fichier(s) annexe(s) relié(s) à leur outil sur {companions}",
+        families=summary.families,
+        homonym_groups=summary.homonym_groups,
+        linked=linked.linked,
+        companions=linked.companions,
     )
 
 
@@ -196,9 +239,12 @@ def _duplicates(ctx: AppContext, control: TaskControl, _report: Report) -> str:
     control.checkpoint()
     threshold = float(SettingsService(ctx.conn, ctx.journal).get("similarite.seuil"))
     summary = DuplicateService(ctx.conn, ctx.clock, ctx.journal).compute(threshold=threshold)
-    return (
-        f"{summary.groups} groupe(s) de doublons exacts ({summary.admissible} admissible(s) "
-        f"à la quarantaine), {summary.similar_text + summary.similar_sets} similarité(s)"
+    return tr(
+        "{groups} groupe(s) de doublons exacts ({admissible} admissible(s) à la "
+        "quarantaine), {v} similarité(s)",
+        groups=summary.groups,
+        admissible=summary.admissible,
+        v=summary.similar_text + summary.similar_sets,
     )
 
 
@@ -223,7 +269,7 @@ def run_steps(
     chosen = [step for step in STEPS if step.key in keys]
     for number, step in enumerate(chosen, start=1):
         control.checkpoint()
-        prefix = f"Étape {number}/{len(chosen)} — "
+        prefix = tr("Étape {number}/{v} — ", number=number, v=len(chosen))
 
         def prefixed(text: str, prefix: str = prefix) -> None:
             report(prefix + text)

@@ -28,6 +28,7 @@ from mtlm.app.duplicates import same_bytes
 from mtlm.audit.journal import ACTOR_USER, AuditJournal
 from mtlm.core.clock import Clock, iso_utc
 from mtlm.core.errors import MtlmError
+from mtlm.core.i18n import tr
 from mtlm.fs.reader import FileIdentity, path_identity
 from mtlm.hashing.sha256 import UnstableFileError, hash_file
 from mtlm.store.database import transaction
@@ -109,7 +110,9 @@ class DeletionService:
             "SELECT reference_file_id FROM duplicate_group WHERE id = ?", (group_id,)
         ).fetchone()
         if reference is None or reference[0] is None:
-            raise DeletionError(f"Groupe {group_id} inconnu ou sans référence conservée")
+            raise DeletionError(
+                tr("Groupe {group_id} inconnu ou sans référence conservée", group_id=group_id)
+            )
         return [
             int(r[0])
             for r in self._conn.execute(
@@ -262,9 +265,11 @@ class DeletionService:
         self, file_ids: list[int], origin: str, *, allow_unique: bool = False
     ) -> DeletionResult:
         if origin not in ORIGINS:
-            raise DeletionError(f"Origine inconnue : {origin}")
+            raise DeletionError(tr("Origine inconnue : {origin}", origin=origin))
         if self._backend is None:
-            raise DeletionError("La mise à la Corbeille n'est disponible que sur Mac et Windows.")
+            raise DeletionError(
+                tr("La mise à la Corbeille n'est disponible que sur Mac et Windows.")
+            )
         result = DeletionResult()
         removed: set[int] = set()
         for file_id in dict.fromkeys(file_ids):
@@ -273,21 +278,23 @@ class DeletionService:
                 self._hash_now(file_id)
                 item = self._file(file_id)
             if item is None:
-                result.refused.append((file_id, "fichier absent, non analysé ou non ordinaire"))
+                result.refused.append((file_id, tr("fichier absent, non analysé ou non ordinaire")))
                 continue
             if not self._unchanged(item):
-                result.refused.append((file_id, "fichier modifié depuis l'analyse : relancez-la"))
+                result.refused.append(
+                    (file_id, tr("fichier modifié depuis l'analyse : relancez-la"))
+                )
                 continue
             keeper = self._keeper(item, removed | {file_id})
             if keeper is None and not allow_unique:
                 result.refused.append(
-                    (file_id, "exemplaire unique : aucune copie identique n'est conservée")
+                    (file_id, tr("exemplaire unique : aucune copie identique n'est conservée"))
                 )
                 continue
             try:
                 location = self._backend(item.path)
             except (TrashError, OSError) as exc:
-                result.refused.append((file_id, f"Corbeille : {exc}"))
+                result.refused.append((file_id, tr("Corbeille : {exc}", exc=exc)))
                 self._journal.append(
                     ACTOR_USER,
                     "trash.file",
@@ -444,13 +451,13 @@ class DeletionService:
             (deletion_id,),
         ).fetchone()
         if row is None:
-            raise DeletionError(f"Retrait {deletion_id} inconnu")
+            raise DeletionError(tr("Retrait {deletion_id} inconnu", deletion_id=deletion_id))
         if row[4] != "trashed":
-            raise DeletionError("Ce fichier a déjà été remis en place")
+            raise DeletionError(tr("Ce fichier a déjà été remis en place"))
         file_id, original, trashed, sha = int(row[0]), bytes(row[1]), bytes(row[2]), bytes(row[3])
         try:
             if hash_file(trashed).sha256 != sha:
-                raise DeletionError("Le fichier de la Corbeille a changé : rien n'est fait")
+                raise DeletionError(tr("Le fichier de la Corbeille a changé : rien n'est fait"))
             put_back(trashed, original)
         except (TrashError, OSError, UnstableFileError) as exc:
             self._journal.append(
@@ -481,9 +488,9 @@ class DeletionService:
 
     def records(self, limit: int = 2000) -> list[DeletionRow]:
         labels = {
-            "fichier": "copie identique conservée",
-            "quarantaine": "copie en quarantaine",
-            "extraction": "contenu décompressé et vérifié",
+            "fichier": tr("copie identique conservée"),
+            "quarantaine": tr("copie en quarantaine"),
+            "extraction": tr("contenu décompressé et vérifié"),
         }
         return [
             DeletionRow(
@@ -493,7 +500,7 @@ class DeletionService:
                 _decode(bytes(r[3])),
                 _decode(bytes(r[4])),
                 int(r[5]),
-                labels.get(r[6], "aucune (exemplaire unique)"),
+                labels.get(r[6], tr("aucune (exemplaire unique)")),
                 r[7],
                 r[8],
             )

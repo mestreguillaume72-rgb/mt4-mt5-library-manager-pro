@@ -40,6 +40,7 @@ from mtlm.core.clock import Clock, iso_utc
 from mtlm.core.control import TaskControl
 from mtlm.core.errors import MtlmError
 from mtlm.core.filenames import portable_name
+from mtlm.core.i18n import tr
 from mtlm.core.paths import AppPaths
 from mtlm.fs.reader import FileIdentity
 from mtlm.matching.names import logical_key
@@ -257,12 +258,18 @@ class OrganizeService:
         if detected == "dll":
             return "/".join([plat, "Libraries", file_name])
         if detected == "template":
-            return f"Templates/{file_name}"
+            return tr("Templates/{file_name}", file_name=file_name)
         if detected == "resource":
-            return f"Annexes/{_component(ext or 'sans extension')}/{file_name}"
+            return tr(
+                "Annexes/{v}/{file_name}",
+                v=_component(ext or "sans extension"),
+                file_name=file_name,
+            )
         if ext in ("ex4", "ex5"):
             return "/".join([plat, "Compilés non classés", file_name])
-        return f"Inconnus/{_component(ext or 'sans extension')}/{file_name}"
+        return tr(
+            "Inconnus/{v}/{file_name}", v=_component(ext or "sans extension"), file_name=file_name
+        )
 
     # ---- prévisualisation -------------------------------------------------------------
     def preview(self, destination: Path, *, include_duplicates: bool = False) -> Preview:
@@ -272,7 +279,9 @@ class OrganizeService:
             [self._paths.data_dir, self._paths.logs_dir],
             require_existing=True,
         )
-        folder = f"Bibliotheque-organisee-{self._clock.now():%Y%m%d}-{uuid.uuid4().hex[:6]}"
+        folder = tr(
+            "Bibliotheque-organisee-{v:%Y%m%d}-{v2}", v=self._clock.now(), v2=uuid.uuid4().hex[:6]
+        )
         plan_root = target_root / folder
         rows = self._conn.execute(
             "SELECT f.id, f.name, f.ext, a.detected_type, coalesce(a.platform, 'unknown'),"
@@ -346,7 +355,7 @@ class OrganizeService:
                 )
             )
         if not planned:
-            raise OrganizeError("Rien à organiser : lancez d'abord inventaire et empreintes.")
+            raise OrganizeError(tr("Rien à organiser : lancez d'abord inventaire et empreintes."))
         return self._record_plan(
             plan_root,
             planned,
@@ -516,7 +525,12 @@ class OrganizeService:
             "SELECT display_name FROM file_family WHERE id = ?", (family_id,)
         ).fetchone()
         if head is None:
-            raise OrganizeError(f"Famille {family_id} inconnue : relancez l'étape « Familles »")
+            raise OrganizeError(
+                tr(
+                    "Famille {family_id} inconnue : relancez l'étape « Familles »",
+                    family_id=family_id,
+                )
+            )
         members = [
             int(r[0])
             for r in self._conn.execute(
@@ -529,7 +543,7 @@ class OrganizeService:
         files = self._files(members)
         selection = []
         for r in files.values():
-            folder = str(r[10]).rpartition("/")[0].rpartition("/")[2] or "Racine"
+            folder = str(r[10]).rpartition("/")[0].rpartition("/")[2] or tr("Racine")
             selection.append((r, f"{prefix}{_component(folder)}/{_component(str(r[9]))}"))
         taken = set(files)
         # Outils dont la famille a besoin : indicateurs appelés, bibliothèques importées.
@@ -539,7 +553,9 @@ class OrganizeService:
             if dep.user_id in files and dep.used_id not in taken:
                 used.setdefault(dep.used_id, dep.kind)
         for used_id, r in self._files(sorted(used)).items():
-            folder = "Indicateurs utilisés" if used[used_id] == "icustom" else "Bibliothèques"
+            folder = (
+                tr("Indicateurs utilisés") if used[used_id] == "icustom" else tr("Bibliothèques")
+            )
             selection.append((r, f"{prefix}{folder}/{_component(str(r[9]))}"))
             taken.add(used_id)
         # Fichiers liés (images, sons, documents, modèles, DLL…) : « certain » ou « probable ».
@@ -547,7 +563,7 @@ class OrganizeService:
         for companion_id, kind in linked.items():
             if companion_id not in taken:
                 for r in self._files([companion_id]).values():
-                    folder = COMPANION_DIRS.get(kind, "Autres")
+                    folder = COMPANION_DIRS.get(kind, tr("Autres"))
                     selection.append((r, f"{prefix}{folder}/{_component(str(r[9]))}"))
         return str(head[0]), selection
 
@@ -564,7 +580,7 @@ class OrganizeService:
         dossier « Familles réunies <date> » avec un sous-dossier par robot."""
         ids = list(dict.fromkeys(family_ids))
         if not ids:
-            raise OrganizeError("Choisissez au moins une famille.")
+            raise OrganizeError(tr("Choisissez au moins une famille."))
         target_root = self._destination(destination)
         selection: list[tuple[tuple[Any, ...], str]] = []
         names: list[str] = []
@@ -577,12 +593,12 @@ class OrganizeService:
         folder = (
             _component(names[0])
             if len(ids) == 1
-            else f"Familles réunies {self._clock.now():%Y-%m-%d}"
+            else tr("Familles réunies {v:%Y-%m-%d}", v=self._clock.now())
         )
         plan_root = self._unique_folder(target_root, folder)
         planned, collisions, excluded_q, excluded_d = self._place(selection)
         if not planned:
-            raise OrganizeError("Aucun fichier présent dans ces familles.")
+            raise OrganizeError(tr("Aucun fichier présent dans ces familles."))
         return self._record_plan(
             plan_root,
             planned,
@@ -615,12 +631,12 @@ class OrganizeService:
 
         Copie vérifiée après validation ; les originaux ne bougent pas."""
         if tool_type not in ISOLATED_ROOTS:
-            raise OrganizeError(f"Type inconnu : {tool_type}")
+            raise OrganizeError(tr("Type inconnu : {tool_type}", tool_type=tool_type))
         if mode not in GROUPING_MODES:
-            raise OrganizeError(f"Rangement inconnu : {mode}")
+            raise OrganizeError(tr("Rangement inconnu : {mode}", mode=mode))
         ids = list(dict.fromkeys(family_ids))
         if not ids:
-            raise OrganizeError("Choisissez au moins un outil.")
+            raise OrganizeError(tr("Choisissez au moins un outil."))
         groups = groups or {}
         target_root = self._destination(destination)
         plan_root = self._unique_folder(
@@ -640,7 +656,7 @@ class OrganizeService:
             selection.extend(items)
         planned, collisions, excluded_q, excluded_d = self._place(selection)
         if not planned:
-            raise OrganizeError("Aucun fichier présent pour ces outils.")
+            raise OrganizeError(tr("Aucun fichier présent pour ces outils."))
         return self._record_plan(
             plan_root,
             planned,
@@ -712,7 +728,12 @@ class OrganizeService:
             "SELECT display_name FROM file_family WHERE id = ?", (family_id,)
         ).fetchone()
         if row is None:
-            raise OrganizeError(f"Famille {family_id} inconnue : relancez l'étape « Familles »")
+            raise OrganizeError(
+                tr(
+                    "Famille {family_id} inconnue : relancez l'étape « Familles »",
+                    family_id=family_id,
+                )
+            )
         return str(row[0])
 
     def mq_sources(
@@ -725,23 +746,27 @@ class OrganizeService:
         others: bool = False,
     ) -> list[MqSourceRow]:
         """Sources MQ4/MQ5 présentes, avec ce qui les accompagne (écran « Sources MQ4/MQ5 »)."""
-        clauses = ["f.presence = 'present'", "f.ext IN ('mq4', 'mq5')", "f.in_quarantine = 0"]
+        clauses = [
+            tr("f.presence = 'present'"),
+            tr("f.ext IN ('mq4', 'mq5')"),
+            tr("f.in_quarantine = 0"),
+        ]
         params: list[object] = []
         if text:
-            clauses.append("f.rel_path LIKE ?")
+            clauses.append(tr("f.rel_path LIKE ?"))
             params.append(f"%{text}%")
         if ext:
-            clauses.append("f.ext = ?")
+            clauses.append(tr("f.ext = ?"))
             params.append(ext)
         if tool_type:
-            clauses.append("a.detected_type = ?")
+            clauses.append(tr("a.detected_type = ?"))
             params.append(tool_type)
         if tool_types is not None:
             # Cases à cocher : types choisis, et/ou « autres » (scripts, non reconnus…).
             wanted = [t for t in tool_types if t in ("ea", "indicator")]
             parts = []
             if wanted:
-                parts.append(f"a.detected_type IN ({','.join('?' * len(wanted))})")
+                parts.append(tr("a.detected_type IN ({v})", v=",".join("?" * len(wanted))))
                 params.extend(wanted)
             if others:
                 parts.append("coalesce(a.detected_type, '') NOT IN ('ea', 'indicator')")
@@ -895,7 +920,11 @@ class OrganizeService:
         companions = CompanionService(self._conn, self._clock, self._journal)
         for row in companions.for_tools(source_ids):
             if row.confidence in ("certain", "probable"):
-                add(row.tool_id, row.companion_id, f"fichier lié ({row.confidence})")
+                add(
+                    row.tool_id,
+                    row.companion_id,
+                    tr("fichier lié ({confidence})", confidence=row.confidence),
+                )
         for dep in companions.dependencies(source_ids):
             if dep.user_id in layout:
                 add(dep.user_id, dep.used_id, dep.evidence)
@@ -919,10 +948,10 @@ class OrganizeService:
         Copie vérifiée après validation ; rien n'est dédoublonné (copie fidèle)."""
         chosen = set(file_ids) if file_ids is not None else None
         if chosen is not None and not chosen:
-            raise OrganizeError("Choisissez au moins une source MQ4/MQ5.")
+            raise OrganizeError(tr("Choisissez au moins une source MQ4/MQ5."))
         target_root = self._destination(destination)
         plan_root = self._unique_folder(
-            target_root, f"Sources MQ4-MQ5 isolées {self._clock.now():%Y-%m-%d}"
+            target_root, tr("Sources MQ4-MQ5 isolées {v:%Y-%m-%d}", v=self._clock.now())
         )
         source_ids = [
             int(r[0])
@@ -976,7 +1005,7 @@ class OrganizeService:
         # 1.6.0 : jamais de doublon dans le dossier créé (une copie par contenu identique).
         planned, collisions, excluded_q, excluded_d = self._place(selection)
         if not planned:
-            raise OrganizeError("Aucune source MQ4/MQ5 analysée.")
+            raise OrganizeError(tr("Aucune source MQ4/MQ5 analysée."))
         return self._record_plan(
             plan_root,
             planned,
@@ -1011,10 +1040,12 @@ class OrganizeService:
             (plan_id,),
         ).fetchone()
         if plan is None:
-            raise OrganizeError(f"Plan {plan_id} inconnu")
+            raise OrganizeError(tr("Plan {plan_id} inconnu", plan_id=plan_id))
         destination, expected, status = plan
         if status in ("completed", "cancelled"):
-            raise OrganizeError(f"Le plan {plan_id} est déjà {status}")
+            raise OrganizeError(
+                tr("Le plan {plan_id} est déjà {status}", plan_id=plan_id, status=status)
+            )
         if token != expected:
             self._journal.append(
                 ACTOR_USER,
@@ -1024,8 +1055,10 @@ class OrganizeService:
                 details={"motif": "jeton incorrect"},
             )
             raise OrganizeError(
-                "Confirmation refusée : le jeton ne correspond pas à la "
-                "prévisualisation de ce plan."
+                tr(
+                    "Confirmation refusée : le jeton ne correspond pas à la prévisualisation "
+                    "de ce plan."
+                )
             )
         root = Path(destination)
         # Le dossier choisi par l'utilisateur (parent du dossier du plan) doit toujours exister.
@@ -1051,7 +1084,9 @@ class OrganizeService:
         try:
             ensure_directory(root_bytes)
         except OSError as exc:
-            raise OrganizeError(f"Destination non inscriptible : {exc.strerror or exc}") from exc
+            raise OrganizeError(
+                tr("Destination non inscriptible : {v}", v=exc.strerror or exc)
+            ) from exc
         with transaction(self._conn):
             self._conn.execute(
                 "UPDATE organize_plan SET status = 'running' WHERE id = ?", (plan_id,)
@@ -1067,7 +1102,7 @@ class OrganizeService:
                 skipped += 1
                 continue
             if ctl.cancelled:
-                stopped = "annulé par l'utilisateur"
+                stopped = tr("annulé par l'utilisateur")
                 break
             ctl.checkpoint()
             source = os.path.join(os.fsencode(row[5]), bytes(row[6]))  # noqa: PTH118
@@ -1161,13 +1196,13 @@ class OrganizeService:
         write_json_atomic(
             os.path.join(root, b"manifeste-organisation.json"),  # noqa: PTH118
             {
-                "application": "MT4 MT5 Library Manager PRO",
+                "application": tr("MT4 MT5 Library Manager PRO"),
                 "plan": plan_id,
                 "cree_le": plan[0],
                 "etat": plan[1],
                 "modele": plan[3],
                 "collisions_de_noms": plan[2],
-                "note": "copie vérifiée par empreinte ; originaux jamais modifiés",
+                "note": tr("copie vérifiée par empreinte ; originaux jamais modifiés"),
                 "elements": items,
             },
         )

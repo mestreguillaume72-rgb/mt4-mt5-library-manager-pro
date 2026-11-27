@@ -74,10 +74,10 @@ class SetsPage(Page):
         for label, value in (
             (tr("À traiter : en vrac, mal rangés, sans robot"), "a_traiter"),
             (tr("Tous les SET"), None),
-            (PLACEMENT_LABELS["avec_son_robot"], "avec_son_robot"),
-            (PLACEMENT_LABELS["en_vrac"], "en_vrac"),
-            (PLACEMENT_LABELS["avec_autre_robot"], "avec_autre_robot"),
-            (PLACEMENT_LABELS["dossier_standard"], "dossier_standard"),
+            (tr(PLACEMENT_LABELS["avec_son_robot"]), "avec_son_robot"),
+            (tr(PLACEMENT_LABELS["en_vrac"]), "en_vrac"),
+            (tr(PLACEMENT_LABELS["avec_autre_robot"]), "avec_autre_robot"),
+            (tr(PLACEMENT_LABELS["dossier_standard"]), "dossier_standard"),
         ):
             self.placement.addItem(label, value)
         self.placement.currentIndexChanged.connect(lambda _i: self.refresh())
@@ -189,7 +189,12 @@ class SetsPage(Page):
         fill_table(
             self.sets,
             [
-                (*r, PLACEMENT_LABELS.get(placements.get(int(r[0]), ""), tr("sans robot trouvé")))
+                (
+                    *r,
+                    tr(
+                        PLACEMENT_LABELS.get(placements.get(int(r[0]), ""), tr("sans robot trouvé"))
+                    ),
+                )
                 for r in rows
                 if wanted is None
                 or (wanted == "a_traiter" and placements.get(int(r[0]), "en_vrac") in TO_PROCESS)
@@ -235,8 +240,8 @@ class SetsPage(Page):
                     a.id,
                     a.score,
                     certainty_label(a.level, a.score),
-                    DECISIONS[a.user_decision],
-                    PLACEMENT_LABELS[a.placement],
+                    tr(DECISIONS[a.user_decision]),
+                    tr(PLACEMENT_LABELS[a.placement]),
                     a.robot_path,
                 )
                 for a in rows
@@ -283,14 +288,16 @@ class SetsPage(Page):
             tr(
                 "Marquer {v} associations comme « {v2} » ?",
                 v=len(assoc_ids),
-                v2=DECISIONS[decision],
+                v2=tr(DECISIONS[decision]),
             ),
         ):
             return
         service = self._assoc()
         for assoc_id in assoc_ids:
             service.decide(assoc_id, decision)
-        self.app.status(tr("{v} association(s) : {v2}", v=len(assoc_ids), v2=DECISIONS[decision]))
+        self.app.status(
+            tr("{v} association(s) : {v2}", v=len(assoc_ids), v2=tr(DECISIONS[decision]))
+        )
         self.load_selected()
 
     def accept_best(self) -> None:
@@ -387,7 +394,8 @@ class FamiliesPage(Page):
         self.tool_type.setAccessibleName(tr("Type d'outil"))
         self.tool_type.addItem(tr("Tous les outils"), None)
         for value, label in TYPE_LABELS.items():
-            self.tool_type.addItem(f"{label}s" if not label.endswith("s") else label, value)
+            plural = f"{label}s" if not label.endswith("s") else label
+            self.tool_type.addItem(tr(plural), value)
         self.tool_type.currentIndexChanged.connect(lambda _i: self.refresh())
         row.addWidget(self.search)
         row.addWidget(self.tool_type)
@@ -540,7 +548,7 @@ class FamiliesPage(Page):
                     r.members,
                     r.versions,
                     r.confidence,
-                    TYPE_LABELS.get(r.tool_type, ""),
+                    tr(TYPE_LABELS.get(r.tool_type, "")),
                 )
                 for r in rows
             ],
@@ -603,7 +611,7 @@ class FamiliesPage(Page):
                     link.companion_id,
                     KIND_LABELS.get(link.kind, link.kind),
                     link.confidence,
-                    LINK_PLACEMENTS[link.placement],
+                    tr(LINK_PLACEMENTS[link.placement]),
                     link.tool_path.rpartition("/")[2],
                     " ; ".join(link.evidence),
                     link.companion_path,
@@ -1146,7 +1154,7 @@ class RiskPage(Page):
         fill_table(
             self.findings,
             [
-                (r.file_id, RISK_LABELS.get(r.level, r.level), r.rel_path, r.reasons)
+                (r.file_id, tr(RISK_LABELS.get(r.level, r.level)), r.rel_path, r.reasons)
                 for r in self._rows
             ],
         )

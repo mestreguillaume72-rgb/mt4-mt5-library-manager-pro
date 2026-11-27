@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 from mtlm.audit.journal import ACTOR_USER, AuditJournal
 from mtlm.core.errors import MtlmError
+from mtlm.core.i18n import tr
 from mtlm.formats.archives import ArchiveLimits
 from mtlm.store.database import transaction
 
@@ -124,7 +125,7 @@ class SettingsService:
     def get(self, key: str) -> float:
         spec = SPECS.get(key)
         if spec is None:
-            raise SettingsError(f"Paramètre inconnu : {key}")
+            raise SettingsError(tr("Paramètre inconnu : {key}", key=key))
         row = self._conn.execute("SELECT value_json FROM setting WHERE key = ?", (key,)).fetchone()
         value = float(json.loads(row[0])) if row else spec.default
         return int(value) if spec.integer else value
@@ -135,12 +136,17 @@ class SettingsService:
     def set(self, key: str, value: float) -> float:
         spec = SPECS.get(key)
         if spec is None:
-            raise SettingsError(f"Paramètre inconnu : {key}")
+            raise SettingsError(tr("Paramètre inconnu : {key}", key=key))
         if spec.integer and float(value) != int(value):
-            raise SettingsError(f"{spec.label} : un nombre entier est attendu")
+            raise SettingsError(tr("{label} : un nombre entier est attendu", label=spec.label))
         if not spec.minimum <= value <= spec.maximum:
             raise SettingsError(
-                f"{spec.label} : valeur entre {spec.minimum:g} et {spec.maximum:g} attendue"
+                tr(
+                    "{label} : valeur entre {minimum:g} et {maximum:g} attendue",
+                    label=spec.label,
+                    minimum=spec.minimum,
+                    maximum=spec.maximum,
+                )
             )
         stored = int(value) if spec.integer else float(value)
         previous = self.get(key)

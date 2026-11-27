@@ -227,7 +227,11 @@ class ActionRegistry:
             raise ValueError(tr("Action en double : {action_id}", action_id=action_id))
         from mtlm.ui.bulles import ACTION_TIPS
 
-        tip = ACTION_TIPS.get(action_id) or tooltip
+        tip = (
+            tr(ACTION_TIPS.get(action_id) or tooltip)
+            if (ACTION_TIPS.get(action_id) or tooltip)
+            else ""
+        )
         spec = ActionSpec(action_id, label, handler, tooltip=tip)
         self.specs[action_id] = spec
         button = QPushButton(label)

@@ -16,6 +16,7 @@ from typing import NoReturn
 from mtlm.audit.journal import ACTOR_USER, AuditJournal
 from mtlm.core.clock import Clock, iso_utc
 from mtlm.core.errors import MtlmError
+from mtlm.core.i18n import tr
 from mtlm.core.paths import AppPaths
 from mtlm.fs.paths import identity, overlaps
 from mtlm.store.database import transaction
@@ -55,30 +56,36 @@ class SourceService:
         for source in self.list(include_removed=True):
             if source.id == source_id:
                 return source
-        raise SourceError(f"Source {source_id} inconnue")
+        raise SourceError(tr("Source {source_id} inconnue", source_id=source_id))
 
     def add(self, path: Path, display_name: str | None = None) -> SourceRoot:
         raw = Path(path).expanduser()
         if not raw.exists():
-            self._refuse(raw, "le dossier n'existe pas")
+            self._refuse(raw, tr("le dossier n'existe pas"))
         if not raw.is_dir():
-            self._refuse(raw, "ce n'est pas un dossier")
+            self._refuse(raw, tr("ce n'est pas un dossier"))
         if not os.access(raw, os.R_OK | os.X_OK):
-            self._refuse(raw, "le dossier n'est pas lisible (permission refusée)")
+            self._refuse(raw, tr("le dossier n'est pas lisible (permission refusée)"))
         resolved = Path(os.path.realpath(raw))
         for app_dir in (self._paths.data_dir, self._paths.logs_dir):
             if overlaps(resolved, app_dir):
                 self._refuse(
                     raw,
-                    "il contient (ou est contenu dans) les dossiers de l'application ; "
-                    "la base et les journaux ne doivent jamais se trouver dans une source",
+                    tr(
+                        "il contient (ou est contenu dans) les dossiers de l'application ; la "
+                        "base et les journaux ne doivent jamais se trouver dans une source"
+                    ),
                 )
         for existing in self.list():
             if overlaps(resolved, Path(existing.path)):
                 self._refuse(
                     raw,
-                    f"il chevauche la source n° {existing.id} ({existing.path}) ; "
-                    "les fichiers seraient comptés deux fois",
+                    tr(
+                        "il chevauche la source n° {id} ({path}) ; les fichiers seraient comptés "
+                        "deux fois",
+                        id=existing.id,
+                        path=existing.path,
+                    ),
                 )
         removed = self._conn.execute(
             "SELECT id FROM source_root WHERE path = ? AND status = 'removed'", (str(resolved),)
@@ -106,7 +113,7 @@ class SourceService:
     def remove(self, source_id: int) -> SourceRoot:
         source = self.get(source_id)
         if source.status == "removed":
-            raise SourceError(f"La source {source_id} est déjà retirée")
+            raise SourceError(tr("La source {source_id} est déjà retirée", source_id=source_id))
         with transaction(self._conn):
             self._conn.execute(
                 "UPDATE source_root SET status = 'removed' WHERE id = ?", (source_id,)
@@ -123,4 +130,4 @@ class SourceService:
         self._journal.append(
             ACTOR_USER, "source.add", str(path), result="refused", details={"raison": reason}
         )
-        raise SourceError(f"Source refusée : {path} — {reason}")
+        raise SourceError(tr("Source refusée : {path} — {reason}", path=path, reason=reason))

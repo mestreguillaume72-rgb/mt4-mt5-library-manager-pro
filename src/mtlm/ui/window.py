@@ -160,7 +160,7 @@ class MainWindow(QMainWindow):
         self.sidebar.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         placed: list[str] = []
         for section, keys in SECTIONS:
-            header = QListWidgetItem(section)
+            header = QListWidgetItem(tr(section))
             header.setFlags(Qt.ItemFlag.NoItemFlags)
             self.sidebar.addItem(header)
             for key in keys:
@@ -233,13 +233,13 @@ class MainWindow(QMainWindow):
         for (key, attribute), text in WIDGET_TIPS.items():
             widget = getattr(self.pages.get(key), attribute, None)
             if widget is not None:
-                widget.setToolTip(text)
+                widget.setToolTip(tr(text))
 
     def _add_nav(self, key: str) -> None:
         page = self.pages[key]
-        item = QListWidgetItem(f"{page.icon}   {page.title}")
+        item = QListWidgetItem(f"{page.icon}   {tr(page.title)}")
         item.setData(Qt.ItemDataRole.UserRole, key)
-        item.setToolTip(page.subtitle or page.title)
+        item.setToolTip(tr(page.subtitle or page.title))
         self.sidebar.addItem(item)
 
     def _row_of(self, key: str) -> int:
@@ -260,7 +260,7 @@ class MainWindow(QMainWindow):
     def _menu(self) -> None:
         file_menu = self.menuBar().addMenu(tr("&Aller à"))
         for index, page in enumerate(self.pages.values()):
-            action = QAction(page.title, self)
+            action = QAction(tr(page.title), self)
             if index < 9:
                 action.setShortcut(QKeySequence(tr("Ctrl+{v}", v=index + 1)))
             action.triggered.connect(lambda _c=False, k=page.key: self.navigate(k))

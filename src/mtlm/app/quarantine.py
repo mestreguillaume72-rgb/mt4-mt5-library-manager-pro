@@ -34,6 +34,7 @@ from mtlm.core.clock import Clock, iso_utc
 from mtlm.core.control import TaskControl
 from mtlm.core.errors import MtlmError
 from mtlm.core.filenames import portable_name
+from mtlm.core.i18n import tr
 from mtlm.core.paths import AppPaths
 from mtlm.fs.reader import FileIdentity
 from mtlm.store.database import transaction
@@ -176,11 +177,17 @@ class QuarantineService:
                         (file_id,),
                     ).fetchone()
                     excluded.append(
-                        (file_id, row[0] if row and row[0] else "pas un doublon exact admissible")
+                        (
+                            file_id,
+                            row[0] if row and row[0] else tr("pas un doublon exact admissible"),
+                        )
                     )
         if not entries:
             raise QuarantineError(
-                "Aucun doublon exact admissible à mettre en quarantaine (lancez « mtlm doublons »)."
+                tr(
+                    "Aucun doublon exact admissible à mettre en quarantaine (lancez « mtlm "
+                    "doublons »)."
+                )
             )
         total = sum(e.size for e in entries)
         token = _plan_token(str(target), entries)
@@ -227,7 +234,7 @@ class QuarantineService:
             "jeton_de_confirmation": token,
             "fichiers": len(entries),
             "octets": total,
-            "mode": "copie vérifiée — les originaux ne sont ni modifiés ni déplacés",
+            "mode": tr("copie vérifiée — les originaux ne sont ni modifiés ni déplacés"),
             "elements": [
                 {
                     "fichier": e.file_id,
@@ -263,10 +270,12 @@ class QuarantineService:
             (batch_id,),
         ).fetchone()
         if batch is None:
-            raise QuarantineError(f"Lot {batch_id} inconnu")
+            raise QuarantineError(tr("Lot {batch_id} inconnu", batch_id=batch_id))
         destination, expected, status, batch_uuid = batch
         if status in ("completed", "cancelled"):
-            raise QuarantineError(f"Le lot {batch_id} est déjà {status}")
+            raise QuarantineError(
+                tr("Le lot {batch_id} est déjà {status}", batch_id=batch_id, status=status)
+            )
         if token != expected:
             self._journal.append(
                 ACTOR_USER,
@@ -276,7 +285,7 @@ class QuarantineService:
                 details={"motif": "jeton incorrect"},
             )
             raise QuarantineError(
-                "Confirmation refusée : le jeton ne correspond pas à la simulation de ce lot."
+                tr("Confirmation refusée : le jeton ne correspond pas à la simulation de ce lot.")
             )
         entries = self._conn.execute(
             "SELECT e.id, e.file_id, e.source_path_bytes, e.dest_path_bytes, e.sha256, e.size,"
@@ -293,8 +302,10 @@ class QuarantineService:
         ]
         if status == "simulated" and _plan_token(destination, current) != expected:
             raise QuarantineError(
-                "Plan invalidé : des fichiers ont changé depuis la simulation. "
-                "Relancez inventaire, empreintes, doublons puis la simulation."
+                tr(
+                    "Plan invalidé : des fichiers ont changé depuis la simulation. Relancez "
+                    "inventaire, empreintes, doublons puis la simulation."
+                )
             )
         check_destination(
             Path(destination),
@@ -321,7 +332,9 @@ class QuarantineService:
         try:
             ensure_directory(batch_dir)
         except OSError as exc:
-            raise QuarantineError(f"Destination non inscriptible : {exc.strerror or exc}") from exc
+            raise QuarantineError(
+                tr("Destination non inscriptible : {v}", v=exc.strerror or exc)
+            ) from exc
         self._write_manifest(batch_id, batch_dir)
         verified = sum(1 for r in entries if r[6] == "verified")
         failed = 0
@@ -331,14 +344,14 @@ class QuarantineService:
             if state == "verified":
                 continue
             if ctl.cancelled:
-                stopped = "annulé par l'utilisateur"
+                stopped = tr("annulé par l'utilisateur")
                 break
             ctl.checkpoint()
             self._set_entry(entry_id, "copying")
             try:
                 identity = FileIdentity(int(row[10]), int(row[7]), int(row[8]), int(row[9]))
                 if os.path.lexists(bytes(dst)):
-                    raise CopyError("une copie existe déjà à la destination (jamais écrasée)")
+                    raise CopyError(tr("une copie existe déjà à la destination (jamais écrasée)"))
                 copy_verified(
                     bytes(src), bytes(dst), expected_sha256=bytes(sha), expected_identity=identity
                 )
@@ -443,9 +456,13 @@ class QuarantineService:
                     },
                 )
                 raise QuarantineError(
-                    f"Arrêt : la référence conservée « {shown} » (groupe {group_id}) a changé "
-                    "ou n'est plus lisible. Les doublons ne sont plus prouvés : relancez "
-                    "inventaire, empreintes et doublons."
+                    tr(
+                        "Arrêt : la référence conservée « {shown} » (groupe {group_id}) a changé "
+                        "ou n'est plus lisible. Les doublons ne sont plus prouvés : relancez "
+                        "inventaire, empreintes et doublons.",
+                        shown=shown,
+                        group_id=group_id,
+                    )
                 )
         missing = self._conn.execute(
             "SELECT count(*) FROM quarantine_entry e LEFT JOIN duplicate_member m"
@@ -455,8 +472,10 @@ class QuarantineService:
         ).fetchone()[0]
         if missing:
             raise QuarantineError(
-                "Arrêt : des fichiers du lot ne sont plus des doublons exacts connus "
-                "(relancez « mtlm doublons » et une simulation)."
+                tr(
+                    "Arrêt : des fichiers du lot ne sont plus des doublons exacts connus "
+                    "(relancez « mtlm doublons » et une simulation)."
+                )
             )
 
     def _set_entry(
@@ -506,7 +525,7 @@ class QuarantineService:
             )
         ]
         manifest = {
-            "application": "MT4 MT5 Library Manager PRO",
+            "application": tr("MT4 MT5 Library Manager PRO"),
             "lot": batch_id,
             "identifiant": batch[3],
             "cree_le": batch[0],
@@ -514,8 +533,8 @@ class QuarantineService:
             "destination": batch[1],
             "etat": batch[2],
             "jeton": batch[4],
-            "mode": "copie vérifiée : originaux jamais modifiés, déplacés ni supprimés",
-            "restauration": "mtlm quarantaine restaurer LOT (voir docs/utilisateur)",
+            "mode": tr("copie vérifiée : originaux jamais modifiés, déplacés ni supprimés"),
+            "restauration": tr("mtlm quarantaine restaurer LOT (voir docs/utilisateur)"),
             "entrees": entries,
         }
         try:
@@ -557,7 +576,9 @@ class QuarantineService:
                 (batch_id,),
             )
         if cursor.rowcount == 0:
-            raise QuarantineError(f"Le lot {batch_id} ne peut pas être annulé dans son état")
+            raise QuarantineError(
+                tr("Le lot {batch_id} ne peut pas être annulé dans son état", batch_id=batch_id)
+            )
         self._journal.append(ACTOR_USER, "quarantine.cancel", f"lot={batch_id}")
 
     # ---- 5. restauration ----------------------------------------------------------------
@@ -574,7 +595,9 @@ class QuarantineService:
             (batch_id,),
         ).fetchall()
         if not rows:
-            raise QuarantineError(f"Aucun fichier à restaurer dans le lot {batch_id}")
+            raise QuarantineError(
+                tr("Aucun fichier à restaurer dans le lot {batch_id}", batch_id=batch_id)
+            )
         restored = recopied = conflicts = 0
         for entry_id, file_id, src, dst, sha in rows:
             original, copy = bytes(src), bytes(dst)
@@ -584,14 +607,14 @@ class QuarantineService:
                     self._set_entry(
                         int(entry_id),
                         "conflict",
-                        "original absent : relancez avec la recopie autorisée",
+                        tr("original absent : relancez avec la recopie autorisée"),
                     )
                     conflicts += 1
                     continue
                 try:
                     copy_verified(copy, original, expected_sha256=bytes(sha))
                     recopied += 1
-                    note = "original recopié depuis la quarantaine"
+                    note = tr("original recopié depuis la quarantaine")
                 except CopyError as exc:
                     self._set_entry(int(entry_id), "conflict", str(exc))
                     conflicts += 1
@@ -600,7 +623,7 @@ class QuarantineService:
                 self._set_entry(
                     int(entry_id),
                     "conflict",
-                    "un fichier différent occupe le chemin d'origine : rien n'est fait",
+                    tr("un fichier différent occupe le chemin d'origine : rien n'est fait"),
                 )
                 conflicts += 1
                 continue

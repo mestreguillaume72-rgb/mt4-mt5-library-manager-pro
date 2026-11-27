@@ -25,6 +25,7 @@ from mtlm.audit.journal import ACTOR_USER, AuditJournal
 from mtlm.core.clock import Clock, iso_utc
 from mtlm.core.control import TaskControl
 from mtlm.core.errors import MtlmError
+from mtlm.core.i18n import tr
 from mtlm.fs.reader import ReadOnlyFile
 from mtlm.matching.associations import (
     METHOD_VERSION,
@@ -107,11 +108,11 @@ TO_PROCESS = ("en_vrac", "avec_autre_robot", "dossier_standard")
 def certainty_label(level: str, score: float) -> str:
     """Niveau de certitude en mots simples (écran Robots et SET)."""
     if level == "forte":
-        return "certain" if score >= 90 else "très probable"
+        return "certain" if score >= 90 else tr("très probable")
     return {
         "moyenne": "probable",
         "faible": "possible",
-        "a_verifier": "à vérifier (robot compilé seul)",
+        "a_verifier": tr("à vérifier (robot compilé seul)"),
     }.get(level, level)
 
 
@@ -181,7 +182,9 @@ class SetService:
                     decoded = decode_text(data)
                     doc = parse_set(decoded.text, encoding=decoded.encoding)
                     if decoded.confidence < 0.5:
-                        doc.warnings.append(f"encodage incertain ({decoded.encoding})")
+                        doc.warnings.append(
+                            tr("encodage incertain ({encoding})", encoding=decoded.encoding)
+                        )
                     self._store(int(file_id), int(content_id), decoded.encoding, doc)
                     summary.parsed += 1
                     summary.with_warnings += bool(doc.warnings)
@@ -522,27 +525,37 @@ class AssociationService:
             )
         ]
         if not params:
-            return "• Le SET ne contient aucun paramètre lisible : rien à comparer."
+            return tr("• Le SET ne contient aucun paramètre lisible : rien à comparer.")
         sets = self._sets()
         robots = enrich_inputs(self._robots(), sets)
         if not robots:
-            return "• Aucun robot (MQ4, MQ5, EX4, EX5) n'a été trouvé dans vos dossiers."
+            return tr("• Aucun robot (MQ4, MQ5, EX4, EX5) n'a été trouvé dans vos dossiers.")
         wanted = set(params)
         sharing = [r for r in robots if wanted & set(r.inputs)]
         compiled = [r for r in robots if not r.inputs]
         lines = [
-            f"• Ses {len(params)} paramètre(s) ({', '.join(params[:6])}"
-            f"{' …' if len(params) > 6 else ''}) ne correspondent assez à aucun robot "
-            "dont les paramètres sont connus."
+            tr(
+                "• Ses {v} paramètre(s) ({v2}{v3}) ne correspondent assez à aucun robot "
+                "dont les paramètres sont connus.",
+                v=len(params),
+                v2=", ".join(params[:6]),
+                v3=" …" if len(params) > 6 else "",
+            )
             if not sharing
-            else f"• {len(sharing)} robot(s) partagent une partie de ses paramètres, mais trop "
-            "peu pour proposer un lien (score inférieur au minimum)."
+            else tr(
+                "• {v} robot(s) partagent une partie de ses paramètres, mais trop peu "
+                "pour proposer un lien (score inférieur au minimum).",
+                v=len(sharing),
+            )
         ]
         if compiled:
             lines.append(
-                f"• {len(compiled)} robot(s) n'existent qu'en EX4/EX5 : leurs paramètres ne "
-                "sont pas lisibles. Pour aider : rangez un SET de ce robot dans son dossier "
-                "(l'application en apprend les paramètres), ou ajoutez son MQ4/MQ5."
+                tr(
+                    "• {v} robot(s) n'existent qu'en EX4/EX5 : leurs paramètres ne sont pas "
+                    "lisibles. Pour aider : rangez un SET de ce robot dans son dossier "
+                    "(l'application en apprend les paramètres), ou ajoutez son MQ4/MQ5.",
+                    v=len(compiled),
+                )
             )
         return "\n".join(lines)
 
@@ -557,13 +570,13 @@ class AssociationService:
         clauses: list[str] = ["1 = 1"]
         params: list[object] = []
         if set_file_id is not None:
-            clauses.append("a.set_file_id = ?")
+            clauses.append(tr("a.set_file_id = ?"))
             params.append(set_file_id)
         if robot_file_id is not None:
-            clauses.append("a.robot_file_id = ?")
+            clauses.append(tr("a.robot_file_id = ?"))
             params.append(robot_file_id)
         if level is not None:
-            clauses.append("a.level = ?")
+            clauses.append(tr("a.level = ?"))
             params.append(level)
         rows = self._conn.execute(
             "SELECT a.id, a.robot_file_id, r.rel_path, a.set_file_id, s.rel_path, a.score,"
@@ -688,12 +701,14 @@ class AssociationService:
 
     def decide(self, association_id: int, decision: str) -> AssociationRow:
         if decision not in ("accepted", "rejected", "none"):
-            raise AssociationError(f"Décision invalide : {decision}")
+            raise AssociationError(tr("Décision invalide : {decision}", decision=decision))
         row = self._conn.execute(
             "SELECT robot_file_id, set_file_id FROM association WHERE id = ?", (association_id,)
         ).fetchone()
         if row is None:
-            raise AssociationError(f"Association {association_id} inconnue")
+            raise AssociationError(
+                tr("Association {association_id} inconnue", association_id=association_id)
+            )
         with transaction(self._conn):
             self._conn.execute(
                 "UPDATE association SET user_decision = ?, decided_at = ? WHERE id = ?",
