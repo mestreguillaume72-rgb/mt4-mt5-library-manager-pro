@@ -23,6 +23,7 @@ from mtlm import APP_NAME, __version__
 from mtlm.app.context import AppContext
 from mtlm.core.clock import Clock
 from mtlm.core.control import TaskControl
+from mtlm.core.i18n import tr
 from mtlm.ui.base import ActionRegistry, Dialogs, TaskFunction, TaskRunner
 from mtlm.ui.theme import app_icon
 
@@ -71,8 +72,10 @@ class UiApp:
                 self.dialogs.info(
                     self.window,
                     title,
-                    "Une autre tâche est en cours : attendez "
-                    "sa fin, ou mettez-la en pause / annulez-la (écran Analyse).",
+                    tr(
+                        "Une autre tâche est en cours : attendez sa fin, ou mettez-la en pause / "
+                        "annulez-la (écran Analyse)."
+                    ),
                 )
             return False
         self.control = TaskControl()
@@ -85,18 +88,18 @@ class UiApp:
                 on_message(text)
 
         def done(result: Any) -> None:
-            self.status(f"{title} : terminé.")
+            self.status(tr("{title} : terminé.", title=title))
             on_success(result)
             self._finished()
 
         def failed(text: str) -> None:
-            self.status(f"{title} : échec.")
+            self.status(tr("{title} : échec.", title=title))
             if self.window is not None:
                 self.dialogs.error(self.window, title, text)
             self._finished()
 
         def cancelled() -> None:
-            self.status(f"{title} : annulé (état cohérent conservé).")
+            self.status(tr("{title} : annulé (état cohérent conservé).", title=title))
             self._finished()
 
         runner.message.connect(message)
@@ -153,7 +156,7 @@ class MainWindow(QMainWindow):
         self._place_counts()
         self.sidebar = QListWidget()
         self.sidebar.setObjectName("navigation")
-        self.sidebar.setAccessibleName("Navigation entre les écrans")
+        self.sidebar.setAccessibleName(tr("Navigation entre les écrans"))
         self.sidebar.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         placed: list[str] = []
         for section, keys in SECTIONS:
@@ -176,17 +179,17 @@ class MainWindow(QMainWindow):
         brand_row = QHBoxLayout()
         logo = QLabel()
         logo.setPixmap(app_icon(64).pixmap(40, 40))
-        brand = QLabel("MT4 MT5\nLibrary Manager PRO")
+        brand = QLabel(tr("MT4 MT5\nLibrary Manager PRO"))
         brand.setObjectName("brand")
         brand_row.addWidget(logo)
         brand_row.addWidget(brand, 1)
         left.addLayout(brand_row)
-        safe = QLabel("🔒 Rien n'est supprimé sans votre accord")
+        safe = QLabel(tr("🔒 Rien n'est supprimé sans votre accord"))
         safe.setObjectName("brandSub")
         left.addWidget(safe)
         left.addSpacing(6)
         left.addWidget(self.sidebar, 1)
-        version = QLabel(f"Version {__version__}")
+        version = QLabel(tr("Version {version}", version=__version__))
         version.setObjectName("brandSub")
         left.addWidget(version)
         container = QWidget()
@@ -206,7 +209,7 @@ class MainWindow(QMainWindow):
         self.navigate(next(iter(self.pages)))
         app.on_task_finished(self.refresh_current)
         self.statusBar().showMessage(
-            "Prêt. Rien n'est modifié dans vos dossiers sans votre confirmation."
+            tr("Prêt. Rien n'est modifié dans vos dossiers sans votre confirmation.")
         )
 
     def _place_counts(self) -> None:
@@ -255,11 +258,11 @@ class MainWindow(QMainWindow):
         self.refresh_current()
 
     def _menu(self) -> None:
-        file_menu = self.menuBar().addMenu("&Aller à")
+        file_menu = self.menuBar().addMenu(tr("&Aller à"))
         for index, page in enumerate(self.pages.values()):
             action = QAction(page.title, self)
             if index < 9:
-                action.setShortcut(QKeySequence(f"Ctrl+{index + 1}"))
+                action.setShortcut(QKeySequence(tr("Ctrl+{v}", v=index + 1)))
             action.triggered.connect(lambda _c=False, k=page.key: self.navigate(k))
             file_menu.addAction(action)
         file_menu.addSeparator()

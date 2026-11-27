@@ -33,6 +33,7 @@ from mtlm.app.sets import (
     SetService,
     certainty_label,
 )
+from mtlm.core.i18n import tr
 from mtlm.ui.base import fill_table, make_table, selected_value, selected_values
 from mtlm.ui.pages_main import Page, two_columns, with_count
 from mtlm.ui.window import UiApp
@@ -66,13 +67,13 @@ class SetsPage(Page):
         self.only_orphans = QCheckBox("SET orphelins uniquement")
         self.only_orphans.stateChanged.connect(lambda _s: self.refresh())
         self.search = QLineEdit()
-        self.search.setPlaceholderText("Filtrer par nom de SET…")
+        self.search.setPlaceholderText(tr("Filtrer par nom de SET…"))
         self.search.returnPressed.connect(self.refresh)
         self.placement = QComboBox()
-        self.placement.setAccessibleName("Placement des SET")
+        self.placement.setAccessibleName(tr("Placement des SET"))
         for label, value in (
-            ("À traiter : en vrac, mal rangés, sans robot", "a_traiter"),
-            ("Tous les SET", None),
+            (tr("À traiter : en vrac, mal rangés, sans robot"), "a_traiter"),
+            (tr("Tous les SET"), None),
             (PLACEMENT_LABELS["avec_son_robot"], "avec_son_robot"),
             (PLACEMENT_LABELS["en_vrac"], "en_vrac"),
             (PLACEMENT_LABELS["avec_autre_robot"], "avec_autre_robot"),
@@ -85,18 +86,26 @@ class SetsPage(Page):
         filters.addWidget(self.only_orphans)
         self.layout_.addLayout(filters)
         self.sets = make_table(
-            ["N°", "SET", "Format", "Paramètres", "Associations", "Placement"],
+            ["N°", "SET", tr("Format"), tr("Paramètres"), tr("Associations"), tr("Placement")],
             badge_columns=(5,),
             multi=True,
             noun="SET",
         )
         self.sets.itemSelectionChanged.connect(self.load_selected)
         self.params = make_table(
-            ["Paramètre", "Valeur brute", "Normalisée", "Type", "Optimisation"], noun="paramètre"
+            [tr("Paramètre"), tr("Valeur brute"), tr("Normalisée"), tr("Type"), tr("Optimisation")],
+            noun=tr("paramètre"),
         )
         self.layout_.addWidget(two_columns(self.sets, self.params), 2)
         self.assoc = make_table(
-            ["N°", "Score", "Certitude", "Décision", "Placement", "Outil (robot, indicateur…)"],
+            [
+                "N°",
+                tr("Score"),
+                tr("Certitude"),
+                tr("Décision"),
+                tr("Placement"),
+                tr("Outil (robot, indicateur…)"),
+            ],
             badge_columns=(2, 3, 4),
             multi=True,
             noun="association",
@@ -110,7 +119,7 @@ class SetsPage(Page):
         self.compare_with = QSpinBox()
         self.compare_with.setRange(1, 2_000_000_000)
         self.compare_with.setAccessibleName("SET à comparer")
-        compare_row.addWidget(QLabel("Comparer le SET choisi avec le SET n°"))
+        compare_row.addWidget(QLabel(tr("Comparer le SET choisi avec le SET n°")))
         compare_row.addWidget(self.compare_with)
         compare_row.addStretch(1)
         self.layout_.addLayout(compare_row)
@@ -118,22 +127,22 @@ class SetsPage(Page):
             *self.select_buttons("sets", self.sets),
             self.btn(
                 "accepter_meilleure",
-                "Accepter la meilleure proposition des SET choisis",
+                tr("Accepter la meilleure proposition des SET choisis"),
                 self.accept_best,
             ),
             self.btn(
                 "corbeille",
-                "Mettre les SET choisis à la Corbeille",
+                tr("Mettre les SET choisis à la Corbeille"),
                 lambda: self.trash_selected(self.sets, "sets", "SET"),
             ),
         )
         self.button_row(
             *self.select_buttons("associations", self.assoc),
-            self.btn("accepter", "Accepter l'association", lambda: self.decide("accepted")),
-            self.btn("rejeter", "Rejeter l'association", lambda: self.decide("rejected")),
-            self.btn("annuler", "Annuler ma décision", lambda: self.decide("none")),
-            self.btn("comparer", "Comparer", self.compare),
-            self.btn("actualiser", "Actualiser", self.refresh),
+            self.btn("accepter", tr("Accepter l'association"), lambda: self.decide("accepted")),
+            self.btn("rejeter", tr("Rejeter l'association"), lambda: self.decide("rejected")),
+            self.btn("annuler", tr("Annuler ma décision"), lambda: self.decide("none")),
+            self.btn("comparer", tr("Comparer"), self.compare),
+            self.btn("actualiser", tr("Actualiser"), self.refresh),
         )
         self._robot_filter: int | None = None
 
@@ -180,7 +189,7 @@ class SetsPage(Page):
         fill_table(
             self.sets,
             [
-                (*r, PLACEMENT_LABELS.get(placements.get(int(r[0]), ""), "sans robot trouvé"))
+                (*r, PLACEMENT_LABELS.get(placements.get(int(r[0]), ""), tr("sans robot trouvé")))
                 for r in rows
                 if wanted is None
                 or (wanted == "a_traiter" and placements.get(int(r[0]), "en_vrac") in TO_PROCESS)
@@ -234,9 +243,9 @@ class SetsPage(Page):
             ],
         )
         self.evidence.setPlainText(
-            "Sélectionnez une association pour voir ses preuves."
+            tr("Sélectionnez une association pour voir ses preuves.")
             if rows
-            else "Aucun robot correspondant trouvé (SET orphelin).\n\nPourquoi ?\n"
+            else tr("Aucun robot correspondant trouvé (SET orphelin).\n\nPourquoi ?\n")
             + self._assoc().why_orphan(set_id)
         )
 
@@ -249,8 +258,14 @@ class SetsPage(Page):
         if assoc_id is None:
             return
         lines = [
-            f"{POLARITY[polarity]} — {EVIDENCE_LABELS.get(kind, kind)} "
-            f"(poids {weight:g}, valeur {value:.2f}) : {detail}"
+            tr(
+                "{v} — {v2} (poids {weight:g}, valeur {value:.2f}) : {detail}",
+                v=POLARITY[polarity],
+                v2=EVIDENCE_LABELS.get(kind, kind),
+                weight=weight,
+                value=value,
+                detail=detail,
+            )
             for kind, weight, value, polarity, detail in self._assoc().evidence(assoc_id)
         ]
         self.evidence.setPlainText("\n".join(lines))
@@ -259,26 +274,32 @@ class SetsPage(Page):
         assoc_ids = [int(v) for v in selected_values(self.assoc)]
         if not assoc_ids:
             self.app.dialogs.info(
-                self.win, "Associations", "Sélectionnez une ou plusieurs associations."
+                self.win, tr("Associations"), tr("Sélectionnez une ou plusieurs associations.")
             )
             return
         if len(assoc_ids) > 1 and not self.app.dialogs.confirm(
             self,
-            "Associations",
-            f"Marquer {len(assoc_ids)} associations comme « {DECISIONS[decision]} » ?",
+            tr("Associations"),
+            tr(
+                "Marquer {v} associations comme « {v2} » ?",
+                v=len(assoc_ids),
+                v2=DECISIONS[decision],
+            ),
         ):
             return
         service = self._assoc()
         for assoc_id in assoc_ids:
             service.decide(assoc_id, decision)
-        self.app.status(f"{len(assoc_ids)} association(s) : {DECISIONS[decision]}")
+        self.app.status(tr("{v} association(s) : {v2}", v=len(assoc_ids), v2=DECISIONS[decision]))
         self.load_selected()
 
     def accept_best(self) -> None:
         """Pour chaque SET choisi : accepte sa meilleure proposition (non rejetée)."""
         set_ids = [int(v) for v in selected_values(self.sets)]
         if not set_ids:
-            self.app.dialogs.info(self.win, "Associations", "Sélectionnez un ou plusieurs SET.")
+            self.app.dialogs.info(
+                self.win, tr("Associations"), tr("Sélectionnez un ou plusieurs SET.")
+            )
             return
         service = self._assoc()
         best = []
@@ -292,18 +313,24 @@ class SetsPage(Page):
                 best.append(rows[0])
         if not best:
             self.app.dialogs.info(
-                self.win, "Associations", "Aucune proposition pour les SET choisis."
+                self.win, tr("Associations"), tr("Aucune proposition pour les SET choisis.")
             )
             return
         weak = sum(a.level != "forte" for a in best)
         if not self.app.dialogs.confirm(
             self,
-            "Accepter les meilleures propositions",
-            f"Accepter la meilleure proposition de {len(best)} SET "
-            f"({len(set_ids) - len(best)} sans proposition)."
+            tr("Accepter les meilleures propositions"),
+            tr(
+                "Accepter la meilleure proposition de {v} SET ({v2} sans proposition).",
+                v=len(best),
+                v2=len(set_ids) - len(best),
+            )
             + (
-                f"\n⚠️ {weak} de ces propositions ne sont pas de niveau « forte » : "
-                "vérifiez leurs preuves avant d'accepter."
+                tr(
+                    "\n⚠️ {weak} de ces propositions ne sont pas de niveau « forte » : "
+                    "vérifiez leurs preuves avant d'accepter.",
+                    weak=weak,
+                )
                 if weak
                 else ""
             ),
@@ -311,13 +338,13 @@ class SetsPage(Page):
             return
         for association in best:
             service.decide(association.id, "accepted")
-        self.app.status(f"{len(best)} association(s) acceptée(s).")
+        self.app.status(tr("{v} association(s) acceptée(s).", v=len(best)))
         self.refresh()
 
     def compare(self) -> None:
         set_id = self._set_id()
         if set_id is None:
-            self.app.dialogs.info(self.win, "Comparer", "Sélectionnez un SET.")
+            self.app.dialogs.info(self.win, tr("Comparer"), tr("Sélectionnez un SET."))
             return
         ctx = self.app.ctx
         diffs = SetService(ctx.conn, ctx.clock, ctx.journal).compare(
@@ -325,17 +352,17 @@ class SetsPage(Page):
         )
         if diffs is None:
             self.app.dialogs.info(
-                self.win, "Comparer", "Les deux numéros doivent désigner des SET analysés."
+                self.win, tr("Comparer"), tr("Les deux numéros doivent désigner des SET analysés.")
             )
             return
         labels = {
             "same": "=",
             "different": "≠",
-            "only_left": "seulement A",
-            "only_right": "seulement B",
+            "only_left": tr("seulement A"),
+            "only_right": tr("seulement B"),
         }
         same = sum(d.status == "same" for d in diffs)
-        text = [f"{same} identique(s) sur {len(diffs)} paramètre(s)."] + [
+        text = [tr("{same} identique(s) sur {v} paramètre(s).", same=same, v=len(diffs))] + [
             f"{labels[d.status]}  {d.name} : A={d.left} B={d.right}"
             for d in diffs
             if d.status != "same"
@@ -354,11 +381,11 @@ class FamiliesPage(Page):
         super().__init__(app)
         row = QHBoxLayout()
         self.search = QLineEdit()
-        self.search.setPlaceholderText("Rechercher une famille…")
+        self.search.setPlaceholderText(tr("Rechercher une famille…"))
         self.search.returnPressed.connect(self.refresh)
         self.tool_type = QComboBox()
-        self.tool_type.setAccessibleName("Type d'outil")
-        self.tool_type.addItem("Tous les outils", None)
+        self.tool_type.setAccessibleName(tr("Type d'outil"))
+        self.tool_type.addItem(tr("Tous les outils"), None)
         for value, label in TYPE_LABELS.items():
             self.tool_type.addItem(f"{label}s" if not label.endswith("s") else label, value)
         self.tool_type.currentIndexChanged.connect(lambda _i: self.refresh())
@@ -366,19 +393,30 @@ class FamiliesPage(Page):
         row.addWidget(self.tool_type)
         self.layout_.addLayout(row)
         self.button_row(
-            self.btn("rechercher", "Rechercher", self.refresh),
-            self.btn("actualiser", "Actualiser", self.refresh),
+            self.btn("rechercher", tr("Rechercher"), self.refresh),
+            self.btn("actualiser", tr("Actualiser"), self.refresh),
         )
         self.banner(
-            "<b>Une famille = un robot, un indicateur ou un script et tout ce qui va avec</b> "
-            ": versions, copies (même sous un autre nom), compilés, SET, modèles .tpl, "
-            "indicateurs qu'il utilise, DLL et bibliothèques importées, images, sons, "
-            "documents. Sélectionnez une ou plusieurs familles (Cmd+clic, Maj+clic) puis "
-            "« Proposer un dossier » : vous voyez d'abord la proposition, puis vous validez.",
+            tr(
+                "<b>Une famille = un robot, un indicateur ou un script et tout ce qui va "
+                "avec</b> : versions, copies (même sous un autre nom), compilés, SET, "
+                "modèles .tpl, indicateurs qu'il utilise, DLL et bibliothèques "
+                "importées, images, sons, documents. Sélectionnez une ou plusieurs "
+                "familles (Cmd+clic, Maj+clic) puis « Proposer un dossier » : vous voyez "
+                "d'abord la proposition, puis vous validez."
+            ),
             "banner",
         )
         self.families = make_table(
-            ["N°", "Famille", "Plateforme", "Membres", "Versions", "Confiance", "Type"],
+            [
+                "N°",
+                tr("Famille"),
+                tr("Plateforme"),
+                tr("Membres"),
+                tr("Versions"),
+                tr("Confiance"),
+                tr("Type"),
+            ],
             badge_columns=(5,),
             multi=True,
             noun="famille",
@@ -388,33 +426,46 @@ class FamiliesPage(Page):
         self.reasons = QPlainTextEdit()
         self.reasons.setReadOnly(True)
         self.members = make_table(
-            ["Fichier", "Relation", "Version estimée", "Base", "Chemin"],
+            [tr("Fichier"), tr("Relation"), tr("Version estimée"), tr("Base"), tr("Chemin")],
             badge_columns=(1,),
             multi=True,
             noun="fichier",
         )
         self.linked = make_table(
-            ["Fichier", "Type", "Lien", "Placement", "Outil", "Indices", "Chemin"],
+            [
+                tr("Fichier"),
+                tr("Type"),
+                tr("Lien"),
+                tr("Placement"),
+                tr("Outil"),
+                tr("Indices"),
+                tr("Chemin"),
+            ],
             badge_columns=(2, 3),
             multi=True,
             noun="fichier",
         )
         self.deps = make_table(
-            ["Outil", "A besoin de", "Comment", "Fichier utilisé"], noun="dépendance"
+            [tr("Outil"), tr("A besoin de"), tr("Comment"), tr("Fichier utilisé")],
+            noun=tr("dépendance"),
         )
         self.layout_.addWidget(self.families, 2)
         self.layout_.addWidget(self.reasons, 1)
         tabs = QTabWidget()
-        tabs.addTab(with_count(self.members), "Fichiers de la famille")
-        tabs.addTab(with_count(self.linked), "Fichiers liés (images, sons, modèles, DLL…)")
-        tabs.addTab(with_count(self.deps), "Dépendances (indicateurs utilisés, bibliothèques)")
+        tabs.addTab(with_count(self.members), tr("Fichiers de la famille"))
+        tabs.addTab(with_count(self.linked), tr("Fichiers liés (images, sons, modèles, DLL…)"))
+        tabs.addTab(with_count(self.deps), tr("Dépendances (indicateurs utilisés, bibliothèques)"))
         self.tabs = tabs
         self.layout_.addWidget(tabs, 2)
         self.button_row(
             self.btn(
-                "dossier", "Proposer un dossier pour les familles choisies…", self.propose_family
+                "dossier",
+                tr("Proposer un dossier pour les familles choisies…"),
+                self.propose_family,
             ),
-            self.btn("corbeille", "Mettre les fichiers choisis à la Corbeille", self.trash_member),
+            self.btn(
+                "corbeille", tr("Mettre les fichiers choisis à la Corbeille"), self.trash_member
+            ),
             *self.select_buttons("fichiers", self.members),
         )
 
@@ -425,22 +476,27 @@ class FamiliesPage(Page):
         families = self._families_selected()
         if not families:
             self.app.dialogs.info(
-                self.win, "Dossier de famille", "Sélectionnez une ou plusieurs familles."
+                self.win, tr("Dossier de famille"), tr("Sélectionnez une ou plusieurs familles.")
             )
             return
         names = selected_values(self.families, 1)
         what = (
-            f"Toute la famille « {names[0]} » réunie dans un dossier au nom du robot"
+            tr("Toute la famille « {v} » réunie dans un dossier au nom du robot", v=names[0])
             if len(families) == 1
-            else f"Les {len(families)} familles choisies réunies dans un dossier, un "
-            "sous-dossier par robot"
+            else tr(
+                "Les {v} familles choisies réunies dans un dossier, un sous-dossier par robot",
+                v=len(families),
+            )
         )
         self.propose_folder(
-            "Dossier de famille",
-            f"{what} : versions, copies, compilés, SET, modèles, indicateurs utilisés, DLL et "
-            "bibliothèques, images, sons et documents. Chaque fichier garde le nom de son "
-            "dossier d'origine ; les fichiers liés sont rangés dans « Images », « Modèles », "
-            "« Bibliothèques »…",
+            tr("Dossier de famille"),
+            tr(
+                "{what} : versions, copies, compilés, SET, modèles, indicateurs "
+                "utilisés, DLL et bibliothèques, images, sons et documents. Chaque "
+                "fichier garde le nom de son dossier d'origine ; les fichiers liés sont "
+                "rangés dans « Images », « Modèles », « Bibliothèques »…",
+                what=what,
+            ),
             lambda service, destination: service.preview_families(destination, families),
         )
 
@@ -451,13 +507,15 @@ class FamiliesPage(Page):
         if not file_ids:
             self.app.dialogs.info(
                 self.win,
-                "Corbeille",
-                "Sélectionnez un ou plusieurs fichiers dans « Fichiers de la famille » ou "
-                "« Fichiers liés ».",
+                tr("Corbeille"),
+                tr(
+                    "Sélectionnez un ou plusieurs fichiers dans « Fichiers de la famille » "
+                    "ou « Fichiers liés »."
+                ),
             )
             return
         paths = selected_values(table, path_column)
-        intro = f"{len(file_ids)} fichier(s) choisi(s) : " + ", ".join(paths[:5])
+        intro = tr("{v} fichier(s) choisi(s) : ", v=len(file_ids)) + ", ".join(paths[:5])
         if len(paths) > 5:
             intro += " …"
         self.trash_with_confirmation(file_ids, "familles", intro)
@@ -496,8 +554,11 @@ class FamiliesPage(Page):
         self.refresh()
         if family_id is None:
             self.reasons.setPlainText(
-                f"Le fichier {file_id} n'appartient à aucune famille "
-                "(relancez l'étape « Familles »)."
+                tr(
+                    "Le fichier {file_id} n'appartient à aucune famille (relancez l'étape « "
+                    "Familles »).",
+                    file_id=file_id,
+                )
             )
             return
         for row in range(self.families.rowCount()):
@@ -521,11 +582,11 @@ class FamiliesPage(Page):
                 continue
             _row, basis, family_members = found
             if len(families) == 1:
-                reasons += [f"Raison : {b}" for b in basis]
+                reasons += [tr("Raison : {b}", b=b) for b in basis]
             members += family_members
         if len(families) > 1:
             reasons.append(
-                f"{len(families)} familles choisies : leurs fichiers sont listés ensemble."
+                tr("{v} familles choisies : leurs fichiers sont listés ensemble.", v=len(families))
             )
         self.reasons.setPlainText("\n".join(reasons))
         ctx = self.app.ctx
@@ -549,7 +610,9 @@ class FamiliesPage(Page):
                 )
             )
         fill_table(self.linked, rows)
-        self.tabs.setTabText(1, f"Fichiers liés (images, sons, modèles, DLL…) : {len(rows)}")
+        self.tabs.setTabText(
+            1, tr("Fichiers liés (images, sons, modèles, DLL…) : {v}", v=len(rows))
+        )
         dependencies = companions.dependencies(member_ids)
         fill_table(
             self.deps,
@@ -564,7 +627,7 @@ class FamiliesPage(Page):
             ],
         )
         self.tabs.setTabText(
-            2, f"Dépendances (indicateurs utilisés, bibliothèques) : {len(dependencies)}"
+            2, tr("Dépendances (indicateurs utilisés, bibliothèques) : {v}", v=len(dependencies))
         )
         fill_table(
             self.members,
@@ -591,23 +654,35 @@ class DuplicatesPage(Page):
     def __init__(self, app: UiApp) -> None:
         super().__init__(app)
         self.banner(
-            "<b>Doublons exacts</b> : contenu identique octet pour octet (seuls "
-            "candidats possibles à la quarantaine). <b>Similaires</b> : jamais des "
-            "doublons, uniquement informatifs.",
+            tr(
+                "<b>Doublons exacts</b> : contenu identique octet pour octet (seuls "
+                "candidats possibles à la quarantaine). <b>Similaires</b> : jamais des "
+                "doublons, uniquement informatifs."
+            ),
             "banner",
         )
         tabs = QTabWidget()
         exact = QWidget()
         exact_layout = QVBoxLayout(exact)
         self.groups = make_table(
-            ["Groupe", "Fichiers", "Taille", "SHA-256", "Référence", "Choisie par vous"],
+            [
+                tr("Groupe"),
+                tr("Fichiers"),
+                tr("Taille"),
+                "SHA-256",
+                tr("Référence"),
+                tr("Choisie par vous"),
+            ],
             badge_columns=(5,),
             multi=True,
             noun="groupe",
         )
         self.groups.itemSelectionChanged.connect(self.load_members)
         self.members = make_table(
-            ["Fichier", "Rôle", "Chemin", "Groupe"], badge_columns=(1,), multi=True, noun="fichier"
+            [tr("Fichier"), tr("Rôle"), tr("Chemin"), tr("Groupe")],
+            badge_columns=(1,),
+            multi=True,
+            noun="fichier",
         )
         exact_layout.addWidget(self.groups, 1)
         group_buttons = QHBoxLayout()
@@ -621,38 +696,42 @@ class DuplicatesPage(Page):
             member_buttons.addWidget(button)
         member_buttons.addStretch(1)
         exact_layout.addLayout(member_buttons)
-        tabs.addTab(exact, "Doublons exacts")
+        tabs.addTab(exact, tr("Doublons exacts"))
         similar = QWidget()
         similar_layout = QVBoxLayout(similar)
         self.kind = QComboBox()
         for label, value in (
-            ("Toutes les similarités", None),
-            ("Équivalents normalisés", "text_normalized_equal"),
-            ("Sources similaires", "text_similar"),
+            (tr("Toutes les similarités"), None),
+            (tr("Équivalents normalisés"), "text_normalized_equal"),
+            (tr("Sources similaires"), "text_similar"),
             ("SET similaires", "set_similar"),
         ):
             self.kind.addItem(label, value)
         self.kind.currentIndexChanged.connect(lambda _i: self.refresh())
         self.similar = make_table(
-            ["Score", "Type", "Fichier A", "Fichier B", "Méthode"], badge_columns=(1,), noun="paire"
+            [tr("Score"), tr("Type"), tr("Fichier A"), tr("Fichier B"), tr("Méthode")],
+            badge_columns=(1,),
+            noun="paire",
         )
         similar_layout.addWidget(self.kind)
         similar_layout.addWidget(self.similar, 1)
-        tabs.addTab(similar, "Similaires")
+        tabs.addTab(similar, tr("Similaires"))
         self.layout_.addWidget(tabs, 1)
         self.button_row(
-            self.btn("reference", "Conserver ce fichier comme référence", self.set_reference),
-            self.btn("octets", "Vérifier octet par octet", self.verify_bytes),
-            self.btn("actualiser", "Actualiser", self.refresh),
+            self.btn("reference", tr("Conserver ce fichier comme référence"), self.set_reference),
+            self.btn("octets", tr("Vérifier octet par octet"), self.verify_bytes),
+            self.btn("actualiser", tr("Actualiser"), self.refresh),
         )
         self.button_row(
             self.btn(
                 "corbeille_groupe",
-                "Mettre à la Corbeille les copies en trop des groupes choisis",
+                tr("Mettre à la Corbeille les copies en trop des groupes choisis"),
                 self.trash_group,
             ),
             self.btn(
-                "corbeille_fichier", "Mettre les fichiers choisis à la Corbeille", self.trash_one
+                "corbeille_fichier",
+                tr("Mettre les fichiers choisis à la Corbeille"),
+                self.trash_one,
             ),
         )
 
@@ -667,7 +746,7 @@ class DuplicatesPage(Page):
         groups = self._groups_selected()
         if not groups:
             self.app.dialogs.info(
-                self.win, "Corbeille", "Sélectionnez un ou plusieurs groupes de doublons."
+                self.win, tr("Corbeille"), tr("Sélectionnez un ou plusieurs groupes de doublons.")
             )
             return
         deletion = self._deletion()
@@ -675,8 +754,12 @@ class DuplicatesPage(Page):
         self.trash_with_confirmation(
             surplus,
             "doublons",
-            f"{len(groups)} groupe(s) choisi(s) : la référence de chaque groupe est conservée, "
-            f"leurs {len(surplus)} copie(s) identique(s) partent à la Corbeille.",
+            tr(
+                "{v} groupe(s) choisi(s) : la référence de chaque groupe est conservée, "
+                "leurs {v2} copie(s) identique(s) partent à la Corbeille.",
+                v=len(groups),
+                v2=len(surplus),
+            ),
         )
 
     def trash_one(self) -> None:
@@ -684,15 +767,15 @@ class DuplicatesPage(Page):
         if not members:
             self.app.dialogs.info(
                 self.win,
-                "Corbeille",
-                "Sélectionnez un ou plusieurs groupes, puis les fichiers à supprimer.",
+                tr("Corbeille"),
+                tr("Sélectionnez un ou plusieurs groupes, puis les fichiers à supprimer."),
             )
             return
         # 1.6.0 : vous supprimez exactement ce que vous choisissez, références comprises ;
         # un autre exemplaire du groupe devient alors la référence. Si tous les exemplaires
         # d'un contenu sont choisis, le dernier est signalé « exemplaire unique ».
         self.trash_with_confirmation(
-            members, "doublons", f"{len(members)} fichier(s) choisi(s) dans les doublons."
+            members, "doublons", tr("{v} fichier(s) choisi(s) dans les doublons.", v=len(members))
         )
 
     def _service(self) -> DuplicateService:
@@ -716,8 +799,8 @@ class DuplicatesPage(Page):
             ],
         )
         labels = {
-            "text_normalized_equal": "équivalent normalisé",
-            "text_similar": "source similaire",
+            "text_normalized_equal": tr("équivalent normalisé"),
+            "text_similar": tr("source similaire"),
             "set_similar": "SET similaire",
         }
         fill_table(
@@ -741,12 +824,12 @@ class DuplicatesPage(Page):
             [
                 (
                     m.file_id,
-                    "RÉFÉRENCE (conservée)"
+                    tr("RÉFÉRENCE (conservée)")
                     if m.is_reference
                     else (
-                        "admissible à la quarantaine"
+                        tr("admissible à la quarantaine")
                         if m.admissible
-                        else f"non admissible : {m.reason}"
+                        else tr("non admissible : {reason}", reason=m.reason)
                     ),
                     m.rel_path,
                     group,
@@ -761,7 +844,7 @@ class DuplicatesPage(Page):
         group = selected_value(self.members, 3)
         if member is None or group is None:
             self.app.dialogs.info(
-                self.win, "Référence", "Sélectionnez un groupe puis le fichier à conserver."
+                self.win, tr("Référence"), tr("Sélectionnez un groupe puis le fichier à conserver.")
             )
             return
         self._service().set_reference(int(group), int(member))
@@ -770,16 +853,22 @@ class DuplicatesPage(Page):
     def verify_bytes(self) -> None:
         groups = self._groups_selected()
         if not groups:
-            self.app.dialogs.info(self.win, "Vérification", "Sélectionnez un ou plusieurs groupes.")
+            self.app.dialogs.info(
+                self.win, tr("Vérification"), tr("Sélectionnez un ou plusieurs groupes.")
+            )
             return
         different = [g for g in groups if not self._service().verify_bytewise(g)]
         self.app.dialogs.info(
             self.win,
-            "Vérification octet par octet",
-            f"{len(groups) - len(different)} groupe(s) identique(s) octet par octet."
+            tr("Vérification octet par octet"),
+            tr("{v} groupe(s) identique(s) octet par octet.", v=len(groups) - len(different))
             + (
-                f"\n{len(different)} groupe(s) DIFFÉRENT(S) : {', '.join(map(str, different))} "
-                "— leurs fichiers ne sont plus admissibles."
+                tr(
+                    "\n{v} groupe(s) DIFFÉRENT(S) : {v2} — leurs fichiers ne sont plus "
+                    "admissibles.",
+                    v=len(different),
+                    v2=", ".join(map(str, different)),
+                )
                 if different
                 else ""
             ),
@@ -797,21 +886,24 @@ class ArchivesPage(Page):
     def __init__(self, app: UiApp) -> None:
         super().__init__(app)
         self.banner(
-            "Les archives sont <b>lues sans rien extraire</b> : chaque fichier contenu est "
-            "comparé à vos fichiers. <b>« Déjà décompressée »</b> = tout son contenu existe "
-            "déjà sur le disque : on peut la mettre à la Corbeille sans rien perdre. Pour "
-            "décompresser, cliquez sur les archives voulues puis « Décompresser » : un dossier "
-            "à leur nom est créé à côté d'elles, chaque fichier est vérifié, et l'archive part "
-            "à la Corbeille seulement si tout est vérifié.",
+            tr(
+                "Les archives sont <b>lues sans rien extraire</b> : chaque fichier "
+                "contenu est comparé à vos fichiers. <b>« Déjà décompressée »</b> = tout "
+                "son contenu existe déjà sur le disque : on peut la mettre à la "
+                "Corbeille sans rien perdre. Pour décompresser, cliquez sur les archives "
+                "voulues puis « Décompresser » : un dossier à leur nom est créé à côté "
+                "d'elles, chaque fichier est vérifié, et l'archive part à la Corbeille "
+                "seulement si tout est vérifié."
+            ),
             "banner",
         )
         filters = QHBoxLayout()
         self.archive_filter = QComboBox()
-        self.archive_filter.setAccessibleName("Archives affichées")
+        self.archive_filter.setAccessibleName(tr("Archives affichées"))
         for label, value in (
-            ("Toutes les archives", "toutes"),
-            ("🔒 Protégées par mot de passe", "protegees"),
-            ("Avec un problème (protégées, abîmées, incomplètes)", "problemes"),
+            (tr("Toutes les archives"), "toutes"),
+            (tr("🔒 Protégées par mot de passe"), "protegees"),
+            (tr("Avec un problème (protégées, abîmées, incomplètes)"), "problemes"),
         ):
             self.archive_filter.addItem(label, value)
         self.archive_filter.currentIndexChanged.connect(lambda _i: self.refresh())
@@ -822,7 +914,7 @@ class ArchivesPage(Page):
         filters.addStretch(1)
         self.layout_.addLayout(filters)
         self.archives = make_table(
-            ["N°", "Archive", "Format", "Fichiers", "Contient", "SET", "État"],
+            ["N°", tr("Archive"), tr("Format"), tr("Fichiers"), tr("Contient"), "SET", tr("État")],
             badge_columns=(6,),
             multi=True,
             noun="archive",
@@ -831,22 +923,28 @@ class ArchivesPage(Page):
         self.layout_.addWidget(self.archives, 2)
         self.button_row(*self.select_buttons("archives", self.archives))
         self.entries = make_table(
-            ["Fichier dans l'archive", "Type", "Taille", "Lecture", "Déjà sur le disque ?"],
+            [
+                tr("Fichier dans l'archive"),
+                tr("Type"),
+                tr("Taille"),
+                tr("Lecture"),
+                tr("Déjà sur le disque ?"),
+            ],
             noun="fichier",
         )
         self.layout_.addWidget(self.entries, 2)
         self.button_row(
             self.btn(
                 "decompresser",
-                "Décompresser les archives choisies (puis Corbeille)",
+                tr("Décompresser les archives choisies (puis Corbeille)"),
                 self.extract,
             ),
             self.btn(
                 "corbeille",
-                "Mettre à la Corbeille les archives déjà décompressées choisies",
+                tr("Mettre à la Corbeille les archives déjà décompressées choisies"),
                 self.trash_redundant,
             ),
-            self.btn("actualiser", "Actualiser", self.refresh),
+            self.btn("actualiser", tr("Actualiser"), self.refresh),
         )
 
     def _service(self) -> ArchiveService:
@@ -873,7 +971,9 @@ class ArchivesPage(Page):
         )
         protected = sum(1 for r in every if r.protected)
         self.protected_count.setText(
-            f"🔒 {protected} archive(s) protégée(s) par mot de passe" if protected else ""
+            tr("🔒 {protected} archive(s) protégée(s) par mot de passe", protected=protected)
+            if protected
+            else ""
         )
         fill_table(
             self.archives,
@@ -908,23 +1008,30 @@ class ArchivesPage(Page):
         chosen = [int(v) for v in selected_values(self.archives)]
         if not chosen:
             self.app.dialogs.info(
-                self.win, "Décompresser", "Cliquez sur les archives à décompresser."
+                self.win, tr("Décompresser"), tr("Cliquez sur les archives à décompresser.")
             )
             return
         backend = self.app.ctx.trash
         if not self.app.dialogs.confirm(
             self,
-            "Décompresser",
-            f"Décompresser {len(chosen)} archive(s), chacune dans un nouveau dossier à son nom, à "
-            "côté d'elle ? Chaque fichier extrait est vérifié par son empreinte."
-            + (
-                " Ensuite, l'archive part à la Corbeille (récupérable), seulement si tout "
-                "est vérifié."
-                if backend is not None
-                else " (La Corbeille n'est disponible que sur Mac et Windows : l'archive "
-                "restera en place.)"
+            tr("Décompresser"),
+            tr(
+                "Décompresser {v} archive(s), chacune dans un nouveau dossier à son nom, "
+                "à côté d'elle ? Chaque fichier extrait est vérifié par son empreinte.",
+                v=len(chosen),
             )
-            + "\n\nAprès, relancez « Tout analyser » pour analyser les fichiers extraits.",
+            + (
+                tr(
+                    " Ensuite, l'archive part à la Corbeille (récupérable), seulement si "
+                    "tout est vérifié."
+                )
+                if backend is not None
+                else tr(
+                    " (La Corbeille n'est disponible que sur Mac et Windows : l'archive "
+                    "restera en place.)"
+                )
+            )
+            + tr("\n\nAprès, relancez « Tout analyser » pour analyser les fichiers extraits."),
         ):
             return
 
@@ -934,45 +1041,54 @@ class ArchivesPage(Page):
             )
 
         def done(result: Any) -> None:
-            text = (
-                f"{result.extracted} archive(s) décompressée(s) ({result.files} fichier(s) "
-                f"vérifié(s)), {result.trashed} mise(s) à la Corbeille."
+            text = tr(
+                "{extracted} archive(s) décompressée(s) ({files} fichier(s) vérifié(s)), "
+                "{trashed} mise(s) à la Corbeille.",
+                extracted=result.extracted,
+                files=result.files,
+                trashed=result.trashed,
             )
             if result.refused:
-                text += f"\n{len(result.refused)} laissée(s) intacte(s) :\n" + "\n".join(
+                text += tr("\n{v} laissée(s) intacte(s) :\n", v=len(result.refused)) + "\n".join(
                     f"• n°{a} : {why}" for a, why in result.refused[:10]
                 )
-            self.app.dialogs.info(self.win, "Décompresser", text)
+            self.app.dialogs.info(self.win, tr("Décompresser"), text)
             self.refresh()
 
-        self.app.run_task("Décompression", work, done)
+        self.app.run_task(tr("Décompression"), work, done)
 
     def trash_redundant(self) -> None:
         chosen = [int(v) for v in selected_values(self.archives)]
         if not chosen:
-            self.app.dialogs.info(self.win, "Corbeille", "Cliquez sur les archives concernées.")
+            self.app.dialogs.info(
+                self.win, tr("Corbeille"), tr("Cliquez sur les archives concernées.")
+            )
             return
         if self.app.ctx.trash is None:
             self.app.dialogs.info(
                 self.win,
-                "Corbeille",
-                "La mise à la Corbeille n'est disponible que sur Mac et Windows.",
+                tr("Corbeille"),
+                tr("La mise à la Corbeille n'est disponible que sur Mac et Windows."),
             )
             return
         if not self.app.dialogs.confirm(
             self,
-            "Mettre à la Corbeille",
-            f"{len(chosen)} archive(s) choisie(s). Seules celles dont TOUT le contenu existe déjà "
-            "sur le disque partent à la Corbeille (récupérables) ; les autres restent.",
+            tr("Mettre à la Corbeille"),
+            tr(
+                "{v} archive(s) choisie(s). Seules celles dont TOUT le contenu existe "
+                "déjà sur le disque partent à la Corbeille (récupérables) ; les autres "
+                "restent.",
+                v=len(chosen),
+            ),
         ):
             return
         result = self._service().trash_redundant(chosen, self.app.ctx.trash)
-        text = f"{result.trashed} archive(s) mise(s) à la Corbeille."
+        text = tr("{trashed} archive(s) mise(s) à la Corbeille.", trashed=result.trashed)
         if result.refused:
-            text += f"\n{len(result.refused)} laissée(s) en place :\n" + "\n".join(
+            text += tr("\n{v} laissée(s) en place :\n", v=len(result.refused)) + "\n".join(
                 f"• n°{a} : {why}" for a, why in result.refused[:10]
             )
-        self.app.dialogs.info(self.win, "Corbeille", text)
+        self.app.dialogs.info(self.win, tr("Corbeille"), text)
         self.refresh()
 
 
@@ -986,29 +1102,33 @@ class RiskPage(Page):
     def __init__(self, app: UiApp) -> None:
         super().__init__(app)
         self.banner(
-            "<b>Analyse 100 % locale, sur votre Mac</b> : les fichiers sont seulement lus, "
-            "<b>jamais exécutés</b>, et <b>rien n'est envoyé sur Internet</b>. On repère des "
-            "<b>signes</b> : DLL, robots qui peuvent télécharger, lancer un programme, effacer "
-            "des fichiers ou lire le clavier, programmes et scripts (.exe, .bat…), fichiers "
-            "déguisés, archives protégées par mot de passe. <b>Ce n'est pas un antivirus</b> : "
-            "un signe n'est pas une preuve, et un virus inconnu peut passer inaperçu. En cas "
-            "de doute, passez le fichier dans un antivirus pour Mac avant de l'utiliser.",
+            tr(
+                "<b>Analyse 100 % locale, sur votre Mac</b> : les fichiers sont "
+                "seulement lus, <b>jamais exécutés</b>, et <b>rien n'est envoyé sur "
+                "Internet</b>. On repère des <b>signes</b> : DLL, robots qui peuvent "
+                "télécharger, lancer un programme, effacer des fichiers ou lire le "
+                "clavier, programmes et scripts (.exe, .bat…), fichiers déguisés, "
+                "archives protégées par mot de passe. <b>Ce n'est pas un antivirus</b> : "
+                "un signe n'est pas une preuve, et un virus inconnu peut passer "
+                "inaperçu. En cas de doute, passez le fichier dans un antivirus pour Mac "
+                "avant de l'utiliser."
+            ),
             "bannerSafe",
         )
         self.findings = make_table(
-            ["N°", "Niveau", "Fichier", "Ce qu'il pourrait faire"],
+            ["N°", tr("Niveau"), tr("Fichier"), tr("Ce qu'il pourrait faire")],
             badge_columns=(1,),
             multi=True,
             noun="fichier",
         )
         self.layout_.addWidget(self.findings, 1)
-        self.summary = QLabel("Cliquez sur « Rechercher les fichiers à risque ».")
+        self.summary = QLabel(tr("Cliquez sur « Rechercher les fichiers à risque »."))
         self.summary.setObjectName("cardHint")
         self.layout_.addWidget(self.summary)
         self.button_row(
-            self.btn("rechercher", "Rechercher les fichiers à risque", self.scan),
+            self.btn("rechercher", tr("Rechercher les fichiers à risque"), self.scan),
             *self.select_buttons("fichiers", self.findings),
-            self.btn("corbeille", "Mettre les fichiers choisis à la Corbeille", self.trash),
+            self.btn("corbeille", tr("Mettre les fichiers choisis à la Corbeille"), self.trash),
         )
         self._rows: list[Any] = []
 
@@ -1020,7 +1140,7 @@ class RiskPage(Page):
             self._rows = list(rows)
             self._show()
 
-        self.app.run_task("Fichiers à risque", work, done)
+        self.app.run_task(tr("Fichiers à risque"), work, done)
 
     def _show(self) -> None:
         fill_table(
@@ -1033,21 +1153,29 @@ class RiskPage(Page):
         high = sum(r.level == "élevé" for r in self._rows)
         watch = sum(r.level == "à surveiller" for r in self._rows)
         self.summary.setText(
-            f"{high} fichier(s) à risque élevé, {watch} à surveiller, "
-            f"{len(self._rows) - high - watch} pour information. Rappel : ce sont des signes, "
-            "pas des preuves de virus."
+            tr(
+                "{high} fichier(s) à risque élevé, {watch} à surveiller, {v} pour "
+                "information. Rappel : ce sont des signes, pas des preuves de virus.",
+                high=high,
+                watch=watch,
+                v=len(self._rows) - high - watch,
+            )
             if self._rows
-            else "Aucun signe de risque trouvé dans les fichiers analysés (ce qui ne garantit "
-            "pas l'absence de virus)."
+            else tr(
+                "Aucun signe de risque trouvé dans les fichiers analysés (ce qui ne "
+                "garantit pas l'absence de virus)."
+            )
         )
 
     def trash(self) -> None:
         chosen = [int(v) for v in selected_values(self.findings)]
         if not chosen:
-            self.app.dialogs.info(self.win, "Corbeille", "Cliquez sur les fichiers concernés.")
+            self.app.dialogs.info(
+                self.win, tr("Corbeille"), tr("Cliquez sur les fichiers concernés.")
+            )
             return
         self.trash_with_confirmation(
-            chosen, "risques", f"{len(chosen)} fichier(s) signalé(s) à risque."
+            chosen, "risques", tr("{v} fichier(s) signalé(s) à risque.", v=len(chosen))
         )
 
     def refresh(self) -> None:

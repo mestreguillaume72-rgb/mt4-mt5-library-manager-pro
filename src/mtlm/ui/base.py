@@ -39,6 +39,7 @@ from mtlm.app.context import AppContext, open_app
 from mtlm.core.clock import Clock
 from mtlm.core.control import Cancelled, TaskControl
 from mtlm.core.errors import MtlmError
+from mtlm.core.i18n import tr
 from mtlm.core.paths import AppPaths
 
 log = logging.getLogger("mtlm.ui")
@@ -70,7 +71,7 @@ class QtDialogs:
 
     def save_file(self, parent: QWidget, title: str, suggestion: str) -> Path | None:
         chosen, _ = QFileDialog.getSaveFileName(
-            parent, title, suggestion, "CSV (*.csv);;JSON (*.json);;JSONL (*.jsonl)"
+            parent, title, suggestion, tr("CSV (*.csv);;JSON (*.json);;JSONL (*.jsonl)")
         )
         return Path(chosen) if chosen else None
 
@@ -134,8 +135,8 @@ class QtDialogs:
         layout.addWidget(listing, 1)
         row = QHBoxLayout()
         for caption, state in (
-            ("Tout cocher", Qt.CheckState.Checked),
-            ("Tout décocher", Qt.CheckState.Unchecked),
+            (tr("Tout cocher"), Qt.CheckState.Checked),
+            (tr("Tout décocher"), Qt.CheckState.Unchecked),
         ):
             button = QPushButton(caption)
 
@@ -150,8 +151,8 @@ class QtDialogs:
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
-        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Valider")
-        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("Annuler")
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText(tr("Valider"))
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText(tr("Annuler"))
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
@@ -223,7 +224,7 @@ class ActionRegistry:
         role: str = "",
     ) -> QPushButton:
         if action_id in self.specs:
-            raise ValueError(f"Action en double : {action_id}")
+            raise ValueError(tr("Action en double : {action_id}", action_id=action_id))
         from mtlm.ui.bulles import ACTION_TIPS
 
         tip = ACTION_TIPS.get(action_id) or tooltip
@@ -246,11 +247,11 @@ class ActionRegistry:
     def unavailable(self, action_id: str, label: str, reason: str) -> QPushButton:
         spec = ActionSpec(action_id, label, None, reason)
         self.specs[action_id] = spec
-        button = QPushButton(f"{label} (non disponible)")
+        button = QPushButton(tr("{label} (non disponible)", label=label))
         button.setObjectName(action_id)
         button.setEnabled(False)
-        button.setToolTip(f"Non disponible : {reason}")
-        button.setAccessibleName(f"{label} (non disponible)")
+        button.setToolTip(tr("Non disponible : {reason}", reason=reason))
+        button.setAccessibleName(tr("{label} (non disponible)", label=label))
         return button
 
     def trigger(self, action_id: str) -> None:
@@ -303,7 +304,7 @@ class TaskRunner(QThread):
             self.failed.emit(str(exc))
         except Exception as exc:
             log.error("Tâche en échec :\n%s", traceback.format_exc())
-            self.failed.emit(f"Erreur inattendue : {exc}")
+            self.failed.emit(tr("Erreur inattendue : {exc}", exc=exc))
         else:
             self.succeeded.emit(result)
 
@@ -468,7 +469,7 @@ def make_table(
     table = QTableWidget(0, len(headers))
     count = QLabel(f"0 {noun}")
     count.setObjectName("cardHint")
-    count.setAccessibleName("Nombre d'éléments de la liste")
+    count.setAccessibleName(tr("Nombre d'éléments de la liste"))
     table.count_label = count  # type: ignore[attr-defined]
     table.count_noun = noun  # type: ignore[attr-defined]
     table.itemSelectionChanged.connect(lambda: update_count(table))

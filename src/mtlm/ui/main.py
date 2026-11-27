@@ -12,6 +12,7 @@ from mtlm import APP_NAME, __version__
 from mtlm.app.context import open_app
 from mtlm.core.clock import Clock
 from mtlm.core.errors import MtlmError
+from mtlm.core.i18n import tr
 from mtlm.core.paths import AppPaths, default_paths
 from mtlm.ui.base import Dialogs, QtDialogs
 from mtlm.ui.pages_actions import (
@@ -121,9 +122,9 @@ def autotest(source: Path, report: Path | None = None) -> int:
                 with report.open("a", encoding="utf-8") as handle:
                     handle.write(f"[{time.strftime('%H:%M:%S')}] {text}\n")
 
-        trace("écrans ouverts ; ajout de la source")
+        trace(tr("écrans ouverts ; ajout de la source"))
         window.pages["sources"].add()
-        trace(f"sources : {window.pages['sources'].table.rowCount()} ; analyse lancée")
+        trace(tr("sources : {v} ; analyse lancée", v=window.pages["sources"].table.rowCount()))
         window.pages["analyse"].start_all()
         deadline = time.monotonic() + 20 * 60
         last = ""
@@ -135,7 +136,7 @@ def autotest(source: Path, report: Path | None = None) -> int:
                 last = message
                 trace(message)
             if time.monotonic() > deadline:
-                dialogs.errors.append("analyse trop longue (plus de 20 minutes) : arrêtée")
+                dialogs.errors.append(tr("analyse trop longue (plus de 20 minutes) : arrêtée"))
                 if window.app.control is not None:
                     window.app.control.cancel()
                 break
@@ -148,10 +149,15 @@ def autotest(source: Path, report: Path | None = None) -> int:
         close_logs()
     ok = len(pages) == len(PAGES) and files > 0 and not dialogs.errors and log.count("✔") == 8
     lines = [
-        f"Auto-diagnostic : {'RÉUSSI' if ok else 'ÉCHEC'} — {len(pages)} écran(s), "
-        f"{files} fichier(s) analysé(s) dans {source}",
+        tr(
+            "Auto-diagnostic : {v} — {v2} écran(s), {files} fichier(s) analysé(s) dans {source}",
+            v="RÉUSSI" if ok else "ÉCHEC",
+            v2=len(pages),
+            files=files,
+            source=source,
+        ),
         log,
-        *(f"Erreur : {error}" for error in dialogs.errors),
+        *(tr("Erreur : {error}", error=error) for error in dialogs.errors),
     ]
     text = "\n".join(lines)
     # Application fenêtrée de Windows : pas de console, le rapport va dans un fichier.
@@ -174,7 +180,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         try:
             return autotest(target, report)
         except Exception as exc:  # jamais de fenêtre d'erreur bloquante : un rapport d'échec
-            text = f"Auto-diagnostic : ÉCHEC — {type(exc).__name__} : {exc}"
+            text = tr("Auto-diagnostic : ÉCHEC — {name} : {exc}", name=type(exc).__name__, exc=exc)
             if report is not None:
                 with report.open("a", encoding="utf-8") as handle:
                     handle.write(text + "\n")

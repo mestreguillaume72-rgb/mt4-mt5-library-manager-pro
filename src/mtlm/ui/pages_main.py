@@ -40,6 +40,7 @@ from mtlm.app.presenters import (
 from mtlm.app.scan import ScanService
 from mtlm.app.sets import AssociationService
 from mtlm.app.sources import SourceService
+from mtlm.core.i18n import tr
 from mtlm.ui.base import fill_table, make_table, selected_value, selected_values
 from mtlm.ui.theme import glow
 from mtlm.ui.window import MainWindow, UiApp
@@ -75,7 +76,7 @@ class Page(QWidget):
     @property
     def win(self) -> MainWindow:
         if self.app.window is None:
-            raise RuntimeError("fenêtre principale non initialisée")
+            raise RuntimeError(tr("fenêtre principale non initialisée"))
         return self.app.window
 
     def button_row(self, *buttons: QWidget) -> QHBoxLayout:
@@ -93,21 +94,21 @@ class Page(QWidget):
 
     def select_buttons(self, name: str, table: Any) -> tuple[Any, Any, Any]:
         """« Tout sélectionner », « Tout désélectionner » et le compteur de la sélection."""
-        counter = QLabel("0 sélectionné(s)")
+        counter = QLabel(tr("0 sélectionné(s)"))
         counter.setObjectName("cardHint")
         counter.setToolTip(
-            "Nombre de lignes choisies. Un clic sur une ligne l'ajoute ou la retire."
+            tr("Nombre de lignes choisies. Un clic sur une ligne l'ajoute ou la retire.")
         )
 
         def update() -> None:
             count = len(table.selectionModel().selectedRows())
-            counter.setText(f"{count} sélectionné(s)")
+            counter.setText(tr("{count} sélectionné(s)", count=count))
 
         table.itemSelectionChanged.connect(update)
         setattr(self, f"counter_{name}", counter)
         return (
-            self.btn(f"tout_{name}", "Tout sélectionner", table.selectAll),
-            self.btn(f"aucun_{name}", "Tout désélectionner", table.clearSelection),
+            self.btn(f"tout_{name}", tr("Tout sélectionner"), table.selectAll),
+            self.btn(f"aucun_{name}", tr("Tout désélectionner"), table.clearSelection),
             counter,
         )
 
@@ -144,12 +145,14 @@ class Page(QWidget):
         if backend is None:
             self.app.dialogs.info(
                 self.win,
-                "Corbeille",
-                "La mise à la Corbeille n'est disponible que sur Mac et Windows.",
+                tr("Corbeille"),
+                tr("La mise à la Corbeille n'est disponible que sur Mac et Windows."),
             )
             return
         if not file_ids:
-            self.app.dialogs.info(self.win, "Corbeille", "Aucun fichier à mettre à la Corbeille.")
+            self.app.dialogs.info(
+                self.win, tr("Corbeille"), tr("Aucun fichier à mettre à la Corbeille.")
+            )
             return
         ctx = self.app.ctx
         unique: list[int] = []
@@ -158,10 +161,13 @@ class Page(QWidget):
                 list(file_ids)
             )
         safety = (
-            "ATTENTION : exemplaire unique, aucune copie identique n'est conservée ailleurs."
+            tr("ATTENTION : exemplaire unique, aucune copie identique n'est conservée ailleurs.")
             if allow_unique
-            else "Avant chaque fichier, l'application vérifie qu'il n'a pas changé depuis "
-            "l'analyse et qu'une copie identique est conservée (comparaison octet par octet)."
+            else tr(
+                "Avant chaque fichier, l'application vérifie qu'il n'a pas changé depuis "
+                "l'analyse et qu'une copie identique est conservée (comparaison octet "
+                "par octet)."
+            )
         )
         if unique:
             names = [
@@ -172,51 +178,67 @@ class Page(QWidget):
                 )
             ]
             safety += (
-                f"\n\n⚠️ {len(unique)} fichier(s) sont le SEUL exemplaire de leur contenu "
-                "(aucune copie identique ne restera) : "
+                tr(
+                    "\n\n⚠️ {v} fichier(s) sont le SEUL exemplaire de leur contenu (aucune "
+                    "copie identique ne restera) : ",
+                    v=len(unique),
+                )
                 + ", ".join(names)
                 + (" …" if len(unique) > 5 else "")
-                + ". Vous pourrez choisir de les supprimer aussi juste après."
+                + tr(". Vous pourrez choisir de les supprimer aussi juste après.")
             )
         from mtlm.app.companions import CompanionService
 
         needed = CompanionService(ctx.conn, ctx.clock, ctx.journal).needed_by(list(file_ids))
         if needed:
             lines = [
-                f"• fichier n°{file_id} est utilisé par : {', '.join(users[:3])}"
+                tr(
+                    "• fichier n°{file_id} est utilisé par : {v}",
+                    file_id=file_id,
+                    v=", ".join(users[:3]),
+                )
                 + (" …" if len(users) > 3 else "")
                 for file_id, users in list(needed.items())[:8]
             ]
-            intro += (
-                "\n\n⚠️ ATTENTION : des outils ont besoin de ces fichiers (indicateur appelé, "
-                "DLL, bibliothèque ou include). Sans eux, ils risquent de ne plus fonctionner :\n"
-                + "\n".join(lines)
-            )
+            intro += tr(
+                "\n\n⚠️ ATTENTION : des outils ont besoin de ces fichiers (indicateur "
+                "appelé, DLL, bibliothèque ou include). Sans eux, ils risquent de ne "
+                "plus fonctionner :\n"
+            ) + "\n".join(lines)
         if not self.app.dialogs.confirm(
             self,
-            "Mettre à la Corbeille",
-            f"{intro}\n\n{len(file_ids)} fichier(s) iront dans la Corbeille : "
-            "récupérables tant qu'elle n'est pas vidée (bouton « Remettre en place » dans "
-            f"l'écran Quarantaine).\n\n{safety}\n\nContinuer ?",
+            tr("Mettre à la Corbeille"),
+            tr(
+                "{intro}\n\n{v} fichier(s) iront dans la Corbeille : récupérables tant "
+                "qu'elle n'est pas vidée (bouton « Remettre en place » dans l'écran "
+                "Quarantaine).\n\n{safety}\n\nContinuer ?",
+                intro=intro,
+                v=len(file_ids),
+                safety=safety,
+            ),
         ):
-            self.app.status("Rien n'a été mis à la Corbeille.")
+            self.app.status(tr("Rien n'a été mis à la Corbeille."))
             return
         ids = list(file_ids)
         accept_unique = bool(allow_unique)
         if unique:
             accept_unique = self.app.dialogs.confirm(
                 self,
-                "Exemplaires uniques",
-                f"Supprimer AUSSI les {len(unique)} exemplaire(s) unique(s) ? Ils iront dans la "
-                "Corbeille (récupérables tant qu'elle n'est pas vidée), mais aucune autre "
-                "copie n'existe.\n\nOui : tout ce que vous avez choisi part à la Corbeille.\n"
-                "Non : seuls les fichiers qui ont une copie identique ailleurs partent.",
+                tr("Exemplaires uniques"),
+                tr(
+                    "Supprimer AUSSI les {v} exemplaire(s) unique(s) ? Ils iront dans la "
+                    "Corbeille (récupérables tant qu'elle n'est pas vidée), mais aucune "
+                    "autre copie n'existe.\n\nOui : tout ce que vous avez choisi part à la "
+                    "Corbeille.\nNon : seuls les fichiers qui ont une copie identique "
+                    "ailleurs partent.",
+                    v=len(unique),
+                ),
             )
             if not accept_unique:
                 left = set(unique)
                 ids = [f for f in ids if f not in left]
                 if not ids:
-                    self.app.status("Rien n'a été mis à la Corbeille.")
+                    self.app.status(tr("Rien n'a été mis à la Corbeille."))
                     return
 
         def work(ctx: Any, _control: Any, _report: Any) -> Any:
@@ -226,23 +248,30 @@ class Page(QWidget):
 
         def done(result: Any) -> None:
             lines = [
-                f"{result.trashed} fichier(s) mis à la Corbeille "
-                f"({human_size(result.trashed_bytes)})."
+                tr(
+                    "{trashed} fichier(s) mis à la Corbeille ({v}).",
+                    trashed=result.trashed,
+                    v=human_size(result.trashed_bytes),
+                )
             ]
             if result.refused:
-                lines.append(f"{len(result.refused)} fichier(s) laissé(s) en place :")
-                lines += [f"• fichier n°{f} : {why}" for f, why in result.refused[:10]]
-            self.app.dialogs.info(self.win, "Corbeille", "\n".join(lines))
+                lines.append(tr("{v} fichier(s) laissé(s) en place :", v=len(result.refused)))
+                lines += [
+                    tr("• fichier n°{f} : {why}", f=f, why=why) for f, why in result.refused[:10]
+                ]
+            self.app.dialogs.info(self.win, tr("Corbeille"), "\n".join(lines))
             self.refresh()
 
-        self.app.run_task("Corbeille", work, done)
+        self.app.run_task(tr("Corbeille"), work, done)
 
     def trash_selected(self, table: Any, origin: str, what: str = "fichier(s)") -> None:
         """Bouton « Mettre à la Corbeille » d'un écran : les lignes choisies (colonne N°)."""
         chosen = [int(v) for v in selected_values(table) if v.isdigit()]
         if not chosen:
             self.app.dialogs.info(
-                self.win, "Corbeille", f"Cliquez d'abord sur les {what} à mettre à la Corbeille."
+                self.win,
+                tr("Corbeille"),
+                tr("Cliquez d'abord sur les {what} à mettre à la Corbeille.", what=what),
             )
             return
         names = [
@@ -252,7 +281,7 @@ class Page(QWidget):
                 chosen[:5],
             )
         ]
-        intro = f"{len(chosen)} {what} choisi(s) : " + ", ".join(names)
+        intro = tr("{v} {what} choisi(s) : ", v=len(chosen), what=what) + ", ".join(names)
         if len(chosen) > 5:
             intro += " …"
         self.trash_with_confirmation(chosen, origin, intro)
@@ -265,7 +294,8 @@ class Page(QWidget):
     ) -> None:
         """Proposition de dossier : aperçu, puis copie vérifiée seulement si vous validez."""
         chosen = self.app.dialogs.choose_directory(
-            self, f"{title} : où créer le dossier ? (en dehors de vos bibliothèques)"
+            self,
+            tr("{title} : où créer le dossier ? (en dehors de vos bibliothèques)", title=title),
         )
         if chosen is None:
             return
@@ -274,7 +304,10 @@ class Page(QWidget):
         preview = make_preview(service, chosen)
         shown = service.items(preview.plan_id, limit=15)
         skipped = (
-            f"\n{preview.excluded_duplicates} copie(s) identique(s) non recopiée(s)."
+            tr(
+                "\n{excluded_duplicates} copie(s) identique(s) non recopiée(s).",
+                excluded_duplicates=preview.excluded_duplicates,
+            )
             if preview.excluded_duplicates
             else ""
         )
@@ -283,12 +316,21 @@ class Page(QWidget):
         if not self.app.dialogs.confirm(
             self,
             title,
-            f"PROPOSITION — rien n'est encore copié.\n\n{explanation}\n\n"
-            f"Nouveau dossier : {preview.destination}\n{preview.items} fichier(s), "
-            f"{human_size(preview.total_bytes)}.{skipped}\n\nAperçu :\n{listing}{more}\n\n"
-            "Valider et copier ? (copie vérifiée ; vos originaux ne bougent pas)",
+            tr(
+                "PROPOSITION — rien n'est encore copié.\n\n{explanation}\n\nNouveau dossier "
+                ": {destination}\n{items} fichier(s), {v}.{skipped}\n\nAperçu "
+                ":\n{listing}{more}\n\nValider et copier ? (copie vérifiée ; vos originaux "
+                "ne bougent pas)",
+                explanation=explanation,
+                destination=preview.destination,
+                items=preview.items,
+                v=human_size(preview.total_bytes),
+                skipped=skipped,
+                listing=listing,
+                more=more,
+            ),
         ):
-            self.app.status("Proposition non validée : rien n'a été copié.")
+            self.app.status(tr("Proposition non validée : rien n'a été copié."))
             return
         plan_id, token, destination = preview.plan_id, preview.token, preview.destination
 
@@ -298,9 +340,13 @@ class Page(QWidget):
             )
 
         def done(result: Any) -> None:
-            text = f"{result.verified} fichier(s) copié(s) et vérifié(s) dans\n{destination}"
+            text = tr(
+                "{verified} fichier(s) copié(s) et vérifié(s) dans\n{destination}",
+                verified=result.verified,
+                destination=destination,
+            )
             if result.stopped_reason:
-                text += f"\n\nArrêt : {result.stopped_reason}"
+                text += tr("\n\nArrêt : {stopped_reason}", stopped_reason=result.stopped_reason)
             self.app.dialogs.info(self.win, title, text)
             self.refresh()
 
@@ -361,40 +407,46 @@ class DashboardPage(Page):
         definitions = [
             (
                 "1",
-                "Ma bibliothèque",
-                "Choisissez le dossier qui contient vos robots, "
-                "indicateurs et SET. Il est seulement lu.",
+                tr("Ma bibliothèque"),
+                tr(
+                    "Choisissez le dossier qui contient vos robots, indicateurs et SET. Il "
+                    "est seulement lu."
+                ),
                 self.btn(
                     "ajouter",
-                    "📁  Choisir un dossier…",
+                    tr("📁  Choisir un dossier…"),
                     self.add_source,
-                    "Ajouter un dossier à analyser (lecture seule).",
+                    tr("Ajouter un dossier à analyser (lecture seule)."),
                     role="big",
                 ),
             ),
             (
                 "2",
-                "Analyser",
-                "Inventaire, empreintes, reconnaissance des robots, SET, "
-                "familles et doublons — automatiquement.",
+                tr("Analyser"),
+                tr(
+                    "Inventaire, empreintes, reconnaissance des robots, SET, familles et "
+                    "doublons — automatiquement."
+                ),
                 self.btn(
                     "analyser",
-                    "▶  Tout analyser",
+                    tr("▶  Tout analyser"),
                     self.analyse_all,
-                    "Lance toutes les étapes d'analyse.",
+                    tr("Lance toutes les étapes d'analyse."),
                     role="big",
                 ),
             ),
             (
                 "3",
-                "Résultats",
-                "Vérifiez les associations robot ↔ SET, les doublons, puis "
-                "rangez votre bibliothèque.",
+                tr("Résultats"),
+                tr(
+                    "Vérifiez les associations robot ↔ SET, les doublons, puis rangez votre "
+                    "bibliothèque."
+                ),
                 self.btn(
                     "resultats",
-                    "✨  Voir les résultats",
+                    tr("✨  Voir les résultats"),
                     self.open_results,
-                    "Ouvre les associations robot ↔ SET.",
+                    tr("Ouvre les associations robot ↔ SET."),
                     role="big",
                 ),
             ),
@@ -434,8 +486,8 @@ class DashboardPage(Page):
         self.progress.setRange(0, 0)
         progress_row = QHBoxLayout()
         progress_row.addWidget(self.progress, 1)
-        progress_row.addWidget(self.btn("pause", "⏸  Pause", self.toggle_pause, role="ghost"))
-        progress_row.addWidget(self.btn("annuler", "Annuler", self.cancel, role="danger"))
+        progress_row.addWidget(self.btn("pause", tr("⏸  Pause"), self.toggle_pause, role="ghost"))
+        progress_row.addWidget(self.btn("annuler", tr("Annuler"), self.cancel, role="danger"))
         progress_box.addWidget(self.progress_text)
         progress_box.addLayout(progress_row)
         self.progress_card.setVisible(False)
@@ -450,14 +502,19 @@ class DashboardPage(Page):
         grid.setSpacing(12)
         self.values: dict[str, QLabel] = {}
         tiles = [
-            ("robots", "🤖  Robots, indicateurs, scripts", "sets", "Voir"),
-            ("sets", "🧾  Fichiers SET", "sets", "Voir"),
-            ("assoc_strong", "✅  SET reliés avec certitude", "sets", "Voir"),
-            ("assoc_check", "🟠  SET en vrac à relier", "sets", "Vérifier"),
-            ("dup_groups", "👯  Groupes de doublons exacts", "doublons", "Voir"),
-            ("reclaim", "♻️  Copies en trop (quarantaine possible)", "quarantaine", "Traiter"),
-            ("families", "🧬  Familles de robots", "familles", "Voir"),
-            ("files", "📄  Fichiers analysés", "explorateur", "Explorer"),
+            ("robots", tr("🤖  Robots, indicateurs, scripts"), "sets", tr("Voir")),
+            ("sets", tr("🧾  Fichiers SET"), "sets", tr("Voir")),
+            ("assoc_strong", tr("✅  SET reliés avec certitude"), "sets", tr("Voir")),
+            ("assoc_check", tr("🟠  SET en vrac à relier"), "sets", tr("Vérifier")),
+            ("dup_groups", tr("👯  Groupes de doublons exacts"), "doublons", tr("Voir")),
+            (
+                "reclaim",
+                tr("♻️  Copies en trop (quarantaine possible)"),
+                "quarantaine",
+                tr("Traiter"),
+            ),
+            ("families", tr("🧬  Familles de robots"), "familles", tr("Voir")),
+            ("files", tr("📄  Fichiers analysés"), "explorateur", tr("Explorer")),
         ]
         self.tiles: dict[str, QFrame] = {}
         self.hints: dict[str, QLabel] = {}
@@ -503,7 +560,7 @@ class DashboardPage(Page):
         ):
             self.values[key] = QLabel("—")
         self.layout_.addStretch(1)
-        self.button_row(self.btn("actualiser", "Actualiser", self.refresh, role="ghost"))
+        self.button_row(self.btn("actualiser", tr("Actualiser"), self.refresh, role="ghost"))
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._tick)
         self.timer.start(400)
@@ -540,9 +597,9 @@ class DashboardPage(Page):
         if busy:
             paused = self.app.control is not None and self.app.control.paused
             text = (
-                "En pause — cliquez sur « Pause » pour reprendre."
+                tr("En pause — cliquez sur « Pause » pour reprendre.")
                 if paused
-                else (self.app.last_message or "Analyse en cours…")
+                else (self.app.last_message or tr("Analyse en cours…"))
             )
             self.progress_text.setText(f"⏳  {text}")
 
@@ -550,9 +607,9 @@ class DashboardPage(Page):
         """Ton de chaque carte KPI selon les données réelles : vert = en ordre,
         ambre = action recommandée, bleu = information."""
         attention = {
-            "assoc_check": "à vérifier",
-            "dup_groups": "doublons exacts",
-            "reclaim": "copies en trop",
+            "assoc_check": tr("à vérifier"),
+            "dup_groups": tr("doublons exacts"),
+            "reclaim": tr("copies en trop"),
         }
         for key, frame in self.tiles.items():
             if not analysed:
@@ -560,9 +617,9 @@ class DashboardPage(Page):
             elif key in attention:
                 busy = int(values[key]) > 0
                 tone = "warning" if busy else "success"
-                hint = "Action recommandée" if busy else "Tout est en ordre"
+                hint = tr("Action recommandée") if busy else tr("Tout est en ordre")
             elif key == "assoc_strong":
-                tone, hint = ("success", "Reliés avec preuves") if values[key] else ("", "")
+                tone, hint = ("success", tr("Reliés avec preuves")) if values[key] else ("", "")
             else:
                 tone, hint = "info", ""
             frame.setProperty("tone", tone)
@@ -634,15 +691,17 @@ class DashboardPage(Page):
             self.values[key].setText(fmt(value) if isinstance(value, int) else str(value))
         self._apply_tones(values, analysed > 0)
         if values["in_archives"]:
-            self.hints["files"].setText(f"+ {fmt(values['in_archives'])} dans les archives")
+            self.hints["files"].setText(tr("+ {v} dans les archives", v=fmt(values["in_archives"])))
         # États des 3 étapes.
         done = [sources > 0, analysed > 0, values["assoc_ok"] > 0 or values["quarantined"] > 0]
         texts = [
-            f"✓  {sources} dossier(s) ajouté(s)" if sources else "À faire",
-            f"✓  {fmt(stats.files)} fichier(s) analysé(s)"
+            tr("✓  {sources} dossier(s) ajouté(s)", sources=sources) if sources else tr("À faire"),
+            tr("✓  {v} fichier(s) analysé(s)", v=fmt(stats.files))
             if analysed
-            else ("Prêt à lancer" if sources else "Ajoutez d'abord un dossier"),
-            "✓  Résultats consultés" if done[2] else ("Prêt" if analysed else "Après l'analyse"),
+            else (tr("Prêt à lancer") if sources else tr("Ajoutez d'abord un dossier")),
+            tr("✓  Résultats consultés")
+            if done[2]
+            else (tr("Prêt") if analysed else tr("Après l'analyse")),
         ]
         current = next((i for i, d in enumerate(done) if not d), None)
         for i, frame in enumerate(self.step_cards):
@@ -657,28 +716,38 @@ class DashboardPage(Page):
             glow(frame, "success" if done[i] else ("info" if i == current else None), 60)
         if sources == 0:
             self.empty.setText(
-                "Aucune source n'est encore ajoutée. Commencez par l'étape 1 : "
-                "rien ne sera modifié dans vos dossiers."
+                tr(
+                    "Aucune source n'est encore ajoutée. Commencez par l'étape 1 : rien ne "
+                    "sera modifié dans vos dossiers."
+                )
             )
             self.summary.setText("")
         else:
             self.empty.setText(
-                "Toutes les valeurs proviennent de l'analyse réelle de vos dossiers."
+                tr("Toutes les valeurs proviennent de l'analyse réelle de vos dossiers.")
             )
             if analysed:
                 self.summary.setText(
-                    f"<b>Votre bibliothèque</b> : {fmt(stats.files)} fichiers "
-                    f"({values['size']})"
+                    tr(
+                        "<b>Votre bibliothèque</b> : {v} fichiers ({v2})",
+                        v=fmt(stats.files),
+                        v2=values["size"],
+                    )
                     + self._archives_sentence(values)
-                    + f", dont <b>{fmt(int(values['robots']))}</b> robots, "
-                    f"indicateurs ou scripts et <b>{fmt(int(values['sets']))}</b> SET. "
-                    f"<b>{fmt(int(values['assoc_check']))}</b> SET en vrac ou mal rangé(s) "
-                    "attendent que vous validiez leur robot ; "
-                    f"<b>{fmt(int(values['reclaim']))}</b> copie(s) en trop "
-                    "peuvent être mises en quarantaine." + self._placement_sentence()
+                    + tr(
+                        ", dont <b>{v}</b> robots, indicateurs ou scripts et <b>{v2}</b> SET. "
+                        "<b>{v3}</b> SET en vrac ou mal rangé(s) attendent que vous validiez "
+                        "leur robot ; <b>{v4}</b> copie(s) en trop peuvent être mises en "
+                        "quarantaine.",
+                        v=fmt(int(values["robots"])),
+                        v2=fmt(int(values["sets"])),
+                        v3=fmt(int(values["assoc_check"])),
+                        v4=fmt(int(values["reclaim"])),
+                    )
+                    + self._placement_sentence()
                 )
             else:
-                self.summary.setText("Étape suivante : cliquez sur <b>« Tout analyser »</b>.")
+                self.summary.setText(tr("Étape suivante : cliquez sur <b>« Tout analyser »</b>."))
         self._tick()
 
     @staticmethod
@@ -686,13 +755,15 @@ class DashboardPage(Page):
         inside = int(values["in_archives"])
         text = ""
         if inside:
-            text = (
-                f" + <b>{fmt(inside)}</b> fichier(s) lu(s) dans les archives (dont "
-                f"{fmt(int(values['in_archives_tools']))} robots, indicateurs ou SET)"
+            text = tr(
+                " + <b>{v}</b> fichier(s) lu(s) dans les archives (dont {v2} robots, "
+                "indicateurs ou SET)",
+                v=fmt(inside),
+                v2=fmt(int(values["in_archives_tools"])),
             )
         protected = int(values.get("protected", 0))
         if protected:
-            text += f" ; 🔒 <b>{fmt(protected)}</b> archive(s) protégée(s) par mot de passe"
+            text += tr(" ; 🔒 <b>{v}</b> archive(s) protégée(s) par mot de passe", v=fmt(protected))
         return text
 
     def _placement_sentence(self) -> str:
@@ -702,25 +773,31 @@ class DashboardPage(Page):
         counts = AssociationService(ctx.conn, ctx.clock, ctx.journal).placement_counts()
         text = ""
         if sum(counts.values()):
-            text += (
-                f"<br><b>SET</b> : <b>{fmt(counts['avec_son_robot'])}</b> rangé(s) avec leur "
-                f"robot, <b>{fmt(counts['en_vrac'])}</b> en vrac dont le robot a été retrouvé, "
-                f"<b>{fmt(counts['dossier_standard'])}</b> dans le dossier Presets de "
-                f"MetaTrader, <b>{fmt(counts['avec_autre_robot'])}</b> rangé(s) avec un autre "
-                f"robot (peut-être mal rangés), <b>{fmt(counts['orphelins'])}</b> sans robot "
-                "trouvé."
+            text += tr(
+                "<br><b>SET</b> : <b>{v}</b> rangé(s) avec leur robot, <b>{v2}</b> en "
+                "vrac dont le robot a été retrouvé, <b>{v3}</b> dans le dossier Presets "
+                "de MetaTrader, <b>{v4}</b> rangé(s) avec un autre robot (peut-être mal "
+                "rangés), <b>{v5}</b> sans robot trouvé.",
+                v=fmt(counts["avec_son_robot"]),
+                v2=fmt(counts["en_vrac"]),
+                v3=fmt(counts["dossier_standard"]),
+                v4=fmt(counts["avec_autre_robot"]),
+                v5=fmt(counts["orphelins"]),
             )
         from mtlm.app.companions import CompanionService
 
         linked = CompanionService(ctx.conn, ctx.clock, ctx.journal).placement_counts()
         if sum(linked.values()):
-            text += (
-                "<br><b>Images, sons, documents, modèles, DLL</b> : "
-                f"<b>{fmt(linked['avec_son_robot'])}</b> rangé(s) avec leur outil, "
-                f"<b>{fmt(linked['en_vrac'])}</b> en vrac dont l'outil a été retrouvé, "
-                f"<b>{fmt(linked['dossier_standard'])}</b> dans le dossier MetaTrader prévu, "
-                f"<b>{fmt(linked['avec_autre_robot'])}</b> rangé(s) avec un autre outil, "
-                f"<b>{fmt(linked['sans_outil'])}</b> sans outil trouvé."
+            text += tr(
+                "<br><b>Images, sons, documents, modèles, DLL</b> : <b>{v}</b> rangé(s) "
+                "avec leur outil, <b>{v2}</b> en vrac dont l'outil a été retrouvé, "
+                "<b>{v3}</b> dans le dossier MetaTrader prévu, <b>{v4}</b> rangé(s) avec "
+                "un autre outil, <b>{v5}</b> sans outil trouvé.",
+                v=fmt(linked["avec_son_robot"]),
+                v2=fmt(linked["en_vrac"]),
+                v3=fmt(linked["dossier_standard"]),
+                v4=fmt(linked["avec_autre_robot"]),
+                v5=fmt(linked["sans_outil"]),
             )
         return text
 
@@ -736,29 +813,31 @@ class SourcesPage(Page):
     def __init__(self, app: UiApp) -> None:
         super().__init__(app)
         self.banner(
-            "Les dossiers sources sont lus en <b>lecture seule</b> : l'application n'y "
-            "écrit, ne renomme et ne déplace rien. Seule exception, à votre demande et après "
-            "confirmation : les fichiers que <b>vous</b> choisissez de mettre à la "
-            "<b>Corbeille</b> (récupérables).",
+            tr(
+                "Les dossiers sources sont lus en <b>lecture seule</b> : l'application "
+                "n'y écrit, ne renomme et ne déplace rien. Seule exception, à votre "
+                "demande et après confirmation : les fichiers que <b>vous</b> choisissez "
+                "de mettre à la <b>Corbeille</b> (récupérables)."
+            ),
             "bannerSafe",
         )
         self.table = make_table(
-            ["N°", "Nom", "Chemin", "État", "Dernier inventaire"],
+            ["N°", tr("Nom"), tr("Chemin"), tr("État"), tr("Dernier inventaire")],
             badge_columns=(3,),
             noun="dossier",
         )
         self.layout_.addWidget(self.table, 1)
         self.button_row(
-            self.btn("ajouter", "Ajouter un dossier…", self.add),
-            self.btn("metatrader", "Ajouter les dossiers MetaTrader trouvés…", self.add_found),
-            self.btn("inventorier", "Inventorier la source choisie", self.scan_selected),
+            self.btn("ajouter", tr("Ajouter un dossier…"), self.add),
+            self.btn("metatrader", tr("Ajouter les dossiers MetaTrader trouvés…"), self.add_found),
+            self.btn("inventorier", tr("Inventorier la source choisie"), self.scan_selected),
             self.btn(
                 "retirer",
-                "Retirer la source choisie",
+                tr("Retirer la source choisie"),
                 self.remove,
-                "Retire la source de l'application ; aucun fichier n'est supprimé.",
+                tr("Retire la source de l'application ; aucun fichier n'est supprimé."),
             ),
-            self.btn("actualiser", "Actualiser", self.refresh),
+            self.btn("actualiser", tr("Actualiser"), self.refresh),
         )
 
     def _service(self) -> SourceService:
@@ -774,18 +853,20 @@ class SourcesPage(Page):
                     s.display_name,
                     s.path,
                     s.status,
-                    f"tâche {s.last_scan_job_id}" if s.last_scan_job_id else "jamais",
+                    tr("tâche {last_scan_job_id}", last_scan_job_id=s.last_scan_job_id)
+                    if s.last_scan_job_id
+                    else "jamais",
                 )
                 for s in self._service().list()
             ],
         )
 
     def add(self) -> None:
-        folder = self.app.dialogs.choose_directory(self, "Choisir un dossier à analyser")
+        folder = self.app.dialogs.choose_directory(self, tr("Choisir un dossier à analyser"))
         if folder is None:
             return
         source = self._service().add(folder)
-        self.app.status(f"Source n° {source.id} ajoutée : {source.path}")
+        self.app.status(tr("Source n° {id} ajoutée : {path}", id=source.id, path=source.path))
         self.refresh()
 
     def add_found(self) -> None:
@@ -799,16 +880,20 @@ class SourcesPage(Page):
         if not found:
             self.app.dialogs.info(
                 self.win,
-                "Dossiers MetaTrader",
-                "Aucun nouveau dossier MetaTrader (MQL4 ou MQL5) trouvé à l'emplacement habituel "
-                "sur cet ordinateur. Utilisez « Ajouter un dossier… ».",
+                tr("Dossiers MetaTrader"),
+                tr(
+                    "Aucun nouveau dossier MetaTrader (MQL4 ou MQL5) trouvé à l'emplacement "
+                    "habituel sur cet ordinateur. Utilisez « Ajouter un dossier… »."
+                ),
             )
             return
         picked = self.app.dialogs.choose_items(
             self,
-            "Dossiers MetaTrader trouvés",
-            "Ces dossiers de MetaTrader ont été trouvés sur cet ordinateur. Cochez ceux à "
-            "ajouter (rien n'y sera modifié).",
+            tr("Dossiers MetaTrader trouvés"),
+            tr(
+                "Ces dossiers de MetaTrader ont été trouvés sur cet ordinateur. Cochez "
+                "ceux à ajouter (rien n'y sera modifié)."
+            ),
             [(str(p), str(p)) for p in found],
         )
         added, refused = 0, []
@@ -819,14 +904,14 @@ class SourcesPage(Page):
             except MtlmError as exc:
                 refused.append(str(exc))
         if refused:
-            self.app.dialogs.info(self.win, "Dossiers MetaTrader", "\n".join(refused[:5]))
-        self.app.status(f"{added} dossier(s) MetaTrader ajouté(s).")
+            self.app.dialogs.info(self.win, tr("Dossiers MetaTrader"), "\n".join(refused[:5]))
+        self.app.status(tr("{added} dossier(s) MetaTrader ajouté(s).", added=added))
         self.refresh()
 
     def _selected(self) -> int | None:
         value = selected_value(self.table)
         if value is None:
-            self.app.dialogs.info(self.win, "Sources", "Sélectionnez d'abord une source.")
+            self.app.dialogs.info(self.win, tr("Sources"), tr("Sélectionnez d'abord une source."))
             return None
         return int(value)
 
@@ -836,8 +921,11 @@ class SourcesPage(Page):
             return
         if self.app.dialogs.confirm(
             self,
-            "Retirer la source",
-            "Retirer cette source de l'application ?\nAucun fichier ne sera supprimé ni modifié.",
+            tr("Retirer la source"),
+            tr(
+                "Retirer cette source de l'application ?\nAucun fichier ne sera supprimé "
+                "ni modifié."
+            ),
         ):
             self._service().remove(source_id)
             self.refresh()
@@ -851,11 +939,18 @@ class SourcesPage(Page):
             summary = ScanService(ctx.conn, ctx.clock, ctx.journal).scan(
                 source_id,
                 control=control,
-                progress=lambda s: report(f"Inventaire : {s.seen} fichier(s)…"),
+                progress=lambda s: report(tr("Inventaire : {seen} fichier(s)…", seen=s.seen)),
             )
-            return f"{summary.seen} vus, {summary.new} nouveaux, {summary.errors} erreur(s)"
+            return tr(
+                "{seen} vus, {new} nouveaux, {errors} erreur(s)",
+                seen=summary.seen,
+                new=summary.new,
+                errors=summary.errors,
+            )
 
-        self.app.run_task("Inventaire", work, lambda r: self.app.status(f"Inventaire : {r}"))
+        self.app.run_task(
+            tr("Inventaire"), work, lambda r: self.app.status(tr("Inventaire : {r}", r=r))
+        )
 
 
 # ---------------------------------------------------------------------------------------------
@@ -868,7 +963,7 @@ class AnalysisPage(Page):
 
     def __init__(self, app: UiApp) -> None:
         super().__init__(app)
-        box = QGroupBox("Étapes (chacune ne refait que ce qui a changé)")
+        box = QGroupBox(tr("Étapes (chacune ne refait que ce qui a changé)"))
         steps_layout = QVBoxLayout(box)
         self.checks: dict[str, QCheckBox] = {}
         for step in STEPS:
@@ -878,7 +973,7 @@ class AnalysisPage(Page):
             steps_layout.addWidget(check)
             self.checks[step.key] = check
         self.decompress = QCheckBox(
-            "Décompresser les archives (ZIP, RAR, 7z…) et mettre l'archive à la Corbeille"
+            tr("Décompresser les archives (ZIP, RAR, 7z…) et mettre l'archive à la Corbeille")
         )
         self.decompress.setObjectName("analyse.decompresser")
         self.decompress.setChecked(self._decompress_setting())
@@ -886,18 +981,21 @@ class AnalysisPage(Page):
         steps_layout.addWidget(self.decompress)
         self.layout_.addWidget(box)
         self.button_row(
-            self.btn("lancer", "Lancer les étapes cochées", self.start_selected),
-            self.btn("tout", "Tout analyser", self.start_all),
-            self.btn("pause", "Pause", self.pause),
-            self.btn("reprendre", "Reprendre", self.resume),
+            self.btn("lancer", tr("Lancer les étapes cochées"), self.start_selected),
+            self.btn("tout", tr("Tout analyser"), self.start_all),
+            self.btn("pause", tr("Pause"), self.pause),
+            self.btn("reprendre", tr("Reprendre"), self.resume),
             self.btn(
-                "annuler", "Annuler", self.cancel, "Arrête à un point sûr : aucun état incohérent."
+                "annuler",
+                tr("Annuler"),
+                self.cancel,
+                tr("Arrête à un point sûr : aucun état incohérent."),
             ),
         )
         self.progress = QProgressBar()
         self.progress.setRange(0, 1)
         self.progress.setValue(0)
-        self.current = QLabel("Aucune analyse en cours.")
+        self.current = QLabel(tr("Aucune analyse en cours."))
         self.layout_.addWidget(self.progress)
         self.layout_.addWidget(self.current)
         self.log = QPlainTextEdit()
@@ -905,14 +1003,14 @@ class AnalysisPage(Page):
         self.log.setObjectName("analyse.journal")
         self.layout_.addWidget(self.log, 1)
         self.jobs = make_table(
-            ["Tâche", "Type", "État", "Traités", "Erreurs", "Créée le"],
+            [tr("Tâche"), tr("Type"), tr("État"), tr("Traités"), tr("Erreurs"), tr("Créée le")],
             badge_columns=(2,),
-            noun="tâche",
+            noun=tr("tâche"),
         )
         self.layout_.addWidget(self.jobs, 1)
         self.button_row(
-            self.btn("erreurs", "Voir les erreurs de la tâche choisie", self.show_errors),
-            self.btn("zero", "Recommencer l'analyse à zéro…", self.reset_all),
+            self.btn("erreurs", tr("Voir les erreurs de la tâche choisie"), self.show_errors),
+            self.btn("zero", tr("Recommencer l'analyse à zéro…"), self.reset_all),
         )
 
     def _decompress_setting(self) -> bool:
@@ -925,12 +1023,15 @@ class AnalysisPage(Page):
 
         if checked and not self.app.dialogs.confirm(
             self,
-            "Décompresser les archives",
-            "À chaque analyse, chaque archive lue sans problème (ZIP, RAR, 7z, TAR, GZ…) sera "
-            "décompressée dans un nouveau dossier à son nom, à côté d'elle. Chaque fichier "
-            "extrait est vérifié par son empreinte ; l'archive part ensuite à la Corbeille du "
-            "Mac (récupérable), seulement si tout est vérifié. Les archives protégées par mot "
-            "de passe, abîmées ou piégées ne sont jamais touchées.\n\nActiver ?",
+            tr("Décompresser les archives"),
+            tr(
+                "À chaque analyse, chaque archive lue sans problème (ZIP, RAR, 7z, TAR, "
+                "GZ…) sera décompressée dans un nouveau dossier à son nom, à côté "
+                "d'elle. Chaque fichier extrait est vérifié par son empreinte ; "
+                "l'archive part ensuite à la Corbeille du Mac (récupérable), seulement "
+                "si tout est vérifié. Les archives protégées par mot de passe, abîmées "
+                "ou piégées ne sont jamais touchées.\n\nActiver ?"
+            ),
         ):
             self.decompress.blockSignals(True)
             self.decompress.setChecked(False)
@@ -940,9 +1041,9 @@ class AnalysisPage(Page):
             "archives.decompresser", 1 if checked else 0
         )
         self.app.status(
-            "Les archives seront décompressées à la prochaine analyse."
+            tr("Les archives seront décompressées à la prochaine analyse.")
             if checked
-            else "Les archives seront seulement lues, sans rien extraire."
+            else tr("Les archives seront seulement lues, sans rien extraire.")
         )
 
     def refresh(self) -> None:
@@ -972,19 +1073,24 @@ class AnalysisPage(Page):
         """Efface les résultats d'analyse (jamais les fichiers), puis propose de relancer."""
         if self.app.busy:
             self.app.dialogs.info(
-                self.win, "Recommencer à zéro", "Une tâche est en cours : attendez qu'elle finisse."
+                self.win,
+                tr("Recommencer à zéro"),
+                tr("Une tâche est en cours : attendez qu'elle finisse."),
             )
             return
         if not self.app.dialogs.confirm(
             self,
-            "Recommencer l'analyse à zéro",
-            "Les résultats de l'analyse précédente seront effacés : empreintes, archives lues, "
-            "robots et indicateurs reconnus, SET et vos décisions d'association, familles, "
-            "doublons.\n\nRIEN n'est touché sur le disque. Restent conservés : vos dossiers "
-            "ajoutés, les paramètres, le journal, la quarantaine, la Corbeille (« Remettre en "
-            "place » reste possible) et les dossiers créés.\n\nEffacer les résultats ?",
+            tr("Recommencer l'analyse à zéro"),
+            tr(
+                "Les résultats de l'analyse précédente seront effacés : empreintes, "
+                "archives lues, robots et indicateurs reconnus, SET et vos décisions "
+                "d'association, familles, doublons.\n\nRIEN n'est touché sur le disque. "
+                "Restent conservés : vos dossiers ajoutés, les paramètres, le journal, "
+                "la quarantaine, la Corbeille (« Remettre en place » reste possible) et "
+                "les dossiers créés.\n\nEffacer les résultats ?"
+            ),
         ):
-            self.app.status("Rien n'a été effacé.")
+            self.app.status(tr("Rien n'a été effacé."))
             return
         from mtlm.app.reset import ResetService
 
@@ -996,8 +1102,8 @@ class AnalysisPage(Page):
         self.refresh()
         if self.app.dialogs.confirm(
             self,
-            "Recommencer l'analyse à zéro",
-            "Les résultats sont effacés. Lancer « Tout analyser » maintenant ?",
+            tr("Recommencer l'analyse à zéro"),
+            tr("Les résultats sont effacés. Lancer « Tout analyser » maintenant ?"),
         ):
             self.start_all()
 
@@ -1009,7 +1115,7 @@ class AnalysisPage(Page):
     def start_selected(self) -> None:
         keys = [k for k, c in self.checks.items() if c.isChecked()]
         if not keys:
-            self.app.dialogs.info(self.win, "Analyse", "Cochez au moins une étape.")
+            self.app.dialogs.info(self.win, tr("Analyse"), tr("Cochez au moins une étape."))
             return
 
         def work(ctx: Any, control: Any, report: Any) -> list[tuple[str, str]]:
@@ -1018,35 +1124,35 @@ class AnalysisPage(Page):
         def done(results: list[tuple[str, str]]) -> None:
             for label, summary in results:
                 self.log.appendPlainText(f"✔ {label} : {summary}")
-            self.current.setText("Analyse terminée.")
+            self.current.setText(tr("Analyse terminée."))
 
-        if self.app.run_task("Analyse", work, done, self.current.setText):
+        if self.app.run_task(tr("Analyse"), work, done, self.current.setText):
             self.progress.setRange(0, 0)  # indéterminé pendant le travail
             self.log.appendPlainText(f"▶ Étapes lancées : {', '.join(keys)}")
 
     def pause(self) -> None:
         if self.app.busy and self.app.control is not None:
             self.app.control.pause()
-            self.current.setText("En pause — cliquez sur « Reprendre ».")
+            self.current.setText(tr("En pause — cliquez sur « Reprendre »."))
         else:
-            self.current.setText("Aucune tâche en cours.")
+            self.current.setText(tr("Aucune tâche en cours."))
 
     def resume(self) -> None:
         if self.app.control is not None:
             self.app.control.resume()
-            self.current.setText("Reprise…")
+            self.current.setText(tr("Reprise…"))
 
     def cancel(self) -> None:
         if self.app.busy and self.app.control is not None:
             self.app.control.cancel()
-            self.current.setText("Annulation demandée : arrêt au prochain point sûr.")
+            self.current.setText(tr("Annulation demandée : arrêt au prochain point sûr."))
         else:
-            self.current.setText("Aucune tâche en cours.")
+            self.current.setText(tr("Aucune tâche en cours."))
 
     def show_errors(self) -> None:
         value = selected_value(self.jobs)
         if value is None:
-            self.app.dialogs.info(self.win, "Erreurs", "Sélectionnez une tâche.")
+            self.app.dialogs.info(self.win, tr("Erreurs"), tr("Sélectionnez une tâche."))
             return
         service = InventoryService(self.conn)
         kind = self.conn.execute("SELECT kind FROM job WHERE id = ?", (int(value),)).fetchone()
@@ -1060,21 +1166,23 @@ class AnalysisPage(Page):
                 "not permitted" in m.casefold() or "permission" in m.casefold()
                 for m, _c, _e in groups
             ):
-                text += (
+                text += tr(
                     "\n\nmacOS refuse la lecture : donnez à l'application l'« Accès complet au "
-                    "disque » (Réglages Système → Confidentialité et sécurité → Accès complet au "
-                    "disque → + → l'application), puis relancez l'analyse."
+                    "disque » (Réglages Système → Confidentialité et sécurité → Accès "
+                    "complet au disque → + → l'application), puis relancez l'analyse."
                 )
             self.app.dialogs.info(
-                self.win, f"Erreurs de la tâche {value}", text or "Aucune erreur d'empreinte."
+                self.win,
+                tr("Erreurs de la tâche {value}", value=value),
+                text or tr("Aucune erreur d'empreinte."),
             )
             return
         errors = service.errors(int(value))
         text = "\n".join(f"{e.rel_path or '(racine)'} : {e.message}" for e in errors)
         self.app.dialogs.info(
             self.win,
-            f"Erreurs de la tâche {value}",
-            text or "Aucune erreur pour cette tâche.",
+            tr("Erreurs de la tâche {value}", value=value),
+            text or tr("Aucune erreur pour cette tâche."),
         )
 
 
@@ -1091,39 +1199,41 @@ class ExplorerPage(Page):
         super().__init__(app)
         form = QFormLayout()
         self.text = QLineEdit()
-        self.text.setPlaceholderText("Nom, chemin, description… (sans tenir compte des accents)")
+        self.text.setPlaceholderText(
+            tr("Nom, chemin, description… (sans tenir compte des accents)")
+        )
         self.text.returnPressed.connect(self.search)
         self.ext = QLineEdit()
-        self.ext.setPlaceholderText("ex. mq4 ex4 set")
+        self.ext.setPlaceholderText(tr("ex. mq4 ex4 set"))
         self.kind = QComboBox()
-        self.kind.addItem("Tous les types", None)
+        self.kind.addItem(tr("Tous les types"), None)
         for key, label in TYPE_LABELS.items():
             self.kind.addItem(label, key)
         self.platform = QComboBox()
         for label, value in (
-            ("Toutes plateformes", None),
+            (tr("Toutes plateformes"), None),
             ("MT4", "mt4"),
             ("MT5", "mt5"),
-            ("Inconnue", "unknown"),
+            (tr("Inconnue"), "unknown"),
         ):
             self.platform.addItem(label, value)
-        self.missing = QCheckBox("Fichiers disparus uniquement")
-        form.addRow("Recherche", self.text)
-        form.addRow("Extensions", self.ext)
-        form.addRow("Type", self.kind)
-        form.addRow("Plateforme", self.platform)
+        self.missing = QCheckBox(tr("Fichiers disparus uniquement"))
+        form.addRow(tr("Recherche"), self.text)
+        form.addRow(tr("Extensions"), self.ext)
+        form.addRow(tr("Type"), self.kind)
+        form.addRow(tr("Plateforme"), self.platform)
         form.addRow("", self.missing)
         self.layout_.addLayout(form)
         self.button_row(
-            self.btn("rechercher", "Rechercher", self.search),
-            self.btn("precedente", "Page précédente", self.previous),
-            self.btn("suivante", "Page suivante", self.next),
-            self.btn("detail", "Afficher le détail", self.open_detail),
+            self.btn("rechercher", tr("Rechercher"), self.search),
+            self.btn("precedente", tr("Page précédente"), self.previous),
+            self.btn("suivante", tr("Page suivante"), self.next),
+            self.btn("detail", tr("Afficher le détail"), self.open_detail),
         )
         self.counter = QLabel()
         self.layout_.addWidget(self.counter)
         self.table = make_table(
-            ["N°", "Nom", "Type", "Plateforme", "Taille", "Dossier"],
+            ["N°", tr("Nom"), tr("Type"), tr("Plateforme"), tr("Taille"), tr("Dossier")],
             badge_columns=(2,),
             multi=True,
             noun="fichier",
@@ -1134,7 +1244,7 @@ class ExplorerPage(Page):
             *self.select_buttons("fichiers", self.table),
             self.btn(
                 "corbeille",
-                "Mettre les fichiers choisis à la Corbeille",
+                tr("Mettre les fichiers choisis à la Corbeille"),
                 lambda: self.trash_selected(self.table, "explorateur"),
             ),
         )
@@ -1169,7 +1279,7 @@ class ExplorerPage(Page):
                 (
                     r.id,
                     r.name,
-                    TYPE_LABELS.get(kinds.get(r.id, ("", ""))[0], "non analysé"),
+                    TYPE_LABELS.get(kinds.get(r.id, ("", ""))[0], tr("non analysé")),
                     {"mt4": "MT4", "mt5": "MT5"}.get(kinds.get(r.id, ("", ""))[1], "—"),
                     human_size(r.size),
                     r.rel_path.rpartition("/")[0] or "(racine)",
@@ -1179,8 +1289,12 @@ class ExplorerPage(Page):
         )
         start = (len(self._cursors) - 1) * self.PAGE_SIZE
         self.counter.setText(
-            f"{total} fichier(s) correspondant(s) — affichés "
-            f"{start + 1 if rows else 0} à {start + len(rows)}"
+            tr(
+                "{total} fichier(s) correspondant(s) — affichés {v} à {v2}",
+                total=total,
+                v=start + 1 if rows else 0,
+                v2=start + len(rows),
+            )
         )
         self._last = rows[-1].id if rows else self._cursors[-1]
         self._full = len(rows) == self.PAGE_SIZE
@@ -1205,7 +1319,7 @@ class ExplorerPage(Page):
     def open_detail(self) -> None:
         value = selected_value(self.table)
         if value is None:
-            self.app.dialogs.info(self.win, "Détail", "Sélectionnez un fichier.")
+            self.app.dialogs.info(self.win, tr("Détail"), tr("Sélectionnez un fichier."))
             return
         self.win.navigate("detail", file_id=int(value))
 
@@ -1223,15 +1337,15 @@ class DetailPage(Page):
         row = QHBoxLayout()
         self.file_id = QSpinBox()
         self.file_id.setRange(1, 2_000_000_000)
-        self.file_id.setAccessibleName("Numéro du fichier")
-        row.addWidget(QLabel("Fichier n°"))
+        self.file_id.setAccessibleName(tr("Numéro du fichier"))
+        row.addWidget(QLabel(tr("Fichier n°")))
         row.addWidget(self.file_id)
         row.addStretch(1)
         self.layout_.addLayout(row)
         self.button_row(
-            self.btn("afficher", "Afficher", self.show_current),
-            self.btn("famille", "Voir sa famille", self.open_family),
-            self.btn("associations", "Voir ses associations SET", self.open_sets),
+            self.btn("afficher", tr("Afficher"), self.show_current),
+            self.btn("famille", tr("Voir sa famille"), self.open_family),
+            self.btn("associations", tr("Voir ses associations SET"), self.open_sets),
         )
         self.text = QPlainTextEdit()
         self.text.setReadOnly(True)
@@ -1245,7 +1359,7 @@ class DetailPage(Page):
     def show_current(self) -> None:
         lines = file_detail_lines(self.conn, self.file_id.value())
         self.text.setPlainText(
-            "\n".join(lines) if lines else f"Fichier {self.file_id.value()} inconnu."
+            "\n".join(lines) if lines else tr("Fichier {v} inconnu.", v=self.file_id.value())
         )
 
     def refresh(self) -> None:
