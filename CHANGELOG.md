@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.8.0] — Version Windows
+
+### Ajouté
+- **Windows 10 et 11 (64 bits)** : installateur `…-Windows-Setup.exe` (sans droits
+  administrateur), raccourcis Menu Démarrer et Bureau, guide PDF. Testé à chaque version sur
+  un vrai Windows (tous les tests, application construite, installation silencieuse puis
+  auto-diagnostic de l'application installée).
+  - Lecture en mode binaire, identité réelle des fichiers (numéros NTFS/ReFS jusqu'à 128 bits),
+    jonctions jamais suivies, fichiers OneDrive non téléchargés jamais lus.
+  - **Corbeille de Windows** avec « Remettre en place » ; disques réseau refusés (pas de
+    Corbeille, le fichier serait perdu).
+  - Archives RAR / 7z / TAR… lues avec la bibliothèque fournie par Windows.
+  - Données dans `%APPDATA%\MT4MT5LibraryManagerPro`.
+- **« Ajouter les dossiers MetaTrader trouvés… »** (Mes dossiers) : MQL4 / MQL5 de Windows
+  (`AppData\Roaming\MetaQuotes\Terminal…`, Program Files) et de MetaTrader pour Mac.
+- **Erreurs d'empreinte** visibles : « Voir les erreurs de la tâche choisie » les regroupe
+  par cause avec un exemple ; si macOS refuse la lecture, l'application explique comment
+  donner l'« Accès complet au disque ».
+
+### Modifié
+- Noms créés (dossiers proposés, quarantaine, décompression) valables sous Windows
+  (caractères interdits, noms réservés).
+- Textes « Corbeille » communs au Mac et à Windows.
+
 ## [1.7.0] — Supprimer où je veux, analyse à zéro, progression, SET en vrac
 
 ### Corrigé

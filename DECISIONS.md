@@ -258,3 +258,19 @@ l'utilise (un fichier n'apparaît qu'une fois par copie). Les dossiers standards
   nom ailleurs : elle reçoit déjà les SET (sinon propositions en double).
 * **Doublons** : les deux recherches appliquent les mêmes filtres (sources disponibles) ;
   jamais de groupe d'un seul fichier.
+
+## D-023 — Version Windows (1.8.0)
+
+* Même code que la version Mac ; différences isolées : drapeaux d'ouverture binaires,
+  identité des fichiers relue par ``lstat`` (l'énumération de Windows ne la donne pas),
+  numéros de fichier ramenés à 64 bits signés (``stored_id``), points d'analyse (jonctions)
+  jamais suivis, attributs OneDrive « non téléchargé » respectés.
+* Corbeille : ``SHFileOperationW`` (``shell32.dll``) avec annulation possible ; disques
+  réseau refusés (``kernel32.GetDriveTypeW``) car Windows y effacerait définitivement. Le
+  fichier est retrouvé dans ``$Recycle.Bin`` (fiche ``$I``) pour « Remettre en place » ;
+  sinon, restauration par l'Explorateur.
+* Archives : ``archiveint.dll`` fournie par Windows 10/11 (libarchive), ouverte par nom de
+  fichier (tables de descripteurs différentes) ; exception ctypes documentée et vérifiée.
+* Livraison : PyInstaller + Inno Setup (gratuit, présent sur les machines GitHub),
+  installation par utilisateur, application non signée (avertissement SmartScreen expliqué
+  dans le guide).
