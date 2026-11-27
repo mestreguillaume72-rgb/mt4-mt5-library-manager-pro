@@ -274,3 +274,14 @@ l'utilise (un fichier n'apparaît qu'une fois par copie). Les dossiers standards
 * Livraison : PyInstaller + Inno Setup (gratuit, présent sur les machines GitHub),
   installation par utilisateur, application non signée (avertissement SmartScreen expliqué
   dans le guide).
+
+## D-024 — Langues de l'interface (1.9.0)
+
+* Le texte français sert de clé (``tr("…", valeur=…)``), catalogues ``core/locales/en.json``
+  et ``es.json`` ; texte absent : le français s'affiche (jamais vide, jamais d'erreur).
+* Textes définis une fois (titres, bulles, libellés, paramètres) : traduits à l'affichage.
+  Les valeurs enregistrées en base (raisons, journal d'audit) restent en français ; les
+  raisons de reconnaissance sont traduites à l'affichage.
+* Changement de langue : la fenêtre est reconstruite avec la même base, sur le même écran.
+* Garde-fou : ``tools/i18n_extract.py`` liste tous les textes ; un test exige une traduction
+  par langue avec les mêmes valeurs à insérer et les mêmes balises.

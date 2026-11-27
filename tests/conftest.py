@@ -33,6 +33,18 @@ def _refuse(*_args: Any, **_kwargs: Any) -> Any:
 
 
 @pytest.fixture(autouse=True)
+def french_by_default(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Les tests vérifient les textes français (langue d'origine), quelle que soit la langue
+    de la machine ; un test peut choisir une autre langue."""
+    from mtlm.core.i18n import set_language
+
+    monkeypatch.setenv("MTLM_LANGUE", "fr")
+    set_language("fr")
+    yield
+    set_language("fr")
+
+
+@pytest.fixture(autouse=True)
 def no_network(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     monkeypatch.setattr(socket.socket, "connect", _refuse)
     monkeypatch.setattr(socket.socket, "connect_ex", _refuse)

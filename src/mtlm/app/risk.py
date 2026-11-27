@@ -11,6 +11,7 @@ import sqlite3
 from dataclasses import dataclass, field
 
 from mtlm.core.control import TaskControl
+from mtlm.core.i18n import tr
 from mtlm.formats.signatures import EXPECTED
 from mtlm.fs.reader import ReadOnlyFile
 from mtlm.metatrader.encoding import decode_text
@@ -83,7 +84,9 @@ class RiskService:
             path = os.path.join(os.fsencode(root), bytes(rel_bytes))  # noqa: PTH118
             if ext in EXECUTABLE_EXTS:
                 add(
-                    file_id, rel_path, Finding("élevé", f"{EXECUTABLE_EXTS[ext]} : peut s'exécuter")
+                    file_id,
+                    rel_path,
+                    Finding("élevé", tr("{what} : peut s'exécuter", what=tr(EXECUTABLE_EXTS[ext]))),
                 )
             if (
                 magic in ("pe", "elf", "macho")
@@ -94,13 +97,20 @@ class RiskService:
                 add(
                     file_id,
                     rel_path,
-                    Finding("élevé", f"programme déguisé : extension .{ext}, contenu {magic}"),
+                    Finding(
+                        "élevé",
+                        tr(
+                            "programme déguisé : extension .{ext}, contenu {magic}",
+                            ext=ext,
+                            magic=magic,
+                        ),
+                    ),
                 )
             if ext == "dll":
                 add(
                     file_id,
                     rel_path,
-                    Finding("à surveiller", "DLL : bibliothèque Windows qui peut tout faire"),
+                    Finding("à surveiller", tr("DLL : bibliothèque Windows qui peut tout faire")),
                 )
             if ext in ("mq4", "mq5", "mqh"):
                 data = _read(path)
@@ -121,7 +131,10 @@ class RiskService:
                 add(
                     int(file_id),
                     rel_path,
-                    Finding("à surveiller", f"extension trompeuse : .{ext}, contenu {magic}"),
+                    Finding(
+                        "à surveiller",
+                        tr("extension trompeuse : .{ext}, contenu {magic}", ext=ext, magic=magic),
+                    ),
                 )
         # Archives : protégées par mot de passe, ou contenant des programmes.
         for file_id, rel_path, status in self._conn.execute(
@@ -148,9 +161,16 @@ class RiskService:
                 add(
                     int(file_id),
                     rel_path,
-                    Finding("élevé", f"contient {EXECUTABLE_EXTS[ext]} : {inner}"),
+                    Finding(
+                        "élevé",
+                        tr("contient {what} : {inner}", what=tr(EXECUTABLE_EXTS[ext]), inner=inner),
+                    ),
                 )
             elif ext == "dll":
-                add(int(file_id), rel_path, Finding("à surveiller", f"contient une DLL : {inner}"))
+                add(
+                    int(file_id),
+                    rel_path,
+                    Finding("à surveiller", tr("contient une DLL : {inner}", inner=inner)),
+                )
         result = [r for r in rows.values() if r.findings]
         return sorted(result, key=lambda r: (level_rank(r.level), r.rel_path))

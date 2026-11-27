@@ -14,7 +14,6 @@ from dataclasses import dataclass
 
 from mtlm.audit.journal import ACTOR_USER, AuditJournal
 from mtlm.core.clock import Clock, iso_utc
-from mtlm.core.i18n import tr
 from mtlm.fs.reader import ReadOnlyFile
 from mtlm.matching.companions import (
     KINDS,
@@ -332,15 +331,13 @@ class CompanionService:
         """Fichiers liés aux outils donnés (par exemple tous les membres d'une famille)."""
         if not tool_ids:
             return []
-        return self._rows(
-            tr("l.tool_file_id IN ({v})", v=",".join("?" * len(tool_ids))), tuple(tool_ids)
-        )
+        return self._rows(f"l.tool_file_id IN ({','.join('?' * len(tool_ids))})", tuple(tool_ids))
 
     def all(self, placement: str | None = None, limit: int = 5000) -> list[CompanionRow]:
         rows = (
             self._rows("1 = 1", ())
             if placement is None
-            else self._rows(tr("l.placement = ?"), (placement,))
+            else self._rows("l.placement = ?", (placement,))
         )
         return rows[:limit]
 

@@ -103,9 +103,9 @@ class ArchiveRow:
         """Ce que contient l'archive, en mots : « 2 robots, 1 indicateur »."""
         parts = []
         if self.robots:
-            parts.append(f"{self.robots} robot{'s' if self.robots > 1 else ''}")
+            parts.append(tr("{n} robot(s)", n=self.robots))
         if self.indicators:
-            parts.append(f"{self.indicators} indicateur{'s' if self.indicators > 1 else ''}")
+            parts.append(tr("{n} indicateur(s)", n=self.indicators))
         if self.other_tools:
             parts.append(
                 tr("{other_tools} autre(s) (script ou non reconnu)", other_tools=self.other_tools)
@@ -244,10 +244,10 @@ class ArchiveService:
                     (content_id, archive_id),
                 ).fetchone()
                 where = tr("oui : {v}", v=found[0]) if found else tr("non (absent du disque)")
-            state = "lu" if status == "inspected" else f"{status} : {reason or ''}"
-            label = _type_of(inner)
+            state = tr("lu") if status == "inspected" else f"{status} : {reason or ''}"
+            label = tr(_type_of(inner))
             if kind in TOOL_LABELS:
-                label = f"{TOOL_LABELS[kind]} ({label})"
+                label = f"{tr(TOOL_LABELS[kind])} ({label})"
             result.append((inner, label, size, state, where))
         return result
 

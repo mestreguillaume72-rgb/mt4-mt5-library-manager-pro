@@ -17,6 +17,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from mtlm.core.i18n import tr
+
 #: Fonction Windows → (niveau, explication). « élevé » : rarement nécessaire à un robot.
 DANGEROUS_FUNCTIONS: dict[str, tuple[str, str]] = {
     "URLDownloadToFile": ("élevé", "télécharge un fichier depuis Internet"),
@@ -97,7 +99,7 @@ def _match(names: set[str]) -> list[Finding]:
     found: list[Finding] = []
     for base, (level, why) in DANGEROUS_FUNCTIONS.items():
         if any(base in name for name in names):
-            found.append(Finding(level, f"{base} : {why}"))
+            found.append(Finding(level, f"{base} : {tr(why)}"))
     return found
 
 
@@ -108,7 +110,7 @@ def scan_binary(blob: bytes) -> list[Finding]:
     lowered = blob.lower()
     for dll, (level, why) in SENSITIVE_DLLS.items():
         if dll.encode() in lowered or dll.encode("utf-16-le") in lowered:
-            findings.append(Finding(level, f"{dll} : {why}"))
+            findings.append(Finding(level, f"{dll} : {tr(why)}"))
     return findings
 
 
@@ -119,12 +121,12 @@ def scan_source(text: str) -> list[Finding]:
     lowered = text.lower()
     for dll, (level, why) in SENSITIVE_DLLS.items():
         if dll in lowered:
-            findings.append(Finding(level, f"importe {dll} : {why}"))
+            findings.append(Finding(level, tr("importe {dll} : {why}", dll=dll, why=tr(why))))
     for name, why in MQL_INFO.items():
         if re.search(rf"\b{name}\s*\(", text):
-            findings.append(Finding("info", f"{name} : {why}"))
+            findings.append(Finding("info", f"{name} : {tr(why)}"))
     if "#import" in text and ".dll" in lowered:
-        findings.append(Finding("à surveiller", "importe une DLL : elle peut tout faire"))
+        findings.append(Finding("à surveiller", tr("importe une DLL : elle peut tout faire")))
     return findings
 
 

@@ -72,6 +72,39 @@ COMPANION_DIRS = {
 }
 
 
+#: Raisons de reconnaissance (enregistrées en français) : traduites à l'affichage, en entier
+#: ou par leur début fixe (« tampons d'indicateur : SetIndexBuffer »).
+BASIS_TEXTS = (
+    "fonction OnCalculate()",
+    "fonction OnStart()",
+    "fonction OnTick()",
+    "fonction start() (MQL4 ancien)",
+    "fonction start() (MQL4 ancien) sans dossier ni indice clair",
+    "aucun indice de type dans le contenu",
+    "aucune fonction d'entrée reconnue",
+    "aucun dossier ni source appariée : type inconnu",
+    "contenu non lisible comme source MQL",
+    "extension .mqh : fichier d'inclusion",
+    "bibliothèque Windows (signature PE)",
+)
+BASIS_PREFIXES = (
+    "tampons d'indicateur : ",
+    "passe des ordres : ",
+    "contradiction : rangé dans un dossier « ",
+    "dossier « ",
+    "source de même nom dans le même dossier (type « ",
+)
+
+
+def translate_basis(text: str) -> str:
+    if text in BASIS_TEXTS:
+        return tr(text)
+    for prefix in BASIS_PREFIXES:
+        if text.startswith(prefix):
+            return tr(prefix) + text[len(prefix) :]
+    return text
+
+
 @dataclass(frozen=True)
 class MqSourceRow:
     file_id: int
@@ -87,7 +120,7 @@ class MqSourceRow:
     @property
     def how(self) -> str:
         """Comment le type a été reconnu, en mots (contenu du fichier d'abord)."""
-        shown = [b for b in self.basis if not b.startswith("extension .")]
+        shown = [translate_basis(b) for b in self.basis if not b.startswith("extension .")]
         return "; ".join(shown) or "—"
 
     @property
@@ -747,26 +780,26 @@ class OrganizeService:
     ) -> list[MqSourceRow]:
         """Sources MQ4/MQ5 présentes, avec ce qui les accompagne (écran « Sources MQ4/MQ5 »)."""
         clauses = [
-            tr("f.presence = 'present'"),
-            tr("f.ext IN ('mq4', 'mq5')"),
-            tr("f.in_quarantine = 0"),
+            "f.presence = 'present'",
+            "f.ext IN ('mq4', 'mq5')",
+            "f.in_quarantine = 0",
         ]
         params: list[object] = []
         if text:
-            clauses.append(tr("f.rel_path LIKE ?"))
+            clauses.append("f.rel_path LIKE ?")
             params.append(f"%{text}%")
         if ext:
-            clauses.append(tr("f.ext = ?"))
+            clauses.append("f.ext = ?")
             params.append(ext)
         if tool_type:
-            clauses.append(tr("a.detected_type = ?"))
+            clauses.append("a.detected_type = ?")
             params.append(tool_type)
         if tool_types is not None:
             # Cases à cocher : types choisis, et/ou « autres » (scripts, non reconnus…).
             wanted = [t for t in tool_types if t in ("ea", "indicator")]
             parts = []
             if wanted:
-                parts.append(tr("a.detected_type IN ({v})", v=",".join("?" * len(wanted))))
+                parts.append(f"a.detected_type IN ({','.join('?' * len(wanted))})")
                 params.extend(wanted)
             if others:
                 parts.append("coalesce(a.detected_type, '') NOT IN ('ea', 'indicator')")

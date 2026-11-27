@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.9.0] — Français, English, Español
+
+### Ajouté
+- **Trois langues** : français, anglais, espagnol. Choix dans **Paramètres → 🌐 Langue de
+  l'application** : toute l'interface est reconstruite aussitôt, sur le même écran, sans
+  redémarrer. Au premier lancement, la langue de l'ordinateur est proposée (anglais si elle
+  n'est pas disponible).
+- Traduits : menus, écrans, boutons, bulles d'aide, confirmations, messages, progression de
+  l'analyse, motifs de risque, raisons de reconnaissance, compteurs des listes.
+- Un test vérifie que **chaque texte** a sa traduction anglaise et espagnole, avec les mêmes
+  valeurs insérées et la même mise en forme.
+
+### Pas traduit (pour l'instant)
+- Les noms de fichiers, de dossiers et de paramètres des SET (jamais traduits).
+- Les guides d'installation PDF, l'aide détaillée de la ligne de commande et les en-têtes des
+  exports CSV/JSON (restent en français).
+
 ## [1.8.0] — Version Windows
 
 ### Ajouté

@@ -138,6 +138,9 @@ SECTIONS: list[tuple[str, list[str]]] = [
 
 
 class MainWindow(QMainWindow):
+    #: Fenêtre qui remplace celle-ci après un changement de langue.
+    rebuilt: Any = None
+
     def __init__(self, app: UiApp, page_factories: list[Callable[[UiApp], Any]]) -> None:
         super().__init__()
         self.app = app

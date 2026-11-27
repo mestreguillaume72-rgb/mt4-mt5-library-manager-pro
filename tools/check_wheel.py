@@ -20,6 +20,8 @@ REQUIRED = {
     "mtlm/store/migrations/0004_sets_families.sql",
     "mtlm/store/migrations/0005_quarantine_organize.sql",
     "mtlm/cli/main.py",
+    "mtlm/core/locales/en.json",
+    "mtlm/core/locales/es.json",
 }
 FORBIDDEN_SUFFIXES = {
     ".ex4",

@@ -162,7 +162,7 @@ def test_archive_dit_robots_et_indicateurs(tmp_path: Path, ctx: AppContext) -> N
     found = rows(ctx)
     pack = found["pack trading.zip"]
     assert (pack.robots, pack.indicators) == (1, 2)  # type: ignore[attr-defined]
-    assert pack.contents == "1 robot, 2 indicateurs"  # type: ignore[attr-defined]
+    assert pack.contents == "1 robot(s), 2 indicateur(s)"  # type: ignore[attr-defined]
     entries = {
         e[0]: e[1]
         for e in ArchiveService(ctx.conn, ctx.clock, ctx.journal).entries(pack.file_id)  # type: ignore[attr-defined]

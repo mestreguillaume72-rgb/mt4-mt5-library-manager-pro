@@ -11,7 +11,7 @@ ICON = ROOT / "packaging/windows/AppIcon.ico"
 analysis = Analysis(  # noqa: F821
     [str(ROOT / "packaging/macos/launcher.py")],
     pathex=[str(ROOT / "src")],
-    datas=collect_data_files("mtlm", includes=["**/*.sql"]),
+    datas=collect_data_files("mtlm", includes=["**/*.sql", "core/locales/*.json"]),
     excludes=["tests", "pytest", "hypothesis", "tkinter", "PySide6.QtWebEngineCore",
               "PySide6.QtQml", "PySide6.QtQuick", "PySide6.Qt3DCore", "PySide6.QtMultimedia"],
     noarchive=False,

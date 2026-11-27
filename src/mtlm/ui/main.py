@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -63,8 +64,39 @@ def build_window(
     paths: AppPaths, dialogs: Dialogs | None = None, clock: Clock | None = None
 ) -> MainWindow:
     ctx = open_app(paths, clock)
+    from mtlm.app.settings import SettingsService
+    from mtlm.core.i18n import best_language, set_language
+
+    # MTLM_LANGUE : langue imposée (tests, diagnostic) ; sinon le choix de l'utilisateur.
+    chosen = os.environ.get("MTLM_LANGUE") or SettingsService(ctx.conn, ctx.journal).language()
+    if chosen is None:  # premier lancement : la langue de l'ordinateur
+        from PySide6.QtCore import QLocale
+
+        chosen = best_language(QLocale.system().name())
+    set_language(chosen)
     app = UiApp(ctx, dialogs or QtDialogs(), clock)
     return MainWindow(app, list(PAGES))
+
+
+def rebuild_window(old: MainWindow) -> MainWindow:
+    """Reconstruit toute la fenêtre dans la langue choisie (mêmes données, même écran)."""
+    current = old.current_key()
+    app = UiApp(old.app.ctx, old.app.dialogs, old.app.clock)
+    window = MainWindow(app, list(PAGES))
+    window.setGeometry(old.geometry())
+    visible = old.isVisible()
+    old.hide()
+    old.deleteLater()  # la base reste ouverte : la nouvelle fenêtre l'utilise
+    if visible:
+        window.show()
+    if current in window.pages:
+        window.navigate(current)
+    _ALIVE[:] = [window]
+    return window
+
+
+#: Fenêtre ouverte (gardée en vie après une reconstruction).
+_ALIVE: list[MainWindow] = []
 
 
 class AutoDialogs:
@@ -198,9 +230,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         QMessageBox.critical(None, APP_NAME, f"Démarrage impossible : {exc}")
         return 1
+    ctx = window.app.ctx
+    _ALIVE[:] = [window]
     window.show()
     code = qt_app.exec()
-    window.app.ctx.close()
+    ctx.close()
     return int(code)
 
 

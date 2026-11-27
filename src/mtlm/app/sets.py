@@ -570,13 +570,13 @@ class AssociationService:
         clauses: list[str] = ["1 = 1"]
         params: list[object] = []
         if set_file_id is not None:
-            clauses.append(tr("a.set_file_id = ?"))
+            clauses.append("a.set_file_id = ?")
             params.append(set_file_id)
         if robot_file_id is not None:
-            clauses.append(tr("a.robot_file_id = ?"))
+            clauses.append("a.robot_file_id = ?")
             params.append(robot_file_id)
         if level is not None:
-            clauses.append(tr("a.level = ?"))
+            clauses.append("a.level = ?")
             params.append(level)
         rows = self._conn.execute(
             "SELECT a.id, a.robot_file_id, r.rel_path, a.set_file_id, s.rel_path, a.score,"

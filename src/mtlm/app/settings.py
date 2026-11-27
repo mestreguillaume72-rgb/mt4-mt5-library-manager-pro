@@ -133,6 +133,30 @@ class SettingsService:
     def all(self) -> dict[str, float]:
         return {key: self.get(key) for key in SPECS}
 
+    #: Langue de l'interface (texte, hors des réglages numériques).
+    LANGUAGE_KEY = "interface.langue"
+
+    def language(self) -> str | None:
+        row = self._conn.execute(
+            "SELECT value_json FROM setting WHERE key = ?", (self.LANGUAGE_KEY,)
+        ).fetchone()
+        return str(json.loads(row[0])) if row else None
+
+    def set_language(self, code: str) -> None:
+        previous = self.language()
+        with transaction(self._conn):
+            self._conn.execute(
+                "INSERT INTO setting(key, value_json) VALUES (?, ?) ON CONFLICT(key)"
+                " DO UPDATE SET value_json = excluded.value_json",
+                (self.LANGUAGE_KEY, json.dumps(code)),
+            )
+        self._journal.append(
+            ACTOR_USER,
+            "settings.set",
+            self.LANGUAGE_KEY,
+            details={"avant": previous, "apres": code},
+        )
+
     def set(self, key: str, value: float) -> float:
         spec = SPECS.get(key)
         if spec is None:

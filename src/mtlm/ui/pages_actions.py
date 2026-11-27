@@ -30,7 +30,8 @@ from mtlm.app.quarantine import QuarantineService, Simulation
 from mtlm.app.reports import KINDS, ReportService
 from mtlm.app.settings import SPECS, SettingsService
 from mtlm.core.errors import MtlmError
-from mtlm.core.i18n import tr
+from mtlm.core.i18n import LANGUAGES, set_language, tr
+from mtlm.core.i18n import language as current_language
 from mtlm.ui.base import fill_table, make_table, selected_value, selected_values
 from mtlm.ui.pages_main import Page, two_columns
 from mtlm.ui.window import UiApp
@@ -866,12 +867,29 @@ class ReportsPage(Page):
         self.refresh()
 
 
+def _rebuild(window: Any) -> Any:
+    from mtlm.ui.main import rebuild_window
+
+    return rebuild_window(window)
+
+
 class SettingsPage(Page):
     key, title, icon = "parametres", "Paramètres", "⚙️"
     subtitle = "Réglages de l'analyse. Les valeurs par défaut conviennent dans la plupart des cas."
 
     def __init__(self, app: UiApp) -> None:
         super().__init__(app)
+        language_row = QHBoxLayout()
+        self.language = QComboBox()
+        self.language.setAccessibleName(tr("Langue"))
+        for code, name in LANGUAGES.items():
+            self.language.addItem(name, code)
+        self.language.setCurrentIndex(list(LANGUAGES).index(current_language()))
+        self.language.currentIndexChanged.connect(lambda _i: self.change_language())
+        language_row.addWidget(QLabel(tr("🌐 Langue de l'application")))
+        language_row.addWidget(self.language)
+        language_row.addStretch(1)
+        self.layout_.addLayout(language_row)
         form = QFormLayout()
         self.fields: dict[str, QSpinBox | QDoubleSpinBox] = {}
         for key, spec in SPECS.items():
@@ -914,6 +932,15 @@ class SettingsPage(Page):
     def refresh(self) -> None:
         for key, value in self._service().all().items():
             self.fields[key].setValue(value)  # type: ignore[arg-type]
+
+    def change_language(self) -> None:
+        """Nouvelle langue : enregistrée, puis toute l'interface est reconstruite."""
+        code = str(self.language.currentData())
+        if code == current_language():
+            return
+        SettingsService(self.conn, self.app.ctx.journal).set_language(code)
+        set_language(code)
+        self.win.rebuilt = _rebuild(self.win)
 
     def save(self) -> None:
         service = self._service()

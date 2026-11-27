@@ -318,7 +318,26 @@ class TaskRunner(QThread):
 BADGE_RULES: list[tuple[str, tuple[str, ...]]] = [
     (
         "danger",
-        ("échec", "failed", "erreur", "error", "rejetée", "corrompue", "non admissible", "refus"),
+        (
+            "échec",
+            "failed",
+            "erreur",
+            "error",
+            "rejetée",
+            "corrompue",
+            "non admissible",
+            "refus",
+            # anglais, espagnol (1.9.0)
+            "failure",
+            "rejected",
+            "corrupt",
+            "not eligible",
+            "refused",
+            "fallo",
+            "rechaz",
+            "corrupt",
+            "no admisible",
+        ),
     ),
     (
         "warning",
@@ -338,6 +357,27 @@ BADGE_RULES: list[tuple[str, tuple[str, ...]]] = [
             "avec un autre robot",
             "avec un autre outil",
             "corbeille",
+            "to check",
+            "to review",
+            "interrupted",
+            "paused",
+            "canceled",
+            "medium",
+            "eligible",
+            "with another robot",
+            "with another tool",
+            "trash",
+            "por verificar",
+            "a revisar",
+            "interrumpid",
+            "pausa",
+            "cancelad",
+            "media",
+            "conflicto",
+            "admisible",
+            "con otro robot",
+            "con otra herramienta",
+            "papelera",
         ),
     ),
     (
@@ -360,6 +400,29 @@ BADGE_RULES: list[tuple[str, tuple[str, ...]]] = [
             "avec son outil",
             "dossier metatrader prévu",
             "remis en place",
+            "done",
+            "finished",
+            "strong",
+            "accepted",
+            "healthy",
+            "reference",
+            "yes",
+            "with its robot",
+            "with its tool",
+            "metatrader folder",
+            "put back",
+            "terminad",
+            "completad",
+            "fuerte",
+            "aceptad",
+            "verificad",
+            "referencia",
+            "restaurad",
+            "cierto",
+            "sí",
+            "con su robot",
+            "con su herramienta",
+            "carpeta de metatrader",
         ),
     ),
     (
@@ -374,6 +437,12 @@ BADGE_RULES: list[tuple[str, tuple[str, ...]]] = [
             "probable",
             "copie",
             "en vrac",
+            "in progress",
+            "copy",
+            "loose",
+            "en curso",
+            "copia",
+            "suelto",
         ),
     ),
 ]
@@ -452,11 +521,11 @@ def update_count(table: QTableWidget) -> None:
         return
     noun = str(getattr(table, "count_noun", "élément"))
     total = table.rowCount()
-    text = f"{total:,} {_plural(total, noun)}".replace(",", " ")
+    text = f"{total:,} {tr(_plural(total, noun))}".replace(",", " ")
     model = table.selectionModel()
     chosen = len(model.selectedRows()) if model is not None else 0
     if chosen:
-        text += f" — {chosen:,} {_plural(chosen, 'sélectionné')}".replace(",", " ")
+        text += f" — {chosen:,} {tr(_plural(chosen, 'sélectionné'))}".replace(",", " ")
     label.setText(text)
 
 
