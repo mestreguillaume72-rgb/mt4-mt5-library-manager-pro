@@ -43,7 +43,13 @@ jobs:
         run: uv run python tools/icone.py packaging/windows/AppIcon.ico
       - name: Construire l'application
         run: uv run --group build pyinstaller --noconfirm packaging/windows/mtlm.spec
+      - name: Auto-diagnostic depuis les sources (comparaison)
+        timeout-minutes: 25
+        run: |
+          uv run python -c "import sys; from mtlm.ui.main import main; sys.exit(main(['x', '--autotest', 'src', '--rapport', 'source.log']))" || true
+          cat source.log
       - name: Auto-diagnostic (application construite)
+        timeout-minutes: 25
         run: |
           APP="dist/MT4-MT5-Library-Manager-PRO"
           find "$APP" -type f -exec sha256sum {} + | sort > avant.txt
@@ -59,6 +65,7 @@ jobs:
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DVersion=$version" packaging\windows\installateur.iss
           Get-ChildItem dist\*.exe
       - name: Installation silencieuse puis auto-diagnostic de l'application installée
+        timeout-minutes: 25
         shell: pwsh
         run: |
           $setup = Get-ChildItem dist\*-Windows-Setup.exe | Select-Object -First 1
@@ -92,6 +99,7 @@ jobs:
         with:
           name: rapports-windows
           path: |
+            source.log
             autotest.log
             installe.log
 

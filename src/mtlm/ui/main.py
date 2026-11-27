@@ -102,6 +102,7 @@ def autotest(source: Path, report: Path | None = None) -> int:
     ajoute ``source`` (lecture seule), lance toute l'analyse et vérifie les résultats. Les
     données de l'application sont placées dans un dossier temporaire supprimé à la fin."""
     import tempfile
+    import time
 
     qt_app = QApplication.instance() or QApplication([])
     apply_theme(qt_app)  # type: ignore[arg-type]
@@ -110,11 +111,30 @@ def autotest(source: Path, report: Path | None = None) -> int:
         window = build_window(default_paths({"MTLM_HOME": home}), dialogs)
         window.show()
         pages = list(window.pages)
+
+        def trace(text: str) -> None:
+            if report is not None:  # suivi pas à pas : utile si l'auto-diagnostic se bloque
+                with report.open("a", encoding="utf-8") as handle:
+                    handle.write(f"[{time.strftime('%H:%M:%S')}] {text}\n")
+
+        trace("écrans ouverts ; ajout de la source")
         window.pages["sources"].add()
+        trace(f"sources : {window.pages['sources'].table.rowCount()} ; analyse lancée")
         window.pages["analyse"].start_all()
+        deadline = time.monotonic() + 20 * 60
+        last = ""
         while window.app.busy:
             qt_app.processEvents()
             window.app.wait(50)
+            message = window.app.last_message or ""
+            if message != last:
+                last = message
+                trace(message)
+            if time.monotonic() > deadline:
+                dialogs.errors.append("analyse trop longue (plus de 20 minutes) : arrêtée")
+                if window.app.control is not None:
+                    window.app.control.cancel()
+                break
         qt_app.processEvents()
         for key in pages:
             window.navigate(key)
@@ -131,7 +151,8 @@ def autotest(source: Path, report: Path | None = None) -> int:
     text = "\n".join(lines)
     # Application fenêtrée de Windows : pas de console, le rapport va dans un fichier.
     if report is not None:
-        report.write_text(text + "\n", encoding="utf-8")
+        with report.open("a", encoding="utf-8") as handle:
+            handle.write(text + "\n")
     if sys.stdout is not None:
         print(text)
     return 0 if ok else 1
