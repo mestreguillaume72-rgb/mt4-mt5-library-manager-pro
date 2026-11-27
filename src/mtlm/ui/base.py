@@ -463,7 +463,7 @@ def make_table(
     noun: str = "élément",
 ) -> QTableWidget:
     """``multi`` : sélection de plusieurs lignes **au simple clic** (chaque clic ajoute ou
-    retire la ligne, sans clavier) ; Cmd+A sélectionne tout. ``noun`` : ce que compte la
+    retire la ligne, sans clavier) ; Cmd+A ou Ctrl+A sélectionne tout. ``noun`` : ce que compte la
     liste (« fichier », « groupe »…), affiché sous elle avec le nombre sélectionné."""
     table = QTableWidget(0, len(headers))
     count = QLabel(f"0 {noun}")

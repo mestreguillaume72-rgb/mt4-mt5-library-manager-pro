@@ -13,7 +13,13 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 
 DEFAULT_CHUNK = 1024 * 1024
-_FLAGS = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+_FLAGS = (
+    os.O_RDONLY
+    | getattr(os, "O_NOFOLLOW", 0)
+    | getattr(os, "O_CLOEXEC", 0)
+    | getattr(os, "O_BINARY", 0)  # Windows : jamais de conversion des fins de ligne
+    | getattr(os, "O_NOINHERIT", 0)
+)
 
 
 class NotRegularFileError(OSError):

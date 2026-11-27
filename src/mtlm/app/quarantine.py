@@ -33,6 +33,7 @@ from mtlm.audit.journal import ACTOR_SYSTEM, ACTOR_USER, AuditJournal
 from mtlm.core.clock import Clock, iso_utc
 from mtlm.core.control import TaskControl
 from mtlm.core.errors import MtlmError
+from mtlm.core.filenames import portable_name
 from mtlm.core.paths import AppPaths
 from mtlm.fs.reader import FileIdentity
 from mtlm.store.database import transaction
@@ -103,8 +104,7 @@ def _plan_token(destination: str, entries: list[PlanEntry]) -> str:
 
 
 def _safe_component(name: str) -> str:
-    cleaned = "".join("_" if c in "/\\:\0" else c for c in name).strip() or "source"
-    return cleaned[:120]
+    return portable_name(name, "source")
 
 
 class QuarantineService:

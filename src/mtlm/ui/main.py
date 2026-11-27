@@ -97,7 +97,7 @@ class AutoDialogs:
         return []  # l'auto-diagnostic ne valide jamais de lien
 
 
-def autotest(source: Path) -> int:
+def autotest(source: Path, report: Path | None = None) -> int:
     """Auto-diagnostic de l'application installée (sans écran possible) : ouvre tous les écrans,
     ajoute ``source`` (lecture seule), lance toute l'analyse et vérifie les résultats. Les
     données de l'application sont placées dans un dossier temporaire supprimé à la fin."""
@@ -122,13 +122,18 @@ def autotest(source: Path) -> int:
         log = window.pages["analyse"].log.toPlainText()
         window.app.ctx.close()
     ok = len(pages) == len(PAGES) and files > 0 and not dialogs.errors and log.count("✔") == 8
-    print(
+    lines = [
         f"Auto-diagnostic : {'RÉUSSI' if ok else 'ÉCHEC'} — {len(pages)} écran(s), "
-        f"{files} fichier(s) analysé(s) dans {source}"
-    )
-    print(log)
-    for error in dialogs.errors:
-        print(f"Erreur : {error}")
+        f"{files} fichier(s) analysé(s) dans {source}",
+        log,
+        *(f"Erreur : {error}" for error in dialogs.errors),
+    ]
+    text = "\n".join(lines)
+    # Application fenêtrée de Windows : pas de console, le rapport va dans un fichier.
+    if report is not None:
+        report.write_text(text + "\n", encoding="utf-8")
+    if sys.stdout is not None:
+        print(text)
     return 0 if ok else 1
 
 
@@ -137,7 +142,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     if "--autotest" in args:
         index = args.index("--autotest")
         target = Path(args[index + 1]) if len(args) > index + 1 else Path(sys.executable).parent
-        return autotest(target)
+        report = None
+        if "--rapport" in args and len(args) > args.index("--rapport") + 1:
+            report = Path(args[args.index("--rapport") + 1])
+        return autotest(target, report)
     qt_app = QApplication.instance() or QApplication(args)
     qt_app.setApplicationName(APP_NAME)
     apply_theme(qt_app)  # type: ignore[arg-type]

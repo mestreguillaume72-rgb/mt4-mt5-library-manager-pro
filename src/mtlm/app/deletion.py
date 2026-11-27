@@ -3,7 +3,7 @@
 Décision du propriétaire : les doublons passent en quarantaine (copie vérifiée), puis
 l'utilisateur **valide** leur suppression ; il peut aussi supprimer directement depuis
 « Doublons » ou « Familles et versions ». La suppression envoie le fichier dans la
-**Corbeille du Mac** (récupérable), jamais d'effacement définitif.
+**Corbeille** (récupérable), jamais d'effacement définitif.
 
 Garde-fous appliqués à **chaque** fichier, juste avant de le retirer :
 
@@ -264,7 +264,7 @@ class DeletionService:
         if origin not in ORIGINS:
             raise DeletionError(f"Origine inconnue : {origin}")
         if self._backend is None:
-            raise DeletionError("La mise à la Corbeille n'est disponible que sur Mac.")
+            raise DeletionError("La mise à la Corbeille n'est disponible que sur Mac et Windows.")
         result = DeletionResult()
         removed: set[int] = set()
         for file_id in dict.fromkeys(file_ids):

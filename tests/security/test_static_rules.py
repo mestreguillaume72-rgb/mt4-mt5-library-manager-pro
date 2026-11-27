@@ -70,8 +70,14 @@ CTYPES_ALLOWED: dict[str, set[str]] = {
     "transfer/trash.py": {
         "/usr/lib/libobjc.A.dylib",
         "/System/Library/Frameworks/Foundation.framework/Foundation",
+        "shell32.dll",
+        "kernel32.dll",
     },
-    "formats/libarchive.py": {"/usr/lib/libarchive.2.dylib", "libarchive.so.13"},
+    "formats/libarchive.py": {
+        "/usr/lib/libarchive.2.dylib",
+        "archiveint.dll",
+        "libarchive.so.13",
+    },
 }
 
 # Modules qui lisent les sources de l'utilisateur : aucune écriture possible.

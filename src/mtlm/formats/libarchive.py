@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import ctypes
 import hashlib
+import os
 import sys
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
@@ -30,9 +31,12 @@ from mtlm.formats.archives import (
     wants_bytes,
 )
 
-#: Seules bibliothèques chargées : libarchive de macOS, et celle du système Linux (tests).
+#: Seules bibliothèques chargées : libarchive de macOS, celle de Windows 10/11 (fournie avec
+#: le système pour « tar » et l'Explorateur), et celle du système Linux (tests).
 LIBARCHIVE_MACOS = "/usr/lib/libarchive.2.dylib"
+LIBARCHIVE_WINDOWS = "archiveint.dll"
 LIBARCHIVE_LINUX = "libarchive.so.13"
+IS_WINDOWS = sys.platform == "win32"
 
 _OK, _EOF, _WARN = 0, 1, -20
 _IFMT, _IFREG, _IFDIR = 0o170000, 0o100000, 0o040000
@@ -44,7 +48,12 @@ class LibArchiveError(Exception):
 
 class _Lib:
     def __init__(self) -> None:
-        lib = ctypes.CDLL(LIBARCHIVE_MACOS if sys.platform == "darwin" else LIBARCHIVE_LINUX)
+        if sys.platform == "darwin":
+            lib = ctypes.CDLL(LIBARCHIVE_MACOS)
+        elif IS_WINDOWS:
+            lib = ctypes.CDLL(LIBARCHIVE_WINDOWS)
+        else:
+            lib = ctypes.CDLL(LIBARCHIVE_LINUX)
         vp, ci, cs = ctypes.c_void_p, ctypes.c_int, ctypes.c_char_p
         signatures: dict[str, tuple[object, list[object]]] = {
             "archive_read_new": (vp, []),
@@ -52,6 +61,7 @@ class _Lib:
             "archive_read_support_format_all": (ci, [vp]),
             "archive_read_support_format_raw": (ci, [vp]),
             "archive_read_open_fd": (ci, [vp, ci, ctypes.c_size_t]),
+            "archive_read_open_filename_w": (ci, [vp, ctypes.c_wchar_p, ctypes.c_size_t]),
             "archive_read_next_header": (ci, [vp, ctypes.POINTER(vp)]),
             "archive_read_data": (ctypes.c_ssize_t, [vp, vp, ctypes.c_size_t]),
             "archive_read_data_skip": (ci, [vp]),
@@ -126,7 +136,15 @@ def iter_entries(path: bytes, kind: str = "") -> Iterator[Entry]:
             lib.archive_read_support_format_all(handle)
             if kind in RAW_KINDS:
                 lib.archive_read_support_format_raw(handle)
-            if lib.archive_read_open_fd(handle, stream.fileno(), READ_CHUNK) != _OK:
+            # Windows : la bibliothèque du système n'a pas la même table de descripteurs que
+            # Python ; elle ouvre elle-même le fichier (en lecture seule), déjà vérifié
+            # ordinaire par l'ouverture ci-dessus.
+            opened = (
+                lib.archive_read_open_filename_w(handle, os.fsdecode(path), READ_CHUNK)
+                if IS_WINDOWS
+                else lib.archive_read_open_fd(handle, stream.fileno(), READ_CHUNK)
+            )
+            if opened != _OK:
                 raise LibArchiveError(_text(lib.archive_error_string(handle)) or "illisible")
             entry = ctypes.c_void_p()
             buffer = ctypes.create_string_buffer(READ_CHUNK)

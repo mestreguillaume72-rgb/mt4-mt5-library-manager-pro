@@ -918,10 +918,11 @@ class ArchivesPage(Page):
             f"Décompresser {len(chosen)} archive(s), chacune dans un nouveau dossier à son nom, à "
             "côté d'elle ? Chaque fichier extrait est vérifié par son empreinte."
             + (
-                " Ensuite, l'archive part à la Corbeille du Mac (récupérable), seulement si tout "
+                " Ensuite, l'archive part à la Corbeille (récupérable), seulement si tout "
                 "est vérifié."
                 if backend is not None
-                else " (La Corbeille n'est disponible que sur Mac : l'archive restera en place.)"
+                else " (La Corbeille n'est disponible que sur Mac et Windows : l'archive "
+                "restera en place.)"
             )
             + "\n\nAprès, relancez « Tout analyser » pour analyser les fichiers extraits.",
         ):
@@ -953,14 +954,16 @@ class ArchivesPage(Page):
             return
         if self.app.ctx.trash is None:
             self.app.dialogs.info(
-                self.win, "Corbeille", "La mise à la Corbeille n'est disponible que sur Mac."
+                self.win,
+                "Corbeille",
+                "La mise à la Corbeille n'est disponible que sur Mac et Windows.",
             )
             return
         if not self.app.dialogs.confirm(
             self,
             "Mettre à la Corbeille",
             f"{len(chosen)} archive(s) choisie(s). Seules celles dont TOUT le contenu existe déjà "
-            "sur le disque partent à la Corbeille du Mac (récupérables) ; les autres restent.",
+            "sur le disque partent à la Corbeille (récupérables) ; les autres restent.",
         ):
             return
         result = self._service().trash_redundant(chosen, self.app.ctx.trash)

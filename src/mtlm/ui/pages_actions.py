@@ -39,7 +39,7 @@ class QuarantinePage(Page):
     key, title, icon = "quarantaine", "Quarantaine", "🛡"
     subtitle = (
         "Mettez de côté les copies en trop par copie vérifiée, puis validez leur mise à la "
-        "Corbeille du Mac."
+        "Corbeille."
     )
 
     def __init__(self, app: UiApp) -> None:
@@ -47,7 +47,7 @@ class QuarantinePage(Page):
         self.banner(
             "La quarantaine est une <b>copie vérifiée</b> des doublons exacts vers un "
             "dossier séparé ; une simulation est obligatoire avant toute copie. Ensuite, "
-            "<b>vous validez</b> la mise à la <b>Corbeille du Mac</b> des originaux en trop : "
+            "<b>vous validez</b> la mise à la <b>Corbeille</b> des originaux en trop : "
             "une copie identique est toujours conservée et vérifiée octet par octet, et un "
             "fichier mis à la Corbeille peut être remis en place.",
             "bannerSafe",
@@ -112,7 +112,7 @@ class QuarantinePage(Page):
         bin_layout = QVBoxLayout(bin_tab)
         bin_layout.setContentsMargins(0, 10, 0, 0)
         hint = QLabel(
-            "Fichiers mis à la Corbeille du Mac, depuis la quarantaine, les doublons ou les "
+            "Fichiers mis à la Corbeille, depuis la quarantaine, les doublons ou les "
             "familles : récupérables tant que la Corbeille n'est pas vidée."
         )
         hint.setObjectName("pageSubtitle")
@@ -807,7 +807,7 @@ Rien n'y sera écrit.</li>
 <ul>
 <li>Vos fichiers d'origine ne sont <b>jamais</b> modifiés ni déplacés par l'analyse.</li>
 <li>Un fichier n'est retiré de vos dossiers que si <b>vous</b> le demandez et le confirmez :
-il part dans la <b>Corbeille du Mac</b> (récupérable), et seulement si une copie identique est
+il part dans la <b>Corbeille</b> (récupérable), et seulement si une copie identique est
 conservée, sauf accord explicite pour un exemplaire unique.</li>
 <li>Aucun robot, indicateur, script ou DLL n'est jamais exécuté.</li>
 <li>Aucune donnée n'est envoyée sur Internet.</li>

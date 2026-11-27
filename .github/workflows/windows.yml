@@ -1,0 +1,127 @@
+# Livraison Windows (1.8.0) : tous les tests sur un vrai Windows, construction de l'application
+# (PyInstaller) et de son installateur (Inno Setup, déjà présent sur les machines GitHub),
+# auto-diagnostic de l'application installée, puis publication avec la version macOS.
+# Minutes économisées : seulement pour « [publier] », « [windows] », une étiquette v* ou à la
+# demande.
+name: Windows (tests + installateur)
+
+on:
+  push:
+    branches: ["claude/**", "main"]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Tests et installateur Windows
+    if: github.event_name != 'push' || startsWith(github.ref, 'refs/tags/v') || contains(github.event.head_commit.message, '[publier]') || contains(github.event.head_commit.message, '[windows]')
+    runs-on: windows-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+      PYTHONUTF8: "1"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+      - name: Environnement
+        run: |
+          cmd //c ver
+          uv python install 3.12
+          echo "UV_PYTHON=3.12" >> "$GITHUB_ENV"
+      - name: Dépendances (verrou uv.lock)
+        run: uv sync --frozen --group build
+      - name: Bibliothèque d'archives de Windows (archiveint.dll)
+        run: uv run python -c "from mtlm.formats import libarchive as l; print('libarchive :', l.available())"
+      - name: Tests
+        run: uv run pytest -q -W error::ResourceWarning -p no:cacheprovider
+      - name: Icône (.ico)
+        run: uv run python tools/icone.py packaging/windows/AppIcon.ico
+      - name: Construire l'application
+        run: uv run --group build pyinstaller --noconfirm packaging/windows/mtlm.spec
+      - name: Auto-diagnostic (application construite)
+        run: |
+          APP="dist/MT4-MT5-Library-Manager-PRO"
+          find "$APP" -type f -exec sha256sum {} + | sort > avant.txt
+          "$APP/MT4-MT5-Library-Manager-PRO.exe" --autotest "$APP" --rapport autotest.log || true
+          cat autotest.log
+          grep -q "RÉUSSI" autotest.log
+          find "$APP" -type f -exec sha256sum {} + | sort > apres.txt
+          diff avant.txt apres.txt && echo "Contenu de l'application inchangé après analyse."
+      - name: Installateur (Inno Setup)
+        shell: pwsh
+        run: |
+          $version = (uv run python -c "import mtlm; print(mtlm.__version__)").Trim()
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DVersion=$version" packaging\windows\installateur.iss
+          Get-ChildItem dist\*.exe
+      - name: Installation silencieuse puis auto-diagnostic de l'application installée
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem dist\*-Windows-Setup.exe | Select-Object -First 1
+          Start-Process $setup.FullName -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/CURRENTUSER" -Wait
+          $exe = Get-ChildItem "$env:LOCALAPPDATA\Programs" -Recurse -Filter "MT4-MT5-Library-Manager-PRO.exe" | Select-Object -First 1
+          if (-not $exe) { throw "application installée introuvable" }
+          Start-Process $exe.FullName -ArgumentList "--autotest",$exe.DirectoryName,"--rapport","installe.log" -Wait
+          Get-Content installe.log
+          if (-not (Select-String -Path installe.log -Pattern "RÉUSSI")) { throw "auto-diagnostic en échec" }
+      - name: Dossier d'installation (installateur + guide)
+        run: |
+          VERSION=$(uv run python -c "import mtlm; print(mtlm.__version__)")
+          NAME="MT4 MT5 Library Manager PRO - Installation Windows"
+          mkdir -p "kit/$NAME"
+          cp dist/*-Windows-Setup.exe "kit/$NAME/"
+          cp "packaging/windows/Guide d'installation Windows.pdf" "kit/$NAME/"
+          ZIP="MT4-MT5-Library-Manager-PRO-${VERSION}-Installation-Windows.zip"
+          (cd kit && 7z a -tzip "../dist/$ZIP" "$NAME" > /dev/null)
+          (cd dist && sha256sum "$ZIP" > "$ZIP.sha256" && sha256sum *-Windows-Setup.exe > setup.sha256)
+          ls -l dist
+      - uses: actions/upload-artifact@v5
+        with:
+          name: windows
+          path: |
+            dist/*-Installation-Windows.zip
+            dist/*-Installation-Windows.zip.sha256
+            dist/*-Windows-Setup.exe
+          retention-days: 90
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: rapports-windows
+          path: |
+            autotest.log
+            installe.log
+
+  release:
+    name: Publication (avec la version macOS)
+    needs: build
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || contains(github.event.head_commit.message, '[publier]')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: windows
+          path: windows
+      - name: Ajouter à la pré-version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(grep -m1 '__version__' src/mtlm/__init__.py | cut -d'"' -f2)
+          TAG="v${VERSION}"
+          NOTES="Versions macOS (universelle, macOS 12+) et Windows (10 et 11, 64 bits). Voir le guide d'installation inclus dans chaque dossier. Applications non signées."
+          for attempt in 1 2 3 4 5 6; do
+            if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber windows/* && break
+            elif gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+                --prerelease --title "MT4 MT5 Library Manager PRO $TAG" --notes "$NOTES" windows/*; then
+              break
+            fi
+            sleep 30
+          done
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY"

@@ -69,16 +69,16 @@ ACTION_TIPS: dict[str, str] = {
     "images…) dans un nouveau dossier au nom du robot. Vous voyez la proposition avant de "
     "valider ; la copie est vérifiée et vos originaux ne bougent pas.",
     "familles.corbeille": "Met le fichier choisi dans « Fichiers de la famille » à la "
-    "Corbeille du Mac, après confirmation. Si c'est le seul exemplaire, vous êtes prévenu.",
+    "Corbeille, après confirmation. Si c'est le seul exemplaire, vous êtes prévenu.",
     # Doublons
     "doublons.reference": "Garde le fichier choisi comme exemplaire de référence du groupe : "
     "c'est lui qui reste en place.",
     "doublons.octets": "Compare octet par octet tous les fichiers du groupe pour être "
     "absolument sûr qu'ils sont identiques.",
     "doublons.actualiser": "Recharge la liste des doublons.",
-    "doublons.corbeille_groupe": "Met à la Corbeille du Mac toutes les copies en trop du "
+    "doublons.corbeille_groupe": "Met à la Corbeille toutes les copies en trop du "
     "groupe choisi ; la référence reste. Chaque copie est revérifiée avant.",
-    "doublons.corbeille_fichier": "Met à la Corbeille du Mac le fichier choisi du groupe, "
+    "doublons.corbeille_fichier": "Met à la Corbeille le fichier choisi du groupe, "
     "après confirmation. La référence est protégée.",
     # Quarantaine
     "quarantaine.destination": "Étape 1 : choisissez un dossier de quarantaine, de préférence "
@@ -92,7 +92,7 @@ ACTION_TIPS: dict[str, str] = {
     "originaux disparus entre-temps, sans rien écraser.",
     "quarantaine.annuler": "Annule un lot simulé ou interrompu.",
     "quarantaine.corbeille": "Étape 4 : vous validez la suppression des originaux en trop "
-    "du lot choisi. Ils vont dans la Corbeille du Mac ; une copie identique est conservée.",
+    "du lot choisi. Ils vont dans la Corbeille ; une copie identique est conservée.",
     "quarantaine.remettre": "Remet le fichier choisi à son emplacement d'origine (s'il est "
     "encore dans la Corbeille), sans rien écraser.",
     "quarantaine.actualiser": "Recharge les lots et la liste de la Corbeille.",
@@ -153,8 +153,11 @@ WIDGET_TIPS: dict[tuple[str, str], str] = {
     ("organisation", "items"): "Fichiers du plan choisi et leur emplacement dans la copie rangée.",
 }
 
-_TOUT = "Sélectionne toutes les lignes de la liste (raccourci : Cmd+A dans la liste). Pour en "
-_TOUT += "choisir plusieurs : Cmd+clic ajoute une ligne, Maj+clic sélectionne une plage."
+_TOUT = (
+    "Sélectionne toutes les lignes de la liste (raccourci : Cmd+A ou Ctrl+A dans la liste). "
+    "Pour en choisir plusieurs : Cmd+clic (Ctrl+clic sous Windows) ajoute une ligne, Maj+clic "
+    "sélectionne une plage."
+)
 _AUCUN = "Désélectionne toutes les lignes de la liste."
 for _name in (
     "familles.tout_familles",
@@ -179,11 +182,11 @@ ACTION_TIPS.update(
         "DLL, images…) dans un nouveau dossier au nom du robot. Vous voyez la proposition "
         "avant de valider ; la copie est vérifiée et vos originaux ne bougent pas.",
         "familles.corbeille": "Met les fichiers choisis (onglet « Fichiers de la famille » ou "
-        "« Fichiers liés ») à la Corbeille du Mac, après une seule confirmation. Les "
+        "« Fichiers liés ») à la Corbeille, après une seule confirmation. Les "
         "exemplaires uniques et les fichiers utilisés par un autre outil sont signalés.",
-        "doublons.corbeille_groupe": "Met à la Corbeille du Mac les copies en trop de tous les "
+        "doublons.corbeille_groupe": "Met à la Corbeille les copies en trop de tous les "
         "groupes choisis ; la référence de chaque groupe reste. Chaque copie est revérifiée.",
-        "doublons.corbeille_fichier": "Met à la Corbeille du Mac les fichiers choisis dans la "
+        "doublons.corbeille_fichier": "Met à la Corbeille les fichiers choisis dans la "
         "liste du bas, après une seule confirmation. Les références sont protégées.",
         "doublons.octets": "Compare octet par octet tous les fichiers des groupes choisis.",
         "doublons.reference": "Garde le fichier choisi comme exemplaire de référence de son "
@@ -193,7 +196,7 @@ ACTION_TIPS.update(
         "sets.rejeter": "Indique que les associations choisies sont fausses.",
         "sets.annuler": "Efface votre décision sur les associations choisies.",
         "quarantaine.corbeille": "Étape 4 : vous validez la suppression des originaux en trop "
-        "des lots choisis. Ils vont dans la Corbeille du Mac ; une copie identique est "
+        "des lots choisis. Ils vont dans la Corbeille ; une copie identique est "
         "conservée.",
         "quarantaine.remettre": "Remet les fichiers choisis à leur emplacement d'origine "
         "(s'ils sont encore dans la Corbeille), sans rien écraser.",
@@ -262,9 +265,9 @@ ACTION_TIPS.update(
     {
         "archives.decompresser": "Décompresse les archives cliquées dans la liste, chacune dans "
         "un nouveau dossier à son nom, à côté d'elle. Chaque fichier extrait est vérifié par "
-        "son empreinte ; l'archive part ensuite à la Corbeille du Mac, seulement si tout est "
+        "son empreinte ; l'archive part ensuite à la Corbeille, seulement si tout est "
         "vérifié. Une archive protégée, abîmée ou piégée n'est jamais touchée.",
-        "archives.corbeille": "Met à la Corbeille du Mac les archives cliquées dont TOUT le "
+        "archives.corbeille": "Met à la Corbeille les archives cliquées dont TOUT le "
         "contenu existe déjà sur le disque (« Déjà décompressée ») : rien n'est perdu. Les "
         "autres restent en place.",
         "archives.actualiser": "Recharge la liste des archives.",
@@ -278,7 +281,7 @@ WIDGET_TIPS.update(
         "et s'ils existent déjà sur le disque (et où).",
         ("analyse", "decompress"): "Cochée : à chaque analyse, les archives lues sans problème "
         "sont décompressées dans un dossier à leur nom (fichiers vérifiés), puis mises à la "
-        "Corbeille du Mac. Décochée : les archives sont seulement lues, sans rien extraire.",
+        "Corbeille. Décochée : les archives sont seulement lues, sans rien extraire.",
     }
 )
 
@@ -289,7 +292,7 @@ ACTION_TIPS.update(
         "risques.rechercher": "Lit vos fichiers sur ce Mac pour repérer des signes de risque "
         "(DLL, téléchargement, lancement de programme, programmes cachés…). Analyse locale : "
         "rien n'est exécuté ni envoyé sur Internet. Ce n'est pas un antivirus.",
-        "risques.corbeille": "Met les fichiers cliqués à la Corbeille du Mac (récupérables), "
+        "risques.corbeille": "Met les fichiers cliqués à la Corbeille (récupérables), "
         "après confirmation.",
     }
 )
@@ -338,7 +341,7 @@ for _page, _one, _many in (
 
 # ---- 1.6.0 : supprimer où je veux ------------------------------------------------------------
 _CORBEILLE = (
-    "Met les {what} cliqués à la Corbeille du Mac, après confirmation (récupérables avec "
+    "Met les {what} cliqués à la Corbeille, après confirmation (récupérables avec "
     "« Remettre en place » dans l'écran Quarantaine). Chaque fichier est revérifié avant. Si "
     "un fichier est le SEUL exemplaire de son contenu, c'est signalé et vous décidez."
 )
@@ -371,4 +374,9 @@ WIDGET_TIPS[("archives", "archive_filter")] = (
     "Filtrer : toutes les archives, seulement celles protégées par mot de passe (en entier ou "
     "en partie : leur contenu ne peut pas être lu), ou celles qui ont un problème. Une "
     "archive protégée n'est jamais décompressée ni mise à la Corbeille automatiquement."
+)
+ACTION_TIPS["sources.metatrader"] = (
+    "Cherche les dossiers MQL4 et MQL5 de MetaTrader aux emplacements habituels de cet "
+    "ordinateur (Windows : AppData\\Roaming\\MetaQuotes\\Terminal et Program Files ; Mac : "
+    "MetaTrader pour Mac) et vous laisse cocher ceux à ajouter. Rien n'est modifié."
 )

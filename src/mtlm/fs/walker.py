@@ -14,6 +14,7 @@ from __future__ import annotations
 import errno as errno_module
 import os
 import stat
+import sys
 import unicodedata
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
@@ -21,6 +22,16 @@ from pathlib import Path
 
 # Drapeau macOS des fichiers iCloud non téléchargés (sys/stat.h : SF_DATALESS).
 SF_DATALESS = 0x40000000
+# Windows : fichiers OneDrive (ou autres nuages) non téléchargés — les lire les téléchargerait.
+FILE_ATTRIBUTE_OFFLINE = 0x1000
+FILE_ATTRIBUTE_RECALL_ON_OPEN = 0x40000
+FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS = 0x400000
+_WINDOWS_CLOUD = (
+    FILE_ATTRIBUTE_OFFLINE | FILE_ATTRIBUTE_RECALL_ON_OPEN | FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS
+)
+# Windows : point d'analyse (lien symbolique, jonction) — jamais suivi.
+FILE_ATTRIBUTE_REPARSE_POINT = 0x400
+IS_WINDOWS = sys.platform == "win32"
 
 
 @dataclass(frozen=True)
@@ -70,7 +81,8 @@ def extension_of(name: str) -> str:
 
 
 def _entry_from_stat(rel: bytes, st: os.stat_result) -> WalkEntry:
-    if stat.S_ISLNK(st.st_mode):
+    attributes = getattr(st, "st_file_attributes", 0) or 0
+    if stat.S_ISLNK(st.st_mode) or attributes & FILE_ATTRIBUTE_REPARSE_POINT:
         file_type = "symlink"
     elif stat.S_ISREG(st.st_mode):
         file_type = "file"
@@ -93,7 +105,7 @@ def _entry_from_stat(rel: bytes, st: os.stat_result) -> WalkEntry:
         inode=st.st_ino,
         device=st.st_dev,
         mode=st.st_mode,
-        is_dataless=bool(flags & SF_DATALESS),
+        is_dataless=bool(flags & SF_DATALESS) or bool(attributes & _WINDOWS_CLOUD),
     )
 
 
@@ -134,14 +146,23 @@ def walk(
         subdirs: list[bytes] = []
         for child in children:
             name = child.name if isinstance(child.name, bytes) else os.fsencode(child.name)
-            rel = os.path.join(rel_dir, name) if rel_dir else name
+            # Toujours « / » entre les dossiers (aussi sous Windows) : les chemins enregistrés
+            # sont identiques sur tous les systèmes.
+            rel = rel_dir + b"/" + name if rel_dir else name
             try:
-                st = child.stat(follow_symlinks=False)
+                # Sous Windows, l'entrée d'un dossier n'a pas de numéro de fichier (st_ino = 0) :
+                # on relit l'état complet, sinon chaque fichier paraîtrait « modifié ».
+                st = (
+                    os.lstat(os.path.join(absolute_dir, name))
+                    if IS_WINDOWS
+                    else child.stat(follow_symlinks=False)
+                )
             except OSError as exc:
                 counters.errors += 1
                 yield _error(rel, exc)
                 continue
-            if stat.S_ISDIR(st.st_mode):
+            reparse = (getattr(st, "st_file_attributes", 0) or 0) & FILE_ATTRIBUTE_REPARSE_POINT
+            if stat.S_ISDIR(st.st_mode) and not reparse:
                 key = (st.st_dev, st.st_ino)
                 if key in visited:
                     counters.cycles_skipped += 1

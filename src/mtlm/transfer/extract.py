@@ -20,6 +20,7 @@ from collections.abc import Iterator
 from typing import IO
 
 from mtlm.core.errors import MtlmError
+from mtlm.core.filenames import portable_name
 from mtlm.formats import libarchive
 from mtlm.formats.archives import open_readonly_stream, unsafe_name_reason
 
@@ -29,6 +30,8 @@ _WRITE = (
     | os.O_EXCL
     | getattr(os, "O_CLOEXEC", 0)
     | getattr(os, "O_NOFOLLOW", 0)
+    | getattr(os, "O_BINARY", 0)  # Windows : jamais de conversion des fins de ligne
+    | getattr(os, "O_NOINHERIT", 0)
 )
 
 
@@ -77,7 +80,8 @@ def extract_verified(
         for name, chunks in _entries(archive_path, kind):
             if name not in expected or name in written or unsafe_name_reason(name):
                 continue
-            clean = name.replace("\\", "/")
+            # Chaque partie du chemin rendue valable sous Windows (« : », « ? »… → « _ »).
+            clean = "/".join(portable_name(p) for p in name.replace("\\", "/").split("/") if p)
             key = clean.casefold()
             if key in placed:
                 if placed[key] == expected[name]:

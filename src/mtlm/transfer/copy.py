@@ -34,6 +34,8 @@ _WRITE_FLAGS = (
     | os.O_EXCL
     | getattr(os, "O_CLOEXEC", 0)
     | getattr(os, "O_NOFOLLOW", 0)
+    | getattr(os, "O_BINARY", 0)  # Windows : jamais de conversion des fins de ligne
+    | getattr(os, "O_NOINHERIT", 0)
 )
 
 

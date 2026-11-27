@@ -29,7 +29,13 @@ from typing import BinaryIO
 from mtlm.fs.reader import NotRegularFileError
 
 READ_CHUNK = 256 * 1024
-_FLAGS = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+_FLAGS = (
+    os.O_RDONLY
+    | getattr(os, "O_NOFOLLOW", 0)
+    | getattr(os, "O_CLOEXEC", 0)
+    | getattr(os, "O_BINARY", 0)  # Windows : jamais de conversion des fins de ligne
+    | getattr(os, "O_NOINHERIT", 0)
+)
 
 
 @dataclass(frozen=True)

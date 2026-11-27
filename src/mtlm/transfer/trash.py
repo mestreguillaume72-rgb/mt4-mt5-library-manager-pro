@@ -1,4 +1,5 @@
-"""Mise à la **Corbeille du Mac** et remise en place (décision du propriétaire, 1.3.0).
+"""Mise à la **Corbeille** (Mac ou Windows) et remise en place (décision du propriétaire,
+1.3.0 ; Windows depuis 1.8.0).
 
 Seul endroit de l'application qui retire un fichier d'une bibliothèque. Il ne décide de rien :
 les vérifications (copie identique conservée, fichier inchangé depuis l'analyse, confirmation
@@ -11,6 +12,11 @@ Pour l'appeler sans dépendance supplémentaire, ``ctypes`` charge **uniquement*
 bibliothèques système d'Apple (``libobjc`` et ``Foundation``) : exception unique et
 documentée à la règle « aucun chargement de bibliothèque » (DECISIONS D-016, test statique).
 Aucun fichier de l'utilisateur (DLL, EX4…) n'est jamais chargé ni exécuté.
+
+Sur Windows, ``SHFileOperationW`` (``shell32.dll``, avec annulation possible) envoie le
+fichier dans la Corbeille de Windows ; ``kernel32.dll`` sert seulement à refuser les disques
+réseau, qui n'ont pas de Corbeille (le fichier serait effacé pour de bon). Le fichier mis à
+la Corbeille est retrouvé dans ``$Recycle.Bin`` pour permettre « Remettre en place ».
 """
 
 from __future__ import annotations
@@ -27,6 +33,12 @@ from mtlm.core.errors import MtlmError
 #: Les deux seules bibliothèques chargées (système Apple, chemins absolus fixes).
 LIBOBJC = "/usr/lib/libobjc.A.dylib"
 FOUNDATION = "/System/Library/Frameworks/Foundation.framework/Foundation"
+
+#: Bibliothèques système de Windows (jamais un fichier de l'utilisateur).
+SHELL32 = "shell32.dll"
+KERNEL32 = "kernel32.dll"
+#: Emplacement inconnu dans la Corbeille de Windows : remise en place par l'Explorateur.
+WINDOWS_UNKNOWN = b"?corbeille-windows"
 
 #: Fonction de mise à la Corbeille : chemin d'origine → chemin dans la Corbeille.
 TrashBackend = Callable[[bytes], bytes]
@@ -118,14 +130,104 @@ def macos_trash(path: bytes) -> bytes:
         rt.lib.objc_autoreleasePoolPop(pool)
 
 
+def _recycled_location(original: str, drive: str) -> bytes:
+    """Fichier ``$R…`` de la Corbeille de Windows qui correspond à ``original`` (le plus
+    récent), d'après son fichier d'information ``$I…`` ; sinon :data:`WINDOWS_UNKNOWN`."""
+    base = os.path.join(drive + "\\", "$Recycle.Bin")
+    best: tuple[float, str] | None = None
+    try:
+        owners = [os.path.join(base, d) for d in os.listdir(base)]
+    except OSError:
+        return WINDOWS_UNKNOWN
+    wanted = os.path.normcase(os.path.normpath(original))
+    for owner in owners:
+        try:
+            names = [n for n in os.listdir(owner) if n.startswith("$I")]
+        except OSError:
+            continue
+        for name in names:
+            info = os.path.join(owner, name)
+            try:
+                with open(info, "rb") as handle:
+                    data = handle.read(65536)
+                mtime = os.stat(info).st_mtime
+            except OSError:
+                continue
+            version = int.from_bytes(data[:8], "little")
+            if version == 2:
+                length = int.from_bytes(data[24:28], "little")
+                path = data[28 : 28 + 2 * length].decode("utf-16-le", "replace")
+            else:
+                path = data[24 : 24 + 520].decode("utf-16-le", "replace")
+            path = path.split("\x00", 1)[0]
+            if os.path.normcase(os.path.normpath(path)) != wanted:
+                continue
+            recycled = os.path.join(owner, "$R" + name[2:])
+            if os.path.lexists(recycled) and (best is None or mtime > best[0]):
+                best = (mtime, recycled)
+    return os.fsencode(best[1]) if best else WINDOWS_UNKNOWN
+
+
+class _SHFILEOPSTRUCTW(ctypes.Structure):
+    _fields_ = [
+        ("hwnd", ctypes.c_void_p),
+        ("wFunc", ctypes.c_uint),
+        ("pFrom", ctypes.c_wchar_p),
+        ("pTo", ctypes.c_wchar_p),
+        ("fFlags", ctypes.c_ushort),
+        ("fAnyOperationsAborted", ctypes.c_int),
+        ("hNameMappings", ctypes.c_void_p),
+        ("lpszProgressTitle", ctypes.c_wchar_p),
+    ]
+
+
+_FO_DELETE = 3
+_FOF_SILENT, _FOF_NOCONFIRMATION, _FOF_ALLOWUNDO, _FOF_NOERRORUI = 0x4, 0x10, 0x40, 0x400
+_FOF_WANTNUKEWARNING = 0x4000
+_DRIVE_REMOTE = 4
+
+
+def windows_trash(path: bytes) -> bytes:
+    """Met ``path`` dans la Corbeille de Windows ; retourne son chemin dans la Corbeille (ou
+    :data:`WINDOWS_UNKNOWN` s'il n'a pas pu être retrouvé)."""
+    text = os.path.abspath(os.fsdecode(path))
+    if not os.path.isabs(os.fsdecode(path)):
+        raise TrashError("chemin relatif refusé")
+    if not os.path.lexists(text):
+        raise TrashError("fichier absent")
+    drive = os.path.splitdrive(text)[0]
+    kernel = ctypes.WinDLL(KERNEL32)  # type: ignore[attr-defined]
+    if not drive or drive.startswith("\\\\") or kernel.GetDriveTypeW(drive + "\\") == _DRIVE_REMOTE:
+        raise TrashError("disque réseau : Windows n'a pas de Corbeille pour ce disque")
+    shell = ctypes.WinDLL(SHELL32)  # type: ignore[attr-defined]
+    operation = _SHFILEOPSTRUCTW()
+    operation.wFunc = _FO_DELETE
+    operation.pFrom = text + "\x00"  # liste terminée par un double zéro
+    operation.fFlags = (
+        _FOF_ALLOWUNDO | _FOF_NOCONFIRMATION | _FOF_SILENT | _FOF_NOERRORUI | _FOF_WANTNUKEWARNING
+    )
+    code = shell.SHFileOperationW(ctypes.byref(operation))
+    if code != 0 or operation.fAnyOperationsAborted or os.path.lexists(text):
+        raise TrashError(f"la Corbeille de Windows a refusé ce fichier (code {code})")
+    return _recycled_location(text, drive)
+
+
 def default_backend() -> TrashBackend | None:
-    """La Corbeille du Mac ; ``None`` ailleurs (fonction indisponible, jamais simulée)."""
-    return macos_trash if sys.platform == "darwin" else None
+    """La Corbeille du Mac ou de Windows ; ``None`` ailleurs (jamais simulée)."""
+    if sys.platform == "darwin":
+        return macos_trash
+    if sys.platform == "win32":
+        return windows_trash
+    return None
 
 
 def put_back(trashed: bytes, original: bytes) -> None:
     """Remet un fichier de la Corbeille à son emplacement d'origine, **sans écraser** : refus
     si l'emplacement d'origine est occupé ou si le fichier n'est plus dans la Corbeille."""
+    if trashed == WINDOWS_UNKNOWN:
+        raise TrashError(
+            "ouvrez la Corbeille de Windows, clic droit sur le fichier → « Restaurer »"
+        )
     if not os.path.lexists(trashed):
         raise TrashError("le fichier n'est plus dans la Corbeille (Corbeille vidée ?)")
     if os.path.lexists(original):
@@ -140,3 +242,8 @@ def put_back(trashed: bytes, original: bytes) -> None:
     # Le fichier est en place ; s'il restait aussi dans la Corbeille, ce serait sans effet.
     with contextlib.suppress(OSError):
         os.unlink(trashed)
+    # Windows : la fiche « $I… » qui accompagne « $R… » dans la Corbeille est retirée aussi.
+    folder, name = os.path.split(trashed)
+    if name.startswith(b"$R"):
+        with contextlib.suppress(OSError):
+            os.unlink(os.path.join(folder, b"$I" + name[2:]))

@@ -83,7 +83,7 @@ def test_corbeille_indisponible_hors_mac(
     page.refresh()
     page.groups.selectRow(0)
     click(window, qtbot, "doublons.corbeille_groupe")
-    assert "que sur Mac" in dialogs.infos[-1][1]
+    assert "que sur Mac et Windows" in dialogs.infos[-1][1]
     assert (lib / "Copies" / "Scalper.mq4").exists()
 
 

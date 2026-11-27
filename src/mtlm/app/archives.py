@@ -6,7 +6,7 @@
   supprimer sans rien perdre) ou contient des fichiers **absents du disque**.
 * **Avec décompression** (choix de l'utilisateur : case « Décompresser les archives… » ou
   bouton sur l'écran Archives) : extraction vérifiée dans un nouveau dossier au nom de
-  l'archive, à côté d'elle ; puis l'archive va à la Corbeille du Mac **seulement si tous les
+  l'archive, à côté d'elle ; puis l'archive va à la Corbeille **seulement si tous les
   fichiers ont été extraits et vérifiés**. Une archive protégée, abîmée, piégée ou incomplète
   n'est jamais touchée.
 """

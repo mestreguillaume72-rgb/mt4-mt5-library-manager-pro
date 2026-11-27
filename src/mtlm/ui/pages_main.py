@@ -135,7 +135,7 @@ class Page(QWidget):
         *,
         allow_unique: bool | None = None,
     ) -> None:
-        """Corbeille du Mac après confirmation ; chaque fichier est revérifié avant.
+        """Corbeille après confirmation ; chaque fichier est revérifié avant.
 
         ``allow_unique`` : ``None`` (par défaut) = les fichiers qui seraient le **seul
         exemplaire** de leur contenu sont signalés et l'utilisateur décide (deuxième
@@ -143,7 +143,9 @@ class Page(QWidget):
         backend = self.app.ctx.trash
         if backend is None:
             self.app.dialogs.info(
-                self.win, "Corbeille", "La mise à la Corbeille n'est disponible que sur Mac."
+                self.win,
+                "Corbeille",
+                "La mise à la Corbeille n'est disponible que sur Mac et Windows.",
             )
             return
         if not file_ids:
@@ -193,7 +195,7 @@ class Page(QWidget):
         if not self.app.dialogs.confirm(
             self,
             "Mettre à la Corbeille",
-            f"{intro}\n\n{len(file_ids)} fichier(s) iront dans la Corbeille du Mac : "
+            f"{intro}\n\n{len(file_ids)} fichier(s) iront dans la Corbeille : "
             "récupérables tant qu'elle n'est pas vidée (bouton « Remettre en place » dans "
             f"l'écran Quarantaine).\n\n{safety}\n\nContinuer ?",
         ):
@@ -206,7 +208,7 @@ class Page(QWidget):
                 self,
                 "Exemplaires uniques",
                 f"Supprimer AUSSI les {len(unique)} exemplaire(s) unique(s) ? Ils iront dans la "
-                "Corbeille du Mac (récupérables tant qu'elle n'est pas vidée), mais aucune autre "
+                "Corbeille (récupérables tant qu'elle n'est pas vidée), mais aucune autre "
                 "copie n'existe.\n\nOui : tout ce que vous avez choisi part à la Corbeille.\n"
                 "Non : seuls les fichiers qui ont une copie identique ailleurs partent.",
             )
@@ -737,7 +739,7 @@ class SourcesPage(Page):
             "Les dossiers sources sont lus en <b>lecture seule</b> : l'application n'y "
             "écrit, ne renomme et ne déplace rien. Seule exception, à votre demande et après "
             "confirmation : les fichiers que <b>vous</b> choisissez de mettre à la "
-            "<b>Corbeille du Mac</b> (récupérables).",
+            "<b>Corbeille</b> (récupérables).",
             "bannerSafe",
         )
         self.table = make_table(
@@ -748,6 +750,7 @@ class SourcesPage(Page):
         self.layout_.addWidget(self.table, 1)
         self.button_row(
             self.btn("ajouter", "Ajouter un dossier…", self.add),
+            self.btn("metatrader", "Ajouter les dossiers MetaTrader trouvés…", self.add_found),
             self.btn("inventorier", "Inventorier la source choisie", self.scan_selected),
             self.btn(
                 "retirer",
@@ -783,6 +786,41 @@ class SourcesPage(Page):
             return
         source = self._service().add(folder)
         self.app.status(f"Source n° {source.id} ajoutée : {source.path}")
+        self.refresh()
+
+    def add_found(self) -> None:
+        """Dossiers MQL4/MQL5 de MetaTrader trouvés sur l'ordinateur : l'utilisateur coche ceux
+        à ajouter."""
+        from mtlm.app.mtfolders import metatrader_folders
+        from mtlm.core.errors import MtlmError
+
+        known = {str(r.path) for r in self._service().list()}
+        found = [p for p in metatrader_folders() if str(p) not in known]
+        if not found:
+            self.app.dialogs.info(
+                self.win,
+                "Dossiers MetaTrader",
+                "Aucun nouveau dossier MetaTrader (MQL4 ou MQL5) trouvé à l'emplacement habituel "
+                "sur cet ordinateur. Utilisez « Ajouter un dossier… ».",
+            )
+            return
+        picked = self.app.dialogs.choose_items(
+            self,
+            "Dossiers MetaTrader trouvés",
+            "Ces dossiers de MetaTrader ont été trouvés sur cet ordinateur. Cochez ceux à "
+            "ajouter (rien n'y sera modifié).",
+            [(str(p), str(p)) for p in found],
+        )
+        added, refused = 0, []
+        for folder in picked or []:
+            try:
+                self._service().add(Path(folder))
+                added += 1
+            except MtlmError as exc:
+                refused.append(str(exc))
+        if refused:
+            self.app.dialogs.info(self.win, "Dossiers MetaTrader", "\n".join(refused[:5]))
+        self.app.status(f"{added} dossier(s) MetaTrader ajouté(s).")
         self.refresh()
 
     def _selected(self) -> int | None:

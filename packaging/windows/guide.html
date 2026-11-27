@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Guide d'installation Windows</title>
+<style>
+  @page { size: A4; margin: 16mm 16mm 14mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Inter", "Helvetica Neue", Arial, sans-serif; color: #0f172a; margin: 0;
+         font-size: 12.5pt; line-height: 1.45; }
+  header { background: #0b0f19; color: #f8fafc; border-radius: 14px; padding: 18px 22px;
+           margin-bottom: 16px; }
+  header h1 { margin: 0 0 4px; font-size: 21pt; }
+  header p { margin: 0; color: #a5b4cf; font-size: 11.5pt; }
+  h2 { font-size: 15pt; margin: 18px 0 8px; color: #1e3a8a; }
+  .step { display: flex; gap: 14px; align-items: flex-start; margin: 10px 0; padding: 12px 14px;
+          border: 1px solid #dbe3f0; border-radius: 12px; background: #f8fafc;
+          break-inside: avoid; }
+  .num { flex: none; width: 34px; height: 34px; border-radius: 50%; color: #fff; font-weight: 700;
+         display: flex; align-items: center; justify-content: center; font-size: 14pt;
+         background: linear-gradient(135deg, #3b82f6, #6366f1); }
+  .step p { margin: 3px 0; }
+  .file { font-family: "SF Mono", Menlo, Consolas, monospace; background: #e0e7ff; color: #1e1b4b;
+          padding: 1px 6px; border-radius: 5px; font-size: 11pt; }
+  .note { border-left: 4px solid #f59e0b; background: #fffbeb; padding: 10px 14px;
+          border-radius: 8px; margin: 10px 0; break-inside: avoid; }
+  .ok { border-left: 4px solid #22c55e; background: #f0fdf4; padding: 10px 14px;
+        border-radius: 8px; margin: 10px 0; break-inside: avoid; }
+  ul { margin: 4px 0 4px 20px; padding: 0; }
+  img { width: 88%; display: block; margin-left: auto; margin-right: auto; border-radius: 10px; border: 1px solid #dbe3f0; margin-top: 6px; }
+  .page-break { break-before: page; }
+  footer { color: #64748b; font-size: 9.5pt; margin-top: 14px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>MT4 MT5 Library Manager PRO</h1>
+  <p>Guide d'installation sur Windows 10 et 11 (64 bits) — environ 2 minutes</p>
+</header>
+
+<h2>Installation</h2>
+
+<div class="step"><div class="num">1</div><div>
+  <p><b>Ouvrez ce dossier</b> d'installation (clic droit sur le fichier .zip → « Extraire
+  tout… »). Il contient :</p>
+  <ul>
+    <li><span class="file">MT4-MT5-Library-Manager-PRO-…-Windows-Setup.exe</span> — l'installateur ;</li>
+    <li><span class="file">Guide d'installation Windows.pdf</span> — ce guide.</li>
+  </ul>
+</div></div>
+
+<div class="step"><div class="num">2</div><div>
+  <p><b>Double-cliquez sur l'installateur</b> (<span class="file">…-Windows-Setup.exe</span>).</p>
+  <p>Windows affiche peut-être <b>« Windows a protégé votre ordinateur »</b> : l'application
+  n'est pas signée (la signature est payante). Cliquez sur <b>« Informations
+  complémentaires »</b>, puis sur <b>« Exécuter quand même »</b>.</p>
+</div></div>
+
+<div class="step"><div class="num">3</div><div>
+  <p><b>Suivez l'assistant</b> : « Suivant », cochez si vous voulez une icône sur le Bureau, puis
+  « Installer ». Aucun mot de passe administrateur n'est demandé : l'application s'installe
+  pour votre compte seulement.</p>
+</div></div>
+
+<div class="step"><div class="num">4</div><div>
+  <p><b>Lancez l'application</b> depuis la dernière page de l'assistant, le menu Démarrer ou
+  l'icône du Bureau.</p>
+</div></div>
+
+<div class="ok"><b>Premier pas :</b> écran « Mes dossiers » → <b>« Ajouter les dossiers
+MetaTrader trouvés… »</b> : l'application propose les dossiers MQL4 et MQL5 de vos MetaTrader
+(AppData\Roaming\MetaQuotes\Terminal…). Cochez ceux à analyser, puis « Tout analyser ».</div>
+
+<h2>Bon à savoir</h2>
+<ul>
+  <li><b>Vos fichiers ne sont jamais modifiés</b> par l'analyse : tout est lu, rien n'est écrit
+  dans vos dossiers. Rien n'est envoyé sur Internet.</li>
+  <li>Ce que vous supprimez va dans la <b>Corbeille de Windows</b> : récupérable avec
+  « Remettre en place » (écran Quarantaine, onglet Corbeille) ou depuis la Corbeille (clic droit
+  → Restaurer). Les disques réseau n'ont pas de Corbeille : rien n'y est supprimé.</li>
+  <li>Les fichiers <b>OneDrive non téléchargés</b> ne sont pas lus (sinon Windows les
+  téléchargerait).</li>
+  <li>Vos données (base, sauvegardes) : <span class="file">%APPDATA%\MT4MT5LibraryManagerPro</span>.</li>
+</ul>
+
+<h2>Mise à jour et désinstallation</h2>
+<ul>
+  <li><b>Mettre à jour</b> : lancez l'installateur de la nouvelle version ; vos données sont
+  gardées.</li>
+  <li><b>Désinstaller</b> : Paramètres → Applications → « MT4 MT5 Library Manager PRO » →
+  Désinstaller (vos données restent dans %APPDATA%, supprimez ce dossier si vous le
+  souhaitez).</li>
+</ul>
+
+<footer>Application non signée. Testée automatiquement sur Windows (GitHub) à chaque version.</footer>
+</body>
+</html>

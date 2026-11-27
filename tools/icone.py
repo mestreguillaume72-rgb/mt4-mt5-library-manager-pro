@@ -2,6 +2,7 @@
 
 Utilisation : QT_QPA_PLATFORM=offscreen python tools/icone.py packaging/macos/AppIcon.iconset
 puis (sur macOS) : iconutil -c icns packaging/macos/AppIcon.iconset -o packaging/macos/AppIcon.icns
+Windows : python tools/icone.py packaging/windows/AppIcon.ico (une icône .ico 256 px).
 """
 
 from __future__ import annotations
@@ -18,6 +19,13 @@ SIZES = [16, 32, 128, 256, 512]
 
 def main(out: Path) -> int:
     _app = QGuiApplication.instance() or QGuiApplication([])
+    if out.suffix.lower() == ".ico":
+        out.parent.mkdir(parents=True, exist_ok=True)
+        if not icon_pixmap(256).save(str(out), "ICO"):
+            print("Écriture de l'icône .ico impossible")
+            return 1
+        print(f"Icône écrite : {out}")
+        return 0
     out.mkdir(parents=True, exist_ok=True)
     for size in SIZES:
         icon_pixmap(size).save(str(out / f"icon_{size}x{size}.png"))

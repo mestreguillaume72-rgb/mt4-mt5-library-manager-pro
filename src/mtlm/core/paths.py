@@ -9,6 +9,8 @@ La variable d'environnement ``MTLM_HOME`` permet de choisir un autre dossier
 
 * macOS : ``~/Library/Application Support/MT4MT5LibraryManagerPro`` et
   ``~/Library/Logs/MT4MT5LibraryManagerPro`` ;
+* Windows : ``%APPDATA%\\MT4MT5LibraryManagerPro`` (base) et
+  ``%LOCALAPPDATA%\\MT4MT5LibraryManagerPro\\Logs`` (journaux) ;
 * autres systèmes (développement) : ``$XDG_DATA_HOME/mt4mt5-library-manager-pro``.
 """
 
@@ -62,6 +64,14 @@ def default_paths(
         return AppPaths(
             data_dir=library / "Application Support" / MACOS_DIR_NAME,
             logs_dir=library / "Logs" / MACOS_DIR_NAME,
+        )
+
+    if plat == "win32":
+        roaming = Path(env.get("APPDATA") or user_home / "AppData" / "Roaming")
+        local = Path(env.get("LOCALAPPDATA") or user_home / "AppData" / "Local")
+        return AppPaths(
+            data_dir=roaming / MACOS_DIR_NAME,
+            logs_dir=local / MACOS_DIR_NAME / "Logs",
         )
 
     xdg = env.get("XDG_DATA_HOME")

@@ -35,7 +35,7 @@ class AppContext:
     migrator: Migrator
     log_file: Path
     applied_migrations: list[int] = field(default_factory=list)
-    #: Corbeille du Mac (``None`` hors macOS : la suppression est alors indisponible).
+    #: Corbeille (``None`` hors macOS : la suppression est alors indisponible).
     trash: TrashBackend | None = field(default_factory=default_backend)
 
     def backup(self, label: str) -> Path:

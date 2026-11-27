@@ -39,6 +39,7 @@ from mtlm.audit.journal import ACTOR_SYSTEM, ACTOR_USER, AuditJournal
 from mtlm.core.clock import Clock, iso_utc
 from mtlm.core.control import TaskControl
 from mtlm.core.errors import MtlmError
+from mtlm.core.filenames import portable_name
 from mtlm.core.paths import AppPaths
 from mtlm.fs.reader import FileIdentity
 from mtlm.matching.names import logical_key
@@ -173,8 +174,7 @@ class OrganizeResult:
 
 
 def _component(text: str) -> str:
-    cleaned = "".join("_" if c in "/\\:\0" else c for c in text).strip().strip(".")
-    return (cleaned or "_")[:120]
+    return portable_name(text)
 
 
 def _with_suffix(path: str, n: int) -> str:
