@@ -73,6 +73,7 @@ def _hash(ctx: AppContext, control: TaskControl, report: Report) -> str:
         control=control,
         progress=lambda s: report(hash_progress_text(s)),
         useful_only=not int(settings.get("empreintes.tout_lire")),
+        retry_errors=True,  # les fichiers en erreur la dernière fois sont réessayés
     )
     if summary.state == "cancelled":
         raise Cancelled
@@ -87,6 +88,18 @@ def _hash(ctx: AppContext, control: TaskControl, report: Report) -> str:
             " ; {skipped_unrelated} fichier(s) sans rapport avec MetaTrader seulement listé(s)",
             skipped_unrelated=summary.skipped_unrelated,
         )
+    if summary.errors:
+        from mtlm.app.inventory import InventoryService
+
+        causes = InventoryService(ctx.conn).hash_error_summary(limit=1)
+        if causes:
+            message, count, example = causes[0]
+            text += tr(
+                " — cause principale ({count} fichier(s)) : {message} ; exemple : {example}",
+                count=count,
+                message=message,
+                example=example,
+            )
     return text
 
 

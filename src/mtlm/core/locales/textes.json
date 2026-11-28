@@ -25,6 +25,7 @@
  " Groupes : {v} ({v2} {singular}(s)) ; les autres sont à la racine.",
  " Groupes existants : {v}.",
  " — EXTENSION TROMPEUSE",
+ " — cause principale ({count} fichier(s)) : {message} ; exemple : {example}",
  " — peut-être mal rangé",
  " — reste environ {v}",
  "&Aller à",

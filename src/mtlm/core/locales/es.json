@@ -25,6 +25,7 @@
  " Groupes : {v} ({v2} {singular}(s)) ; les autres sont à la racine.": " Grupos: {v} ({v2} {singular}(s)); los demás están en la raíz.",
  " Groupes existants : {v}.": " Grupos existentes: {v}.",
  " — EXTENSION TROMPEUSE": " — EXTENSIÓN ENGAÑOSA",
+ " — cause principale ({count} fichier(s)) : {message} ; exemple : {example}": " — causa principal ({count} archivo(s)): {message}; ejemplo: {example}",
  " — peut-être mal rangé": " — quizá mal ubicado",
  " — reste environ {v}": " — quedan unos {v}",
  "&Aller à": "&Ir a",

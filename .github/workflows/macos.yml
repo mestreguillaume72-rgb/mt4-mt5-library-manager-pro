@@ -42,6 +42,14 @@ jobs:
           uv run pytest -W error::ResourceWarning
           --cov --cov-report=term --cov-fail-under=85
           --junitxml=pytest-report.xml
+      - name: Disques externes exFAT et FAT32 (comme un « Backup Plus »)
+        run: |
+          for fs in ExFAT MS-DOS; do
+            hdiutil create -size 200m -fs "$fs" -volname MTLMTEST -o "disque-$fs" >/dev/null
+            hdiutil attach "disque-$fs.dmg" -mountpoint /Volumes/MTLMTEST >/dev/null
+            uv run python tools/disque_externe.py /Volumes/MTLMTEST
+            hdiutil detach /Volumes/MTLMTEST >/dev/null
+          done
       - name: Invariant « sources inchangées » à 50 000 fichiers
         run: uv run pytest -m slow -s -k "50000" --junitxml=pytest-charge.xml
       - uses: actions/upload-artifact@v5

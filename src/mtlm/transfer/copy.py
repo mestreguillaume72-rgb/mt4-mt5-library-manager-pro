@@ -110,8 +110,13 @@ def copy_verified(
     digest = hashlib.sha256()
     size = 0
     try:
+        # Chemin comparé au chemin, fichier ouvert au fichier ouvert ; entre les deux, taille
+        # et date seulement (numéros de fichier instables sur exFAT/NTFS, voir reader).
+        path_before = path_identity(source)
+        if expected_identity is not None and path_before != expected_identity:
+            raise CopyError("L'original a changé depuis l'inventaire : copie refusée")
         with ReadOnlyFile(source) as reader:
-            if expected_identity is not None and reader.opened_identity != expected_identity:
+            if not reader.opened_identity.same_content_state(path_before):
                 raise CopyError("L'original a changé depuis l'inventaire : copie refusée")
             before = reader.opened_identity
             fd = os.open(temp, _WRITE_FLAGS, 0o644)
@@ -126,7 +131,7 @@ def copy_verified(
                 os.fsync(fd)
             finally:
                 os.close(fd)
-            if reader.current_identity() != before or path_identity(source) != before:
+            if reader.current_identity() != before or path_identity(source) != path_before:
                 raise CopyError("L'original a changé pendant la copie : copie annulée")
         if digest.digest() != expected_sha256:
             raise CopyError("Le contenu lu ne correspond pas à l'empreinte attendue")

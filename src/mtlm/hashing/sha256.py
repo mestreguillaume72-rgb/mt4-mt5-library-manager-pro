@@ -39,9 +39,15 @@ def hash_file(
     l'empreinte est refusée (il faut ré-inventorier). ``on_chunk`` est appelé après chaque
     bloc avec le nombre d'octets lus (progression, pause, annulation).
     """
+    # Chemin comparé au chemin (inventaire → maintenant → après lecture), fichier ouvert
+    # comparé au fichier ouvert ; entre les deux, seulement taille et date (voir
+    # FileIdentity.same_content_state : numéros de fichier instables sur exFAT/NTFS).
+    path_before = path_identity(path)
+    if expected is not None and path_before != expected:
+        raise UnstableFileError("modifié depuis l'inventaire : relancez l'inventaire")
     with ReadOnlyFile(path) as handle:
         before = handle.opened_identity
-        if expected is not None and before != expected:
+        if not before.same_content_state(path_before):
             raise UnstableFileError("modifié depuis l'inventaire : relancez l'inventaire")
         digest = hashlib.sha256()
         total = 0
@@ -52,6 +58,6 @@ def hash_file(
                 on_chunk(len(chunk))
         after_fd = handle.current_identity()
     after_path = path_identity(path)
-    if not (before == after_fd == after_path) or total != before.size:
+    if before != after_fd or after_path != path_before or total != before.size:
         raise UnstableFileError("modifié pendant la lecture : empreinte non fiable")
-    return HashResult(digest.digest(), total, before)
+    return HashResult(digest.digest(), total, path_before)

@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tracemalloc
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -154,3 +155,33 @@ def test_tube_jamais_lu(tmp_path: Path) -> None:
 def test_identite() -> None:
     st = os.stat(__file__)
     assert FileIdentity.of(st).size == st.st_size
+
+
+def test_disque_externe_numeros_de_fichier_instables(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """exFAT / NTFS sur Mac : le fichier ouvert n'a pas le même numéro que le chemin. Ce n'est
+    pas une modification : l'empreinte doit être calculée (régression 1.9.1)."""
+    import mtlm.fs.reader as reader_module
+
+    f = tmp_path / "robot.ex4"
+    f.write_bytes(b"EX4 fictif")
+    expected = path_identity(b(f))
+    real_fstat = os.fstat
+
+    def shifted(fd: int) -> object:
+        st = real_fstat(fd)
+        return SimpleNamespace(  # numéro différent pour le fichier ouvert
+            st_mode=st.st_mode,
+            st_size=st.st_size,
+            st_mtime_ns=st.st_mtime_ns,
+            st_ino=st.st_ino + 123456,
+            st_dev=st.st_dev,
+        )
+
+    monkeypatch.setattr(reader_module.os, "fstat", shifted)  # type: ignore[attr-defined]
+    result = hash_file(b(f), expected=expected)
+    assert result.size == len(b"EX4 fictif")
+    f.write_bytes(b"EX4 modifie !")  # une vraie modification reste détectée
+    with pytest.raises(UnstableFileError):
+        hash_file(b(f), expected=expected)

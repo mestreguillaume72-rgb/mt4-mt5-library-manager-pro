@@ -45,6 +45,13 @@ class FileIdentity:
     inode: int
     device: int
 
+    def same_content_state(self, other: FileIdentity) -> bool:
+        """Même taille et même date de modification. Sert à comparer l'état relevé par le
+        chemin (``lstat``) à celui du fichier ouvert (``fstat``) : sur certains disques
+        externes (exFAT, NTFS, réseau), macOS ne donne pas le même numéro de fichier aux deux,
+        alors que c'est bien le même fichier."""
+        return self.size == other.size and self.mtime_ns == other.mtime_ns
+
     @classmethod
     def of(cls, st: os.stat_result) -> FileIdentity:
         return cls(st.st_size, st.st_mtime_ns, stored_id(st.st_ino), stored_id(st.st_dev))

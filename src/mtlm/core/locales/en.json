@@ -25,6 +25,7 @@
  " Groupes : {v} ({v2} {singular}(s)) ; les autres sont à la racine.": " Groups: {v} ({v2} {singular}(s)); the others are at the root.",
  " Groupes existants : {v}.": " Existing groups: {v}.",
  " — EXTENSION TROMPEUSE": " — MISLEADING EXTENSION",
+ " — cause principale ({count} fichier(s)) : {message} ; exemple : {example}": " — main cause ({count} file(s)): {message}; example: {example}",
  " — peut-être mal rangé": " — possibly misplaced",
  " — reste environ {v}": " — about {v} left",
  "&Aller à": "&Go to",
