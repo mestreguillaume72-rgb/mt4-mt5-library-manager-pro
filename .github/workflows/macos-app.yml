@@ -153,7 +153,7 @@ jobs:
           file "$EXE"
           arch -${{ matrix.arch }} "$EXE" --autotest "$MNT/MT4 MT5 Library Manager PRO.app/Contents" \
             | tee autotest-dmg.log
-          hdiutil detach "$MNT"
+          for i in 1 2 3 4 5; do hdiutil detach "$MNT" && break; sleep 5; [ "$i" = 5 ] && hdiutil detach -force "$MNT"; done
       - name: Tester l'installateur (Installer.command)
         shell: bash
         env:
@@ -205,7 +205,7 @@ jobs:
           MNT=$(hdiutil attach -nobrowse -readonly "$DMG" | tail -1 | awk -F'\t' '{print $NF}')
           spctl --assess --type execute -vv "$MNT/MT4 MT5 Library Manager PRO.app" 2>&1 \
             | tee gatekeeper.txt || true
-          hdiutil detach "$MNT"
+          for i in 1 2 3 4 5; do hdiutil detach "$MNT" && break; sleep 5; [ "$i" = 5 ] && hdiutil detach -force "$MNT"; done
       - uses: actions/upload-artifact@v5
         if: always()
         with:
