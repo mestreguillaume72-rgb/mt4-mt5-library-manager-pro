@@ -87,21 +87,27 @@ def test_fichier_modifie_recalcule(tmp_path: Path, ctx: AppContext) -> None:
     assert hashlib.sha256(b"nouveau contenu").hexdigest() in stored_hashes(ctx).values()
 
 
-def test_fichier_modifie_apres_inventaire_en_erreur(tmp_path: Path, ctx: AppContext) -> None:
+def test_robot_modifie_apres_inventaire_lu_dans_sa_nouvelle_version(
+    tmp_path: Path, ctx: AppContext
+) -> None:
+    """1.9.3 : modifier un robot pendant ou après l'inventaire n'est pas une erreur ; sa
+    nouvelle version est lue et son état (taille, date) mis à jour."""
     root = tmp_path / "lib"
     source_id, manifest = prepare(ctx, root, 20)
     victim = root / manifest.entries[3].rel_path
-    victim.write_bytes(victim.read_bytes() + b"++")  # changé entre inventaire et empreinte
+    new_content = victim.read_bytes() + b"++"
+    victim.write_bytes(new_content)  # changé entre inventaire et empreinte
     summary = HashService(ctx.conn, ctx.clock, ctx.journal).run(source_id)
-    assert (summary.hashed, summary.errors) == (19, 1)
-    row = ctx.conn.execute(
-        "SELECT hash_state, hash_error, content_id FROM file_record WHERE hash_state = 'error'"
+    assert (summary.hashed, summary.errors) == (20, 0)
+    rel = manifest.entries[3].rel_path
+    sha, size = ctx.conn.execute(
+        "SELECT c.sha256, f.size FROM file_record f JOIN content c ON c.id = f.content_id"
+        " WHERE f.rel_path = ?",
+        (unicodedata.normalize("NFC", rel),),
     ).fetchone()
-    assert row[0] == "error" and "inventaire" in row[1] and row[2] is None
-    # Après un nouvel inventaire, l'erreur se résout.
-    ScanService(ctx.conn, ctx.clock, ctx.journal).scan(source_id)
-    fixed = HashService(ctx.conn, ctx.clock, ctx.journal).run(source_id, retry_errors=True)
-    assert (fixed.hashed, fixed.errors) == (1, 0)
+    assert bytes(sha) == hashlib.sha256(new_content).digest() and size == len(new_content)
+    # Le prochain inventaire ne le revoit pas comme modifié : l'état est déjà à jour.
+    assert ScanService(ctx.conn, ctx.clock, ctx.journal).scan(source_id).changed == 0
 
 
 def test_annulation_aucune_empreinte_partielle(tmp_path: Path, ctx: AppContext) -> None:

@@ -277,7 +277,10 @@ class HashService:
 
         try:
             ctl.checkpoint()
-            result = hash_file(task.path, expected=task.expected, on_chunk=on_chunk)
+            # Un fichier modifié par l'utilisateur depuis l'inventaire (robot retouché…) n'est
+            # pas une erreur : sa nouvelle version est lue, et son état est mis à jour. La
+            # lecture reste refusée si le fichier change PENDANT qu'on le lit.
+            result = hash_file(task.path, on_chunk=on_chunk)
         except Cancelled:
             return _Outcome(task, None, None, cancelled=True)
         except UnstableFileError as exc:
@@ -306,10 +309,23 @@ class HashService:
                     )
                 elif outcome.result is not None:
                     content_id = self._content_id(outcome.result)
+                    seen = outcome.result.identity
+                    changed = not seen.same_file(task.expected)
                     self._conn.execute(
                         "UPDATE file_record SET hash_state = 'validated', content_id = ?,"
-                        " hash_error = NULL, hashed_with_engine = ? WHERE id = ?",
-                        (content_id, ENGINE_VERSION, task.file_id),
+                        " hash_error = NULL, hashed_with_engine = ?, size = ?, mtime_ns = ?,"
+                        " inode = ?, device = ?,"
+                        " magic = CASE WHEN ? THEN NULL ELSE magic END WHERE id = ?",
+                        (
+                            content_id,
+                            ENGINE_VERSION,
+                            seen.size,
+                            seen.mtime_ns,
+                            seen.inode,
+                            seen.device,
+                            int(changed),
+                            task.file_id,
+                        ),
                     )
                     summary.hashed += 1
                     summary.bytes_read += outcome.result.size
