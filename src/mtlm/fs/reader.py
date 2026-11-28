@@ -46,10 +46,11 @@ class FileIdentity:
     device: int
 
     def same_file(self, other: FileIdentity) -> bool:
-        """Même fichier, inchangé : taille, date et numéro de fichier. Le numéro de **disque**
-        n'est pas comparé : macOS en attribue un nouveau à un disque externe à chaque
-        branchement."""
-        return (self.size, self.mtime_ns, self.inode) == (other.size, other.mtime_ns, other.inode)
+        """Fichier inchangé depuis le relevé ``other`` : même taille et même date de
+        modification (à la nanoseconde). Les numéros de **disque** et de **fichier** ne sont
+        pas comparés : sur un disque externe exFAT/FAT, macOS les attribue à chaque
+        branchement (vérifié sur un vrai Mac, CI « disque rebranché »)."""
+        return (self.size, self.mtime_ns) == (other.size, other.mtime_ns)
 
     def same_content_state(self, other: FileIdentity) -> bool:
         """Même taille et même date de modification. Sert à comparer l'état relevé par le

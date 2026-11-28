@@ -239,8 +239,8 @@ def test_texte_de_progression_avec_temps_restant() -> None:
 
 
 def test_disque_externe_rebranche_numero_de_disque_change(tmp_path: Path, ctx: AppContext) -> None:
-    """Régression 1.9.2 : macOS donne un nouveau numéro à un disque externe à chaque
-    branchement. Les fichiers ne sont pas « modifiés » : leurs empreintes sont calculées."""
+    """Régression 1.9.3 : macOS donne de nouveaux numéros (disque et fichiers) à un disque
+    externe exFAT/FAT à chaque branchement. Les fichiers ne sont pas « modifiés »."""
     root = tmp_path / "BackupPlus"
     (root / "MQL4" / "Experts").mkdir(parents=True)
     for i in range(5):
@@ -249,7 +249,7 @@ def test_disque_externe_rebranche_numero_de_disque_change(tmp_path: Path, ctx: A
     scan = ScanService(ctx.conn, ctx.clock, ctx.journal)
     scan.scan(source.id)
     # Le disque est débranché puis rebranché : ancien numéro enregistré, nouveau sur le disque.
-    ctx.conn.execute("UPDATE file_record SET device = device + 7")
+    ctx.conn.execute("UPDATE file_record SET device = device + 7, inode = inode + 1000")
     ctx.conn.commit()
     summary = HashService(ctx.conn, ctx.clock, ctx.journal).run(source.id)
     assert (summary.hashed, summary.errors) == (5, 0)

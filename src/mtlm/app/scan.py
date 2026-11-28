@@ -3,7 +3,7 @@
 Inventaire en lecture seule d'une source, incrémental :
 
 * fichier nouveau ⇒ inséré ;
-* fichier modifié (taille, date de modification ou inode différents) ⇒ mis à jour, son
+* fichier modifié (taille ou date de modification différentes) ⇒ mis à jour, son
   empreinte éventuelle passe à l'état « stale » (à recalculer) ;
 * fichier inchangé ⇒ seulement marqué « vu » (aucun recalcul ultérieur) ;
 * fichier disparu ⇒ « missing » **uniquement si l'inventaire est allé jusqu'au bout**
@@ -105,7 +105,7 @@ class ScanService:
         stats = WalkStats()
         pending_new: list[tuple[object, ...]] = []
         pending_changed: list[tuple[object, ...]] = []
-        pending_seen: list[tuple[int, int | None, int]] = []
+        pending_seen: list[tuple[int, int | None, int | None, int]] = []
         pending_errors: list[tuple[object, ...]] = []
 
         def flush() -> None:
@@ -125,7 +125,7 @@ class ScanService:
                     # Le numéro de disque est rafraîchi : macOS en donne un nouveau à un disque
                     # externe à chaque branchement (le fichier, lui, n'a pas changé).
                     self._conn.executemany(
-                        "UPDATE file_record SET last_seen_job = ?, device = ?,"
+                        "UPDATE file_record SET last_seen_job = ?, device = ?, inode = ?,"
                         " presence = 'present' WHERE id = ?",
                         pending_seen,
                     )
@@ -199,7 +199,7 @@ class ScanService:
         job_id: int,
         pending_new: list[tuple[object, ...]],
         pending_changed: list[tuple[object, ...]],
-        pending_seen: list[tuple[int, int | None, int]],
+        pending_seen: list[tuple[int, int | None, int | None, int]],
     ) -> None:
         summary.seen += 1
         if item.file_type == "symlink":
@@ -227,11 +227,9 @@ class ScanService:
                     item.file_type,
                 )
             )
-        elif (previous.size, previous.mtime_ns, previous.inode) != (
-            item.size,
-            item.mtime_ns,
-            item.inode,
-        ):
+        elif (previous.size, previous.mtime_ns) != (item.size, item.mtime_ns):
+            # Taille et date seulement : les numéros de fichier d'un disque externe exFAT/FAT
+            # changent à chaque branchement (ils sont rafraîchis ci-dessous).
             summary.changed += 1
             pending_changed.append(
                 (
@@ -251,7 +249,7 @@ class ScanService:
             )
         else:
             summary.unchanged += 1
-            pending_seen.append((job_id, item.device, previous.id))
+            pending_seen.append((job_id, item.device, item.inode, previous.id))
 
     def _insert_new(self, rows: list[tuple[object, ...]], source_id: int, job_id: int) -> None:
         for row in rows:
