@@ -46,9 +46,18 @@ jobs:
         run: |
           for fs in ExFAT MS-DOS; do
             hdiutil create -size 200m -fs "$fs" -volname MTLMTEST -o "disque-$fs" >/dev/null
+            home=$(mktemp -d)
             hdiutil attach "disque-$fs.dmg" -mountpoint /Volumes/MTLMTEST >/dev/null
-            uv run python tools/disque_externe.py /Volumes/MTLMTEST
+            uv run python tools/disque_externe.py /Volumes/MTLMTEST "$home" inventaire
+            # Débranché puis rebranché (avec un autre disque branché entre-temps) : macOS
+            # lui donne un nouveau numéro de disque.
             hdiutil detach /Volumes/MTLMTEST >/dev/null
+            hdiutil create -size 20m -fs ExFAT -volname AUTRE -o autre-$fs >/dev/null
+            hdiutil attach "autre-$fs.dmg" >/dev/null
+            hdiutil attach "disque-$fs.dmg" -mountpoint /Volumes/MTLMTEST >/dev/null
+            uv run python tools/disque_externe.py /Volumes/MTLMTEST "$home" empreintes
+            hdiutil detach /Volumes/MTLMTEST >/dev/null
+            hdiutil detach /Volumes/AUTRE >/dev/null || true
           done
       - name: Invariant « sources inchangées » à 50 000 fichiers
         run: uv run pytest -m slow -s -k "50000" --junitxml=pytest-charge.xml

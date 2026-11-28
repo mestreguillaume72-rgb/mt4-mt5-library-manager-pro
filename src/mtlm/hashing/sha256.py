@@ -43,7 +43,7 @@ def hash_file(
     # comparé au fichier ouvert ; entre les deux, seulement taille et date (voir
     # FileIdentity.same_content_state : numéros de fichier instables sur exFAT/NTFS).
     path_before = path_identity(path)
-    if expected is not None and path_before != expected:
+    if expected is not None and not path_before.same_file(expected):
         raise UnstableFileError("modifié depuis l'inventaire : relancez l'inventaire")
     with ReadOnlyFile(path) as handle:
         before = handle.opened_identity

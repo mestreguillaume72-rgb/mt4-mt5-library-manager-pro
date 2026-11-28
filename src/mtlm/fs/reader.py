@@ -45,6 +45,12 @@ class FileIdentity:
     inode: int
     device: int
 
+    def same_file(self, other: FileIdentity) -> bool:
+        """Même fichier, inchangé : taille, date et numéro de fichier. Le numéro de **disque**
+        n'est pas comparé : macOS en attribue un nouveau à un disque externe à chaque
+        branchement."""
+        return (self.size, self.mtime_ns, self.inode) == (other.size, other.mtime_ns, other.inode)
+
     def same_content_state(self, other: FileIdentity) -> bool:
         """Même taille et même date de modification. Sert à comparer l'état relevé par le
         chemin (``lstat``) à celui du fichier ouvert (``fstat``) : sur certains disques

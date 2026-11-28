@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.9.2] — Disque externe rebranché
+
+### Corrigé
+- **Toutes les empreintes en erreur « modifié depuis l'inventaire » sur un disque externe**
+  (« Backup Plus »…) : macOS attribue un nouveau numéro au disque à chaque branchement ;
+  l'inventaire ne le mettait pas à jour et les contrôles le comparaient, donc chaque
+  fichier semblait modifié. L'inventaire rafraîchit maintenant ce numéro, et les contrôles
+  (empreintes, copies, Corbeille, décompression) ne dépendent plus de lui : taille, date et
+  numéro de fichier suffisent. Une vraie modification reste détectée.
+- Test ajouté qui reproduit le cas (échoue sur 1.9.1, passe sur 1.9.2), et vérification sur
+  un vrai Mac : disques exFAT et FAT32 débranchés puis rebranchés entre l'inventaire et les
+  empreintes.
+
 ## [1.9.1] — Disques externes
 
 ### Corrigé

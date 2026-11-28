@@ -365,7 +365,7 @@ class ArchiveService:
         path = os.path.join(os.fsencode(row[0]), bytes(row[1]))  # noqa: PTH118
         identity = FileIdentity(int(row[6]), int(row[7]), int(row[8]), int(row[9]))
         try:
-            if path_identity(path) != identity:
+            if not path_identity(path).same_file(identity):
                 raise ArchiveError(tr("archive modifiée depuis l'analyse : relancez-la"))
             if row[5] is not None and hash_file(path).sha256 != bytes(row[5]):
                 raise ArchiveError(tr("archive modifiée depuis l'analyse : relancez-la"))

@@ -21,6 +21,7 @@ from mtlm.cli.main import EXIT_ERROR, EXIT_OK, EXIT_USAGE, main
 from mtlm.core.clock import FixedClock
 from mtlm.core.control import TaskControl
 from mtlm.core.paths import AppPaths
+from mtlm.fs.reader import stored_id
 from tests.support.fs_snapshot import diff_snapshots, take_snapshot
 from tests.synthetic.generate import Manifest, generate_corpus
 
@@ -235,3 +236,25 @@ def test_texte_de_progression_avec_temps_restant() -> None:
     assert "reste environ 5 min" in text
     assert duration_text(30) == "moins d'une minute"
     assert duration_text(7500) == "2 h 05 min"
+
+
+def test_disque_externe_rebranche_numero_de_disque_change(tmp_path: Path, ctx: AppContext) -> None:
+    """Régression 1.9.2 : macOS donne un nouveau numéro à un disque externe à chaque
+    branchement. Les fichiers ne sont pas « modifiés » : leurs empreintes sont calculées."""
+    root = tmp_path / "BackupPlus"
+    (root / "MQL4" / "Experts").mkdir(parents=True)
+    for i in range(5):
+        (root / "MQL4" / "Experts" / f"robot{i}.mq4").write_text(f"// {i}\n", encoding="utf-8")
+    source = SourceService(ctx.conn, ctx.clock, ctx.journal, ctx.paths).add(root)
+    scan = ScanService(ctx.conn, ctx.clock, ctx.journal)
+    scan.scan(source.id)
+    # Le disque est débranché puis rebranché : ancien numéro enregistré, nouveau sur le disque.
+    ctx.conn.execute("UPDATE file_record SET device = device + 7")
+    ctx.conn.commit()
+    summary = HashService(ctx.conn, ctx.clock, ctx.journal).run(source.id)
+    assert (summary.hashed, summary.errors) == (5, 0)
+    # Un nouvel inventaire remet le bon numéro, sans déclarer les fichiers modifiés.
+    again = scan.scan(source.id)
+    assert again.changed == 0
+    stored = {int(d) for (d,) in ctx.conn.execute("SELECT DISTINCT device FROM file_record")}
+    assert stored == {stored_id(os.stat(root).st_dev)}

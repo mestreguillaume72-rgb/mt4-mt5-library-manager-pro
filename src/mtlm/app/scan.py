@@ -105,7 +105,7 @@ class ScanService:
         stats = WalkStats()
         pending_new: list[tuple[object, ...]] = []
         pending_changed: list[tuple[object, ...]] = []
-        pending_seen: list[tuple[int, int]] = []
+        pending_seen: list[tuple[int, int | None, int]] = []
         pending_errors: list[tuple[object, ...]] = []
 
         def flush() -> None:
@@ -122,9 +122,11 @@ class ScanService:
                         pending_changed,
                     )
                 if pending_seen:
+                    # Le numéro de disque est rafraîchi : macOS en donne un nouveau à un disque
+                    # externe à chaque branchement (le fichier, lui, n'a pas changé).
                     self._conn.executemany(
-                        "UPDATE file_record SET last_seen_job = ?, presence = 'present'"
-                        " WHERE id = ?",
+                        "UPDATE file_record SET last_seen_job = ?, device = ?,"
+                        " presence = 'present' WHERE id = ?",
                         pending_seen,
                     )
                 if pending_errors:
@@ -197,7 +199,7 @@ class ScanService:
         job_id: int,
         pending_new: list[tuple[object, ...]],
         pending_changed: list[tuple[object, ...]],
-        pending_seen: list[tuple[int, int]],
+        pending_seen: list[tuple[int, int | None, int]],
     ) -> None:
         summary.seen += 1
         if item.file_type == "symlink":
@@ -249,7 +251,7 @@ class ScanService:
             )
         else:
             summary.unchanged += 1
-            pending_seen.append((job_id, previous.id))
+            pending_seen.append((job_id, item.device, previous.id))
 
     def _insert_new(self, rows: list[tuple[object, ...]], source_id: int, job_id: int) -> None:
         for row in rows:

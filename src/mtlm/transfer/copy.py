@@ -113,7 +113,7 @@ def copy_verified(
         # Chemin comparé au chemin, fichier ouvert au fichier ouvert ; entre les deux, taille
         # et date seulement (numéros de fichier instables sur exFAT/NTFS, voir reader).
         path_before = path_identity(source)
-        if expected_identity is not None and path_before != expected_identity:
+        if expected_identity is not None and not path_before.same_file(expected_identity):
             raise CopyError("L'original a changé depuis l'inventaire : copie refusée")
         with ReadOnlyFile(source) as reader:
             if not reader.opened_identity.same_content_state(path_before):

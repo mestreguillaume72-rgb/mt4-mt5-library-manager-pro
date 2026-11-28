@@ -169,7 +169,7 @@ class DeletionService:
         path = os.path.join(os.fsencode(row[0]), bytes(row[1]))  # noqa: PTH118
         identity = FileIdentity(int(row[2]), int(row[3]), int(row[4]), int(row[5]))
         try:
-            if path_identity(path) != identity:
+            if not path_identity(path).same_file(identity):
                 return
             result = hash_file(path, expected=identity)
         except (OSError, UnstableFileError):
@@ -190,7 +190,7 @@ class DeletionService:
 
     def _unchanged(self, item: _File) -> bool:
         try:
-            if path_identity(item.path) != item.identity:
+            if not path_identity(item.path).same_file(item.identity):
                 return False
             return hash_file(item.path, expected=item.identity).sha256 == item.sha256
         except (OSError, UnstableFileError):
