@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.9.1] — Disques externes
+
+### Corrigé
+- **Empreintes impossibles sur un disque externe** (exFAT, NTFS, FAT32 : « Backup Plus »…) :
+  macOS donne un numéro de fichier différent au fichier ouvert et au chemin ; chaque fichier
+  était pris pour « modifié » et laissé de côté (toutes les empreintes en erreur, analyse
+  vide). Le chemin est maintenant comparé au chemin, le fichier ouvert au fichier ouvert,
+  et entre les deux la taille et la date. Une vraie modification reste détectée.
+- Même correction pour les copies vérifiées (quarantaine, dossiers proposés).
+- « Tout analyser » réessaie les fichiers restés en erreur ; le journal de l'analyse
+  affiche la cause principale des erreurs d'empreinte, avec un exemple.
+- Vérifié sur un vrai Mac avec des disques exFAT et FAT32 (CI macOS).
+
 ## [1.9.0] — Français, English, Español
 
 ### Ajouté
