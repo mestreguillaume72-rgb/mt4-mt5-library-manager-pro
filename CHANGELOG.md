@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.9.3] — Disques externes : la vraie correction
+
+### Corrigé
+- **Disque externe débranché puis rebranché** (exFAT, FAT32, NTFS : « Backup Plus »…) :
+  macOS y réattribue les numéros du disque **et de chaque fichier** à chaque branchement ;
+  toutes les empreintes finissaient en « modifié depuis l'inventaire ». Un fichier n'est
+  plus considéré comme modifié que si sa **taille** ou sa **date de modification** change ;
+  les numéros sont simplement rafraîchis. Prouvé sur un vrai Mac (Intel et Apple Silicon) :
+  disques exFAT et FAT32 débranchés puis rebranchés entre l'inventaire et les empreintes,
+  0 erreur (la 1.9.2 en donnait 101 sur 101).
+- **Robot modifié pendant l'analyse** : plus d'erreur ; sa nouvelle version est lue et son
+  état mis à jour. (La Corbeille et la quarantaine refusent toujours un fichier modifié
+  depuis l'analyse : c'est une sécurité.)
+- Dossiers internes du système ignorés à l'inventaire (`.fseventsd`, Spotlight,
+  Corbeilles) : macOS les réécrit lui-même et ils ne contiennent jamais de robots.
+
 ## [1.9.2] — Disque externe rebranché
 
 ### Corrigé
