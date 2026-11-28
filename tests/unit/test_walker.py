@@ -247,3 +247,13 @@ def test_dataless_et_date_de_creation_macos() -> None:
     entry = walker_module._entry_from_stat(b"f.mq4", fake)  # type: ignore[arg-type]
     assert entry.is_dataless is True
     assert entry.birthtime_ns == 1_500_000_000
+
+
+def test_dossiers_internes_du_systeme_ignores(tmp_path: Path) -> None:
+    """Index Spotlight, journal .fseventsd, Corbeilles : jamais inventoriés (1.9.3)."""
+    root = tmp_path / "Disque"
+    for name in (".fseventsd", ".Spotlight-V100", "$RECYCLE.BIN", "MQL4"):
+        (root / name).mkdir(parents=True)
+        (root / name / "f.bin").write_bytes(b"x")
+    found = [e.rel_path for e in walk(root) if isinstance(e, WalkEntry)]
+    assert found == ["MQL4/f.bin"]

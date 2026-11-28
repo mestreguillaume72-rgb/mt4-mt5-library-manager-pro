@@ -34,6 +34,19 @@ _WINDOWS_CLOUD = (
 # Windows : point d'analyse (lien symbolique, jonction) — jamais suivi.
 FILE_ATTRIBUTE_REPARSE_POINT = 0x400
 IS_WINDOWS = sys.platform == "win32"
+#: Dossiers internes de macOS et de Windows sur un disque (index, Corbeille, journal) : ils
+#: ne contiennent jamais de fichiers MetaTrader et le système les réécrit lui-même.
+SYSTEM_DIRS = frozenset(
+    {
+        b".fseventsd",
+        b".Spotlight-V100",
+        b".Trashes",
+        b".TemporaryItems",
+        b".DocumentRevisions-V100",
+        b"$RECYCLE.BIN",
+        b"System Volume Information",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -165,6 +178,8 @@ def walk(
                 continue
             reparse = (getattr(st, "st_file_attributes", 0) or 0) & FILE_ATTRIBUTE_REPARSE_POINT
             if stat.S_ISDIR(st.st_mode) and not reparse:
+                if name in SYSTEM_DIRS:
+                    continue  # dossier interne du système (Spotlight, Corbeille…), jamais un robot
                 key = (st.st_dev, st.st_ino)
                 if key in visited:
                     counters.cycles_skipped += 1
